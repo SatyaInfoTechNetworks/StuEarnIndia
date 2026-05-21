@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+Backend/node_modules/
+Frontend/node_modules/
+
+# Production builds
+dist/
+Frontend/dist/
+
+# Local env files & secrets
+.env
+Backend/.env
+Frontend/.env
+*.local
+
+# Sensitive files / Service account keys
+Backend/config/service-account.json
+Backend/service-account.json
+google-services.json
+
+# Temporary / Large / Old archives
+api (2).zip
+old/
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+*.log

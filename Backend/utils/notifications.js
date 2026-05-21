@@ -7,14 +7,20 @@ let firebaseApp = null;
 const serviceAccountPath = process.env.FCM_SERVICE_ACCOUNT_PATH || './config/service-account.json';
 
 try {
-  if (fs.existsSync(serviceAccountPath)) {
+  if (process.env.FCM_SERVICE_ACCOUNT_JSON) {
+    const serviceAccount = JSON.parse(process.env.FCM_SERVICE_ACCOUNT_JSON);
+    firebaseApp = admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    console.log('✅ Firebase Admin SDK initialized successfully from env variable.');
+  } else if (fs.existsSync(serviceAccountPath)) {
     const serviceAccount = JSON.parse(fs.readFileSync(path.resolve(serviceAccountPath), 'utf8'));
     firebaseApp = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
-    console.log('✅ Firebase Admin SDK initialized successfully.');
+    console.log('✅ Firebase Admin SDK initialized successfully from file.');
   } else {
-    console.warn(`⚠️ Firebase service-account.json not found at ${serviceAccountPath}. Push notifications will be mocked.`);
+    console.warn(`⚠️ Firebase service-account.json not found. Push notifications will be mocked. Define FCM_SERVICE_ACCOUNT_JSON in environment or place file at ${serviceAccountPath}.`);
   }
 } catch (err) {
   console.error('❌ Failed to initialize Firebase Admin SDK:', err.message);

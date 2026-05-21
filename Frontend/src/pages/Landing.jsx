@@ -79,7 +79,6 @@ export default function Landing() {
             <a href="#how-it-works" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontWeight: 500, fontSize: '0.95rem' }}>How it Works</a>
             <a href="#ways-to-earn" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontWeight: 500, fontSize: '0.95rem' }}>Ways to Earn</a>
             <a href="#faq" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontWeight: 500, fontSize: '0.95rem' }}>FAQ</a>
-            <Link to="/admin" style={{ color: 'var(--primary-hover)', textDecoration: 'none', fontWeight: 600, fontSize: '0.95rem' }}>Admin Portal</Link>
           </nav>
           <div>
             <a href="https://play.google.com/store/apps/details?id=com.thinkforgeapps.stuearnindia" target="_blank" rel="noopener noreferrer" className="btn btn-primary">

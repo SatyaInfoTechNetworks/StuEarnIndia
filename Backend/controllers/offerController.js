@@ -4,12 +4,13 @@ import { v4 as uuidv4 } from 'uuid';
 // List all active offers, optionally filtering by user completion, category, or search
 export const listOffers = async (req, res) => {
   try {
-    const { category, search, user_id } = req.query;
+    const { category, search, user_id, country } = req.query;
 
     let query = `
       SELECT id, external_id, title, description, category, icon_url, tracking_url, 
              total_reward, is_active, type, input_type, input_instruction, 
-             reward_type, extra_label, estimated_time, difficulty, likes_count, is_hot, created_at
+             reward_type, extra_label, estimated_time, difficulty, likes_count, is_hot, created_at,
+             daily_completion_cap, country_targeting
       FROM offers 
       WHERE is_active = 1
     `;
@@ -47,6 +48,19 @@ export const listOffers = async (req, res) => {
       [offerIds]
     );
 
+    // Fetch completions today for these offers to enforce caps
+    const [completionsTodayRows] = await pool.query(
+      `SELECT offer_id, COUNT(*) as count 
+       FROM user_offer_progress 
+       WHERE status = 'COMPLETED' 
+         AND DATE(last_updated) = CURDATE() 
+       GROUP BY offer_id`
+    );
+    const completionsMap = {};
+    completionsTodayRows.forEach(r => {
+      completionsMap[r.offer_id] = r.count;
+    });
+
     // Group tiers by offer_id
     const tiersByOffer = {};
     tiers.forEach(t => {
@@ -74,29 +88,48 @@ export const listOffers = async (req, res) => {
     });
 
     // Map into final output format
-    const formattedOffers = offers.map(o => ({
-      id: String(o.id),
-      external_id: o.external_id,
-      title: o.title,
-      description: o.description,
-      category: o.category,
-      iconUrl: o.icon_url,
-      trackingUrl: o.tracking_url,
-      totalReward: parseFloat(o.total_reward || 0),
-      type: o.type || 'online',
-      inputType: o.input_type || null,
-      inputInstruction: o.input_instruction || null,
-      isCompleted: false,
-      rewardType: o.reward_type || 'Multi Reward',
-      extraLabel: o.extra_label || null,
-      estimatedTime: o.estimated_time || null,
-      difficulty: o.difficulty || 'Medium',
-      likesCount: parseInt(o.likes_count || 0),
-      isHot: Boolean(o.is_hot),
-      tiers: tiersByOffer[o.id] || []
-    }));
+    const formattedOffers = offers.map(o => {
+      const completionsToday = completionsMap[o.id] || 0;
+      const dailyCompletionCap = parseInt(o.daily_completion_cap || 0);
+      return {
+        id: String(o.id),
+        external_id: o.external_id,
+        title: o.title,
+        description: o.description,
+        category: o.category,
+        iconUrl: o.icon_url,
+        trackingUrl: o.tracking_url,
+        totalReward: parseFloat(o.total_reward || 0),
+        type: o.type || 'online',
+        inputType: o.input_type || null,
+        inputInstruction: o.input_instruction || null,
+        isCompleted: false,
+        rewardType: o.reward_type || 'Multi Reward',
+        extraLabel: o.extra_label || null,
+        estimatedTime: o.estimated_time || null,
+        difficulty: o.difficulty || 'Medium',
+        likesCount: parseInt(o.likes_count || 0),
+        isHot: Boolean(o.is_hot),
+        dailyCompletionCap: dailyCompletionCap,
+        countryTargeting: o.country_targeting || null,
+        completionsToday: completionsToday,
+        isCapped: dailyCompletionCap > 0 && completionsToday >= dailyCompletionCap,
+        tiers: tiersByOffer[o.id] || []
+      };
+    });
 
-    res.json({ success: true, offers: formattedOffers });
+    // Dynamic Country Filtering
+    let filteredOffers = formattedOffers;
+    if (country) {
+      const userCountry = country.trim().toUpperCase();
+      filteredOffers = formattedOffers.filter(o => {
+        if (!o.countryTargeting) return true; // No targeting bounds
+        const allowedCountries = o.countryTargeting.split(',').map(c => c.trim().toUpperCase());
+        return allowedCountries.includes(userCountry) || allowedCountries.includes('*');
+      });
+    }
+
+    res.json({ success: true, offers: filteredOffers });
   } catch (error) {
     console.error('List Offers Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -180,6 +213,18 @@ export const getOfferById = async (req, res) => {
       }
     }
 
+    // Fetch completions today for this offer to enforce caps
+    const [completionsTodayRows] = await pool.query(
+      `SELECT COUNT(*) as count 
+       FROM user_offer_progress 
+       WHERE offer_id = ? 
+         AND status = 'COMPLETED' 
+         AND DATE(last_updated) = CURDATE()`,
+      [offerId]
+    );
+    const completionsToday = completionsTodayRows[0].count;
+    const dailyCompletionCap = parseInt(o.daily_completion_cap || 0);
+
     res.json({
       success: true,
       offer: {
@@ -205,6 +250,10 @@ export const getOfferById = async (req, res) => {
         userInput: userInput,
         adminStatus: adminStatus,
         rejectionReason: rejectionReason,
+        dailyCompletionCap: dailyCompletionCap,
+        countryTargeting: o.country_targeting || null,
+        completionsToday: completionsToday,
+        isCapped: dailyCompletionCap > 0 && completionsToday >= dailyCompletionCap,
         tiers: formattedTiers
       }
     });
@@ -212,8 +261,6 @@ export const getOfferById = async (req, res) => {
     console.error('Get Offer Details Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
-};
-
 // Start Offer (Click logging)
 export const startOffer = async (req, res) => {
   try {
@@ -224,7 +271,43 @@ export const startOffer = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Offer ID is required' });
     }
 
-    // 1. Check if already started
+    // 1. Fetch the offer to verify caps and targeting
+    const [offerRows] = await pool.query('SELECT daily_completion_cap, country_targeting FROM offers WHERE id = ? LIMIT 1', [offer_id]);
+    if (offerRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Offer not found' });
+    }
+    const offer = offerRows[0];
+
+    // Check completion cap
+    const cap = parseInt(offer.daily_completion_cap || 0);
+    if (cap > 0) {
+      const [completions] = await pool.query(
+        `SELECT COUNT(*) as count FROM user_offer_progress 
+         WHERE offer_id = ? AND status = 'COMPLETED' AND DATE(last_updated) = CURDATE()`,
+        [offer_id]
+      );
+      if (completions[0].count >= cap) {
+        return res.status(400).json({ success: false, message: 'Daily completion limit reached for this offer' });
+      }
+    }
+
+    // Country targeting check
+    if (offer.country_targeting && offer.country_targeting !== '*' && offer.country_targeting !== 'IN') {
+      const [uRows] = await pool.query('SELECT location FROM users WHERE id = ? LIMIT 1', [userId]);
+      if (uRows.length > 0 && uRows[0].location) {
+        const userLoc = uRows[0].location.trim().toUpperCase();
+        const allowed = offer.country_targeting.split(',').map(c => c.trim().toUpperCase());
+        const matchesTarget = allowed.some(c => 
+          userLoc.includes(c) || 
+          (c === 'IN' && (userLoc.includes('INDIA') || userLoc === 'IN'))
+        );
+        if (!matchesTarget) {
+          return res.status(400).json({ success: false, message: 'This offer is not available in your region' });
+        }
+      }
+    }
+
+    // 2. Check if already started
     const [progressRows] = await pool.query(
       'SELECT click_id FROM user_offer_progress WHERE user_id = ? AND offer_id = ? LIMIT 1',
       [userId, offer_id]
@@ -234,11 +317,10 @@ export const startOffer = async (req, res) => {
       return res.json({ success: true, click_id: progressRows[0].click_id });
     }
 
-    // 2. Generate new UUID for click_id
+    // 3. Generate new UUID for click_id
     const clickId = uuidv4();
 
     // Ensure database table fields match
-    // Check if table 'user_offer_progress' has click_id
     await pool.query(
       `INSERT INTO user_offer_progress (id, click_id, user_id, offer_id, status, completed_tiers, last_updated) 
        VALUES (?, ?, ?, ?, 'STARTED', '[]', NOW())`,
@@ -323,12 +405,13 @@ export const submitProof = async (req, res) => {
 // Get Hot Offers (where is_hot = 1)
 export const getHotOffers = async (req, res) => {
   try {
-    const { user_id } = req.query;
+    const { user_id, country } = req.query;
 
     let query = `
       SELECT id, external_id, title, description, category, icon_url, tracking_url, 
              total_reward, is_active, type, input_type, input_instruction, 
-             reward_type, extra_label, estimated_time, difficulty, likes_count, is_hot, created_at
+             reward_type, extra_label, estimated_time, difficulty, likes_count, is_hot, created_at,
+             daily_completion_cap, country_targeting
       FROM offers 
       WHERE is_active = 1 AND is_hot = 1
     `;
@@ -354,6 +437,19 @@ export const getHotOffers = async (req, res) => {
       [offerIds]
     );
 
+    // Fetch completions today for these offers to enforce caps
+    const [completionsTodayRows] = await pool.query(
+      `SELECT offer_id, COUNT(*) as count 
+       FROM user_offer_progress 
+       WHERE status = 'COMPLETED' 
+         AND DATE(last_updated) = CURDATE() 
+       GROUP BY offer_id`
+    );
+    const completionsMap = {};
+    completionsTodayRows.forEach(r => {
+      completionsMap[r.offer_id] = r.count;
+    });
+
     // Group tiers by offer_id
     const tiersByOffer = {};
     tiers.forEach(t => {
@@ -362,7 +458,7 @@ export const getHotOffers = async (req, res) => {
         try {
           steps = typeof t.steps === 'string' ? JSON.parse(t.steps) : t.steps;
         } catch (e) {
-          steps = t.steps.split('\\n').map(s => s.trim()).filter(Boolean);
+          steps = t.steps.split('\n').map(s => s.trim()).filter(Boolean);
         }
       }
 
@@ -380,29 +476,48 @@ export const getHotOffers = async (req, res) => {
       });
     });
 
-    const formattedOffers = offers.map(o => ({
-      id: String(o.id),
-      external_id: o.external_id,
-      title: o.title,
-      description: o.description,
-      category: o.category,
-      iconUrl: o.icon_url,
-      trackingUrl: o.tracking_url,
-      totalReward: parseFloat(o.total_reward || 0),
-      type: o.type || 'online',
-      inputType: o.input_type || null,
-      inputInstruction: o.input_instruction || null,
-      isCompleted: false,
-      rewardType: o.reward_type || 'Multi Reward',
-      extraLabel: o.extra_label || null,
-      estimatedTime: o.estimated_time || null,
-      difficulty: o.difficulty || 'Medium',
-      likesCount: parseInt(o.likes_count || 0),
-      isHot: Boolean(o.is_hot),
-      tiers: tiersByOffer[o.id] || []
-    }));
+    const formattedOffers = offers.map(o => {
+      const completionsToday = completionsMap[o.id] || 0;
+      const dailyCompletionCap = parseInt(o.daily_completion_cap || 0);
+      return {
+        id: String(o.id),
+        external_id: o.external_id,
+        title: o.title,
+        description: o.description,
+        category: o.category,
+        iconUrl: o.icon_url,
+        trackingUrl: o.tracking_url,
+        totalReward: parseFloat(o.total_reward || 0),
+        type: o.type || 'online',
+        inputType: o.input_type || null,
+        inputInstruction: o.input_instruction || null,
+        isCompleted: false,
+        rewardType: o.reward_type || 'Multi Reward',
+        extraLabel: o.extra_label || null,
+        estimatedTime: o.estimated_time || null,
+        difficulty: o.difficulty || 'Medium',
+        likesCount: parseInt(o.likes_count || 0),
+        isHot: Boolean(o.is_hot),
+        dailyCompletionCap: dailyCompletionCap,
+        countryTargeting: o.country_targeting || null,
+        completionsToday: completionsToday,
+        isCapped: dailyCompletionCap > 0 && completionsToday >= dailyCompletionCap,
+        tiers: tiersByOffer[o.id] || []
+      };
+    });
 
-    res.json({ success: true, offers: formattedOffers });
+    // Dynamic Country Filtering
+    let filteredOffers = formattedOffers;
+    if (country) {
+      const userCountry = country.trim().toUpperCase();
+      filteredOffers = formattedOffers.filter(o => {
+        if (!o.countryTargeting) return true; // No targeting bounds
+        const allowedCountries = o.countryTargeting.split(',').map(c => c.trim().toUpperCase());
+        return allowedCountries.includes(userCountry) || allowedCountries.includes('*');
+      });
+    }
+
+    res.json({ success: true, offers: filteredOffers });
   } catch (error) {
     console.error('Get Hot Offers Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });

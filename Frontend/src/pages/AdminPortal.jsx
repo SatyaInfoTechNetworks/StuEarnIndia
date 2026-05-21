@@ -62,7 +62,8 @@ export default function AdminPortal() {
     total_coins_issued: 0,
     total_completions: 0,
     open_tickets: 0,
-    pending_erasures: 0
+    pending_erasures: 0,
+    pending_proofs: 0
   });
 
   const [usersList, setUsersList] = useState([]);
@@ -92,12 +93,16 @@ export default function AdminPortal() {
     icon_url: '',
     tracking_url: '',
     total_reward: 0,
+    actual_price: 0,
     is_active: true,
     type: 'online',
     reward_type: 'Multi Reward',
     estimated_time: '5 mins',
     difficulty: 'Medium',
     is_hot: false,
+    extra_label: '',
+    input_type: '',
+    input_instruction: [],
     tiers: []
   });
 
@@ -110,6 +115,12 @@ export default function AdminPortal() {
 
   // Erasures states
   const [erasuresList, setErasuresList] = useState([]);
+
+  // Offline task manual proof verification states
+  const [proofsList, setProofsList] = useState([]);
+  const [rejectProofClickId, setRejectProofClickId] = useState(null);
+  const [rejectProofReason, setRejectProofReason] = useState('');
+  const [rejectProofModal, setRejectProofModal] = useState(false);
 
   // FCM states
   const [fcmTargetUserId, setFcmTargetUserId] = useState('');
@@ -262,6 +273,24 @@ export default function AdminPortal() {
     }
   }, [withdrawalStatus, activeTab, isAuthenticated]);
 
+  const fetchProofs = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/proofs`, { headers: getHeaders() });
+      if (!checkResponseStatus(res)) return;
+      const data = await res.json();
+      if (data.success) setProofsList(data.proofs || []);
+    } catch (err) {
+      console.error("Error fetching proofs:", err);
+    }
+  };
+
+  // Fetch proofs when tab is proofs
+  useEffect(() => {
+    if (isAuthenticated && activeTab === 'proofs') {
+      fetchProofs();
+    }
+  }, [activeTab, isAuthenticated]);
+
   const viewUserLedger = async (user) => {
     setSelectedUser(user);
     try {
@@ -372,12 +401,16 @@ export default function AdminPortal() {
       icon_url: '',
       tracking_url: '',
       total_reward: 0,
+      actual_price: 0,
       is_active: true,
       type: 'online',
       reward_type: 'Multi Reward',
       estimated_time: '5 mins',
       difficulty: 'Medium',
       is_hot: false,
+      extra_label: '',
+      input_type: '',
+      input_instruction: [],
       tiers: []
     });
   };
@@ -469,6 +502,19 @@ export default function AdminPortal() {
             sequence: parseInt(t.sequence || 1)
           })) : [];
 
+          // Safe parsing of input_instruction
+          let loadedInstructions = [];
+          if (fetched.input_instruction) {
+            try {
+              loadedInstructions = typeof fetched.input_instruction === 'string' 
+                ? JSON.parse(fetched.input_instruction) 
+                : fetched.input_instruction;
+              if (!Array.isArray(loadedInstructions)) loadedInstructions = [];
+            } catch (e) {
+              console.error("Error parsing input_instruction:", e);
+            }
+          }
+
           setOfferForm({
             title: fetched.title || '',
             external_id: fetched.external_id || '',
@@ -477,12 +523,16 @@ export default function AdminPortal() {
             icon_url: fetched.icon_url || '',
             tracking_url: fetched.tracking_url || '',
             total_reward: parseFloat(fetched.total_reward || 0),
+            actual_price: parseFloat(fetched.actual_price || 0),
             is_active: fetched.is_active ? true : false,
             type: fetched.type || 'online',
             reward_type: fetched.reward_type || 'Multi Reward',
             estimated_time: fetched.estimated_time || '5 mins',
             difficulty: fetched.difficulty || 'Medium',
             is_hot: fetched.is_hot ? true : false,
+            extra_label: fetched.extra_label || '',
+            input_type: fetched.input_type || '',
+            input_instruction: loadedInstructions,
             tiers: loadedTiers
           });
         }
@@ -583,6 +633,79 @@ export default function AdminPortal() {
     } catch (err) {
       showNotice('error', 'Failed to dismiss request');
     }
+  };
+
+  const handleApproveProof = async (clickId) => {
+    if (!window.confirm("Are you sure you want to approve this proof submission and credit the user's balance?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/proofs/${clickId}/approve`, {
+        method: 'POST',
+        headers: getHeaders()
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotice('success', data.message || 'Proof submission approved and coins credited');
+        fetchProofs();
+        fetchDashboardData();
+      } else {
+        showNotice('error', data.message);
+      }
+    } catch (err) {
+      showNotice('error', 'Failed to approve proof submission');
+    }
+  };
+
+  const triggerRejectProof = (clickId) => {
+    setRejectProofClickId(clickId);
+    setRejectProofReason('');
+    setRejectProofModal(true);
+  };
+
+  const handleRejectProofSubmit = async (e) => {
+    e.preventDefault();
+    if (!rejectProofClickId) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/proofs/${rejectProofClickId}/reject`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ reason: rejectProofReason })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotice('success', 'Proof submission rejected and user notified');
+        setRejectProofModal(false);
+        setRejectProofClickId(null);
+        setRejectProofReason('');
+        fetchProofs();
+        fetchDashboardData();
+      } else {
+        showNotice('error', data.message);
+      }
+    } catch (err) {
+      showNotice('error', 'Failed to reject proof submission');
+    }
+  };
+
+  const addInstructionField = () => {
+    setOfferForm({
+      ...offerForm,
+      input_instruction: [
+        ...(offerForm.input_instruction || []),
+        { label: '', type: 'text' }
+      ]
+    });
+  };
+
+  const removeInstructionField = (idx) => {
+    const updated = offerForm.input_instruction.filter((_, i) => i !== idx);
+    setOfferForm({ ...offerForm, input_instruction: updated });
+  };
+
+  const updateInstructionField = (idx, key, val) => {
+    const updated = [...offerForm.input_instruction];
+    updated[idx] = { ...updated[idx], [key]: val };
+    setOfferForm({ ...offerForm, input_instruction: updated });
   };
 
   // FCM Sender
@@ -764,6 +887,26 @@ export default function AdminPortal() {
             {stats.pending_withdrawals > 0 && (
               <span style={{ marginLeft: 'auto', background: 'var(--warning)', color: '#000', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '99px', fontWeight: 700 }}>
                 {stats.pending_withdrawals}
+              </span>
+            )}
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('proofs')}
+            className="btn" 
+            style={{ 
+              justifyContent: 'flex-start',
+              background: activeTab === 'proofs' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              color: activeTab === 'proofs' ? '#fff' : 'var(--text-secondary)',
+              border: activeTab === 'proofs' ? '1px solid var(--border-glass)' : 'none',
+              padding: '12px 16px',
+              textAlign: 'left'
+            }}
+          >
+            <ShieldCheck size={18} style={{ color: activeTab === 'proofs' ? 'var(--primary)' : 'var(--text-muted)' }} /> Offline Submissions
+            {stats.pending_proofs > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '99px', fontWeight: 700 }}>
+                {stats.pending_proofs}
               </span>
             )}
           </button>
@@ -1223,7 +1366,7 @@ export default function AdminPortal() {
                       />
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Reward Amount</label>
+                      <label className="form-label">User Reward (Coins)</label>
                       <input 
                         type="number" 
                         className="glass-input" 
@@ -1232,6 +1375,99 @@ export default function AdminPortal() {
                       />
                     </div>
                   </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Company Price ( Advertiser Payout ₹ )</label>
+                      <input 
+                        type="number" 
+                        className="glass-input" 
+                        step="0.01"
+                        placeholder="e.g. 15.50"
+                        value={offerForm.actual_price}
+                        onChange={(e) => setOfferForm({ ...offerForm, actual_price: parseFloat(e.target.value || 0) })}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Integration Mode</label>
+                      <select 
+                        className="glass-input" 
+                        value={offerForm.type}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setOfferForm({ 
+                            ...offerForm, 
+                            type: val, 
+                            input_type: val === 'offline' ? 'multi' : offerForm.input_type 
+                          });
+                        }}
+                        style={{ background: '#0a0b10', color: '#fff' }}
+                      >
+                        <option value="online">Online Campaign (Auto Webhook)</option>
+                        <option value="offline">Offline Campaign (Manual Proof Review)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Extra Badge Label (e.g. "HOT", "EASY SIGNUP")</label>
+                    <input 
+                      type="text" 
+                      className="glass-input" 
+                      placeholder="Leave blank for none" 
+                      value={offerForm.extra_label}
+                      onChange={(e) => setOfferForm({ ...offerForm, extra_label: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Offline Submissions Fields Schema Builder */}
+                  {offerForm.type === 'offline' && (
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
+                      <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                        <h4 style={{ fontSize: '0.95rem', margin: 0 }}>Proof Request Fields ({offerForm.input_instruction?.length || 0})</h4>
+                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={addInstructionField}>
+                          <Plus size={14} /> Add Field
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {offerForm.input_instruction?.map((field, idx) => (
+                          <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-glass)', borderRadius: '8px', padding: '10px' }}>
+                            <div style={{ flex: 1 }}>
+                              <input 
+                                type="text" 
+                                className="glass-input" 
+                                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                                placeholder="Field Label (e.g., Enter registered email)"
+                                value={field.label}
+                                onChange={(e) => updateInstructionField(idx, 'label', e.target.value)}
+                                required
+                              />
+                            </div>
+                            <div style={{ width: '120px' }}>
+                              <select
+                                className="glass-input"
+                                style={{ padding: '8px 12px', fontSize: '0.85rem', background: '#0a0b10', color: '#fff' }}
+                                value={field.type}
+                                onChange={(e) => updateInstructionField(idx, 'type', e.target.value)}
+                              >
+                                <option value="text">Text Input</option>
+                                <option value="file">Image Upload</option>
+                              </select>
+                            </div>
+                            <button type="button" className="btn btn-danger" style={{ padding: '8px' }} onClick={() => removeInstructionField(idx)}>
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                        {(!offerForm.input_instruction || offerForm.input_instruction.length === 0) && (
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', margin: 0 }}>
+                            No custom proof fields added. By default, users will see a text input.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Icon Image URL</label>
@@ -1417,6 +1653,148 @@ export default function AdminPortal() {
                     {withdrawalsList.length === 0 && (
                       <tr>
                         <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>No payout requests matching parameters.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 14: OFFLINE SUBMISSIONS AUDIT PANEL */}
+          {activeTab === 'proofs' && (
+            <div className="glass-panel" style={{ padding: '30px' }}>
+              <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', margin: 0 }}>Offline Submissions Audit Panel</h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Review evidence files and credentials submitted by candidates to approve rewards.
+                  </p>
+                </div>
+                <button className="btn btn-secondary" style={{ padding: '8px 16px', gap: '6px' }} onClick={fetchProofs}>
+                  <RefreshCw size={16} /> Refresh Queue
+                </button>
+              </div>
+
+              <div className="table-container">
+                <table className="glass-table">
+                  <thead>
+                    <tr>
+                      <th>User Candidate</th>
+                      <th>Target Campaign</th>
+                      <th>Submitted Evidence</th>
+                      <th>Campaign Payout</th>
+                      <th>Submission Date</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {proofsList.map(p => {
+                      // Safe parsing of user_input JSON
+                      let inputs = [];
+                      if (p.user_input) {
+                        try {
+                          inputs = typeof p.user_input === 'string' ? JSON.parse(p.user_input) : p.user_input;
+                        } catch (err) {
+                          console.error("Error parsing user_input:", err);
+                        }
+                      }
+
+                      return (
+                        <tr key={p.id}>
+                          <td>
+                            <strong>{p.user_name || 'Anonymous'}</strong>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>ID: <code>{p.user_public_id}</code></p>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{p.user_email}</p>
+                          </td>
+                          <td>
+                            <strong>{p.offer_title}</strong>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Category: <span className="badge badge-pending" style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: 'none', padding: '2px 6px' }}>{p.input_type || 'Manual'}</span></p>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '300px' }}>
+                              {Array.isArray(inputs) ? (
+                                inputs.map((inp, idx) => {
+                                  if (inp.type === 'file') {
+                                    // Make sure URL is complete
+                                    const fileUrl = inp.value && inp.value.startsWith('http') 
+                                      ? inp.value 
+                                      : `${API_BASE}${inp.value}`;
+                                    return (
+                                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{inp.label}:</span>
+                                        <a 
+                                          href={fileUrl} 
+                                          target="_blank" 
+                                          rel="noreferrer" 
+                                          className="btn btn-secondary" 
+                                          style={{ 
+                                            padding: '6px 12px', 
+                                            fontSize: '0.75rem', 
+                                            display: 'inline-flex', 
+                                            alignItems: 'center', 
+                                            gap: '6px',
+                                            alignSelf: 'flex-start',
+                                            textDecoration: 'none',
+                                            background: 'rgba(59, 130, 246, 0.1)',
+                                            color: '#60a5fa',
+                                            border: '1px solid rgba(59, 130, 246, 0.2)'
+                                          }}
+                                        >
+                                          <Eye size={12} /> View Screenshot / Image
+                                        </a>
+                                      </div>
+                                    );
+                                  } else {
+                                    return (
+                                      <div key={idx} style={{ fontSize: '0.85rem' }}>
+                                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{inp.label}: </span>
+                                        <code style={{ background: 'rgba(0,0,0,0.2)', padding: '2px 6px', borderRadius: '4px', wordBreak: 'break-all' }}>{inp.value || 'N/A'}</code>
+                                      </div>
+                                    );
+                                  }
+                                })
+                              ) : (
+                                <div style={{ fontSize: '0.85rem' }}>
+                                  <span style={{ color: 'var(--text-secondary)' }}>Input: </span>
+                                  <code>{p.user_input || 'N/A'}</code>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>User Reward</span>
+                              <p style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--accent)', margin: 0 }}>{parseFloat(p.offer_reward || 0).toFixed(2)} coins</p>
+                            </div>
+                          </td>
+                          <td style={{ fontSize: '0.85rem' }}>{new Date(p.last_updated).toLocaleString()}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                className="btn btn-primary" 
+                                style={{ padding: '6px 12px', fontSize: '0.75rem', background: 'var(--success)', border: 'none' }} 
+                                onClick={() => handleApproveProof(p.click_id)}
+                              >
+                                <Check size={12} /> Pass
+                              </button>
+                              <button 
+                                className="btn btn-danger" 
+                                style={{ padding: '6px 12px', fontSize: '0.75rem' }} 
+                                onClick={() => triggerRejectProof(p.click_id)}
+                              >
+                                <X size={12} /> Fail
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {proofsList.length === 0 && (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
+                          No pending offline proofs to audit.
+                        </td>
                       </tr>
                     )}
                   </tbody>
@@ -1630,6 +2008,34 @@ export default function AdminPortal() {
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button type="submit" className="btn btn-danger" style={{ flex: 1, padding: '10px' }}>Reject & Refund</button>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '10px' }} onClick={() => { setRejectModal(false); setSelectedWithdrawal(null); }}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Proof Modal */}
+      {rejectProofModal && rejectProofClickId && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="glass-panel" style={{ maxWidth: '420px', width: '100%', padding: '30px' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '20px' }}>Reject Proof Submission</h3>
+            
+            <form onSubmit={handleRejectProofSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Reason for Rejection (Visible to User)</label>
+                <textarea 
+                  className="glass-input" 
+                  rows={4}
+                  placeholder="e.g. Screenshot does not match target instructions, or credentials could not be verified."
+                  value={rejectProofReason}
+                  onChange={(e) => setRejectProofReason(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="submit" className="btn btn-danger" style={{ flex: 1, padding: '10px' }}>Confirm Rejection</button>
+                <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '10px' }} onClick={() => { setRejectProofModal(false); setRejectProofClickId(null); setRejectProofReason(''); }}>Cancel</button>
               </div>
             </form>
           </div>

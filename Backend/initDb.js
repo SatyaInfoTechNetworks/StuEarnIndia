@@ -73,6 +73,7 @@ export async function initializeDatabase() {
     await addColumnIfNotExists(connection, 'offers', 'extra_label', 'VARCHAR(100) NULL');
     await addColumnIfNotExists(connection, 'offers', 'estimated_time', 'VARCHAR(100) NULL');
     await addColumnIfNotExists(connection, 'offers', 'difficulty', 'VARCHAR(50) DEFAULT \'Medium\'');
+    await addColumnIfNotExists(connection, 'offers', 'actual_price', 'DECIMAL(10, 2) DEFAULT 0.00');
 
     // 3. offer_tiers Table
     await connection.query(`
@@ -106,6 +107,9 @@ export async function initializeDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
     await addColumnIfNotExists(connection, 'user_offer_progress', 'click_id', 'VARCHAR(255) UNIQUE NULL');
+    await addColumnIfNotExists(connection, 'user_offer_progress', 'user_input', 'TEXT NULL');
+    await addColumnIfNotExists(connection, 'user_offer_progress', 'admin_status', 'VARCHAR(50) DEFAULT \'PENDING\'');
+    await addColumnIfNotExists(connection, 'user_offer_progress', 'admin_remark', 'TEXT NULL');
 
     // 5. transactions Table
     // Let's modify the ENUM values safely or use simple VARCHAR for source/type to be flexible.

@@ -19,6 +19,7 @@ export const getAdminStats = async (req, res) => {
     const [completions]       = await pool.query('SELECT COUNT(*) as c FROM offer_completions');
     const [openTickets]       = await pool.query('SELECT COUNT(*) as c FROM tickets WHERE status != "CLOSED"');
     const [pendingErasures]   = await pool.query('SELECT COUNT(*) as c FROM deletion_requests WHERE status = "PENDING"').catch(() => [[{c:0}]]);
+    const [pendingProofs]     = await pool.query('SELECT COUNT(*) as c FROM user_offer_progress WHERE admin_status = "PENDING"');
 
     res.json({
       success: true,
@@ -34,7 +35,8 @@ export const getAdminStats = async (req, res) => {
         total_coins_spent: parseFloat(coinsSpent[0].t),
         total_completions: completions[0].c,
         open_tickets: openTickets[0].c,
-        pending_erasures: pendingErasures[0].c
+        pending_erasures: pendingErasures[0].c,
+        pending_proofs: pendingProofs[0].c
       }
     });
   } catch (error) {
@@ -188,7 +190,12 @@ export const unbanUser = async (req, res) => {
 export const createOffer = async (req, res) => {
   const connection = await pool.getConnection();
   try {
-    const { external_id, title, description, category, icon_url, tracking_url, total_reward, is_active, type, reward_type, estimated_time, difficulty, is_hot, tiers } = req.body;
+    const { 
+      external_id, title, description, category, icon_url, tracking_url, 
+      total_reward, actual_price, is_active, type, reward_type, 
+      estimated_time, difficulty, is_hot, extra_label, input_type, 
+      input_instruction, tiers 
+    } = req.body;
     if (!title) return res.status(400).json({ success: false, message: 'Title is required' });
 
     await connection.beginTransaction();
@@ -196,11 +203,12 @@ export const createOffer = async (req, res) => {
 
     const offerId = uuidv4();
     await connection.query(
-      `INSERT INTO offers (id, external_id, title, description, category, icon_url, tracking_url, total_reward, is_active, type, reward_type, estimated_time, difficulty, is_hot, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      `INSERT INTO offers (id, external_id, title, description, category, icon_url, tracking_url, total_reward, actual_price, is_active, type, reward_type, estimated_time, difficulty, is_hot, extra_label, input_type, input_instruction, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [offerId, external_id || null, title, description || '', category || 'General', icon_url || '', tracking_url || '',
-       parseFloat(total_reward || 0), is_active !== undefined ? (is_active ? 1 : 0) : 1,
-       type || 'online', reward_type || 'Multi Reward', estimated_time || '', difficulty || 'Medium', is_hot ? 1 : 0]
+       parseFloat(total_reward || 0), parseFloat(actual_price || 0), is_active !== undefined ? (is_active ? 1 : 0) : 1,
+       type || 'online', reward_type || 'Multi Reward', estimated_time || '', difficulty || 'Medium', is_hot ? 1 : 0,
+       extra_label || null, input_type || null, typeof input_instruction === 'object' ? JSON.stringify(input_instruction) : (input_instruction || null)]
     );
 
     if (Array.isArray(tiers)) {
@@ -225,7 +233,12 @@ export const updateOffer = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const offerId = req.params.id;
-    const { external_id, title, description, category, icon_url, tracking_url, total_reward, is_active, type, reward_type, estimated_time, difficulty, is_hot, tiers } = req.body;
+    const { 
+      external_id, title, description, category, icon_url, tracking_url, 
+      total_reward, actual_price, is_active, type, reward_type, 
+      estimated_time, difficulty, is_hot, extra_label, input_type, 
+      input_instruction, tiers 
+    } = req.body;
 
     await connection.beginTransaction();
     const [offerRows] = await connection.query('SELECT id FROM offers WHERE id = ?', [offerId]);
@@ -233,9 +246,10 @@ export const updateOffer = async (req, res) => {
 
     if (is_hot) await connection.query('UPDATE offers SET is_hot = 0');
     await connection.query(
-      `UPDATE offers SET external_id=?, title=?, description=?, category=?, icon_url=?, tracking_url=?, total_reward=?, is_active=?, type=?, reward_type=?, estimated_time=?, difficulty=?, is_hot=? WHERE id=?`,
+      `UPDATE offers SET external_id=?, title=?, description=?, category=?, icon_url=?, tracking_url=?, total_reward=?, actual_price=?, is_active=?, type=?, reward_type=?, estimated_time=?, difficulty=?, is_hot=?, extra_label=?, input_type=?, input_instruction=? WHERE id=?`,
       [external_id || null, title, description || '', category || 'General', icon_url || '', tracking_url || '',
-       parseFloat(total_reward || 0), is_active ? 1 : 0, type || 'online', reward_type || 'Multi Reward', estimated_time || '', difficulty || 'Medium', is_hot ? 1 : 0, offerId]
+       parseFloat(total_reward || 0), parseFloat(actual_price || 0), is_active ? 1 : 0, type || 'online', reward_type || 'Multi Reward', estimated_time || '', difficulty || 'Medium', is_hot ? 1 : 0,
+       extra_label || null, input_type || null, typeof input_instruction === 'object' ? JSON.stringify(input_instruction) : (input_instruction || null), offerId]
     );
 
     if (tiers !== undefined && Array.isArray(tiers)) {
@@ -829,5 +843,158 @@ export const getAdminReports = async (req, res) => {
   } catch (error) {
     console.error('Admin Reports Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==========================================
+// OFFLINE PROOF VERIFICATION
+// ==========================================
+export const getPendingProofs = async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT p.id, p.click_id, p.user_input, p.admin_status, p.last_updated,
+             u.id as user_internal_id, u.email as user_email, u.user_id as user_public_id, u.name as user_name, u.balance as user_balance,
+             o.id as offer_internal_id, o.title as offer_title, o.total_reward as offer_reward, o.input_type, o.input_instruction
+      FROM user_offer_progress p
+      JOIN offers o ON p.offer_id = o.id
+      JOIN users u ON p.user_id = u.id
+      WHERE o.type = 'offline' AND p.admin_status = 'PENDING'
+      ORDER BY p.last_updated DESC
+    `);
+    res.json({ success: true, proofs: rows });
+  } catch (error) {
+    console.error('Admin Get Pending Proofs Error:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  }
+};
+
+export const approveProof = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { clickId } = req.params;
+    if (!clickId) return res.status(400).json({ success: false, message: 'Click ID is required' });
+
+    await connection.beginTransaction();
+
+    // 1. Fetch the progress record and reward amount
+    const [rows] = await connection.query(`
+      SELECT p.*, o.total_reward, o.title as offer_title, u.id as user_internal_id
+      FROM user_offer_progress p
+      JOIN offers o ON p.offer_id = o.id
+      JOIN users u ON p.user_id = u.id
+      WHERE p.click_id = ? FOR UPDATE
+    `, [clickId]);
+
+    if (rows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'Submission not found' });
+    }
+
+    const submission = rows[0];
+    if (submission.admin_status === 'APPROVED') {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'Submission already approved' });
+    }
+
+    const uid = submission.user_internal_id;
+    const reward = parseFloat(submission.total_reward || 0);
+    const offerTitle = submission.offer_title;
+
+    // 2. Update user balance
+    await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [reward, uid]);
+
+    // 3. Update user progress status
+    await connection.query(
+      `UPDATE user_offer_progress 
+       SET admin_status = 'APPROVED', status = 'COMPLETED', admin_remark = 'Approved by Admin' 
+       WHERE click_id = ?`,
+      [clickId]
+    );
+
+    // 4. Record transaction ledger
+    const transId = uuidv4();
+    await connection.query(
+      `INSERT INTO transactions (id, user_id, amount, type, source, reference_id, description, created_at)
+       VALUES (?, ?, ?, 'CREDIT', 'OFFLINE_OFFER', ?, ?, NOW())`,
+      [transId, uid, reward, clickId, `Completed offline task: ${offerTitle}`]
+    );
+
+    // 5. Insert into offer_completions so it registers for leaderboard & top_offers count
+    await connection.query(
+      `INSERT INTO offer_completions (completion_id, user_id, offer_id, provider, payout_coins, status, offer_name, created_at)
+       VALUES (?, ?, ?, 'manual', ?, 'COMPLETED', ?, NOW())`,
+      [clickId, uid, submission.offer_id, reward, offerTitle]
+    );
+
+    await connection.commit();
+
+    // 6. Send push notification to user asynchronously
+    try {
+      await sendNotification(uid, 'Task Approved! 🎉', `Your proof for "${offerTitle}" was approved. +${reward} coins credited to your wallet.`);
+    } catch (notifErr) {
+      console.error('Failed to send task approval notification:', notifErr);
+    }
+
+    res.json({ success: true, message: `Submission approved. ${reward} coins credited.` });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Admin Approve Proof Error:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  } finally {
+    connection.release();
+  }
+};
+
+export const rejectProof = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { clickId } = req.params;
+    const { reason } = req.body;
+    if (!clickId) return res.status(400).json({ success: false, message: 'Click ID is required' });
+
+    await connection.beginTransaction();
+
+    const [rows] = await connection.query(`
+      SELECT p.*, o.title as offer_title, u.id as user_internal_id
+      FROM user_offer_progress p
+      JOIN offers o ON p.offer_id = o.id
+      JOIN users u ON p.user_id = u.id
+      WHERE p.click_id = ? FOR UPDATE
+    `, [clickId]);
+
+    if (rows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'Submission not found' });
+    }
+
+    const submission = rows[0];
+    const uid = submission.user_internal_id;
+    const offerTitle = submission.offer_title;
+    const remark = reason || 'No reason provided';
+
+    // Update progress status to REJECTED
+    await connection.query(
+      `UPDATE user_offer_progress 
+       SET admin_status = 'REJECTED', admin_remark = ? 
+       WHERE click_id = ?`,
+      [remark, clickId]
+    );
+
+    await connection.commit();
+
+    // Send push notification to user asynchronously
+    try {
+      await sendNotification(uid, 'Task Proof Rejected ⚠️', `Your proof for "${offerTitle}" was rejected: ${remark}`);
+    } catch (notifErr) {
+      console.error('Failed to send task rejection notification:', notifErr);
+    }
+
+    res.json({ success: true, message: 'Submission rejected.' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Admin Reject Proof Error:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  } finally {
+    connection.release();
   }
 };

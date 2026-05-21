@@ -99,7 +99,10 @@ import {
   getAdminTicketDetail,
   replyAdminTicket,
   closeAdminTicket,
-  getAdminReports
+  getAdminReports,
+  getPendingProofs,
+  approveProof,
+  rejectProof
 } from './controllers/adminController.js';
 
 // Middleware Imports
@@ -310,6 +313,11 @@ app.get('/api/admin/tickets', authenticateAdmin, listAdminTickets);
 app.get('/api/admin/tickets/:id', authenticateAdmin, getAdminTicketDetail);
 app.post('/api/admin/tickets/:id/reply', authenticateAdmin, replyAdminTicket);
 app.post('/api/admin/tickets/:id/close', authenticateAdmin, closeAdminTicket);
+
+// Offline Task Proof Verification
+app.get('/api/admin/proofs', authenticateAdmin, getPendingProofs);
+app.post('/api/admin/proofs/:clickId/approve', authenticateAdmin, approveProof);
+app.post('/api/admin/proofs/:clickId/reject', authenticateAdmin, rejectProof);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

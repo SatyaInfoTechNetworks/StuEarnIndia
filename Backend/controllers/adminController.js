@@ -1,6 +1,26 @@
 import pool from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { sendNotification, broadcastNotification } from '../utils/notifications.js';
+import { recordLedgerTransaction } from '../utils/ledger.js';
+
+// ==========================================
+// CORE AUDITING HELPER
+// ==========================================
+async function logAdminAction(connection, { adminId, actionType, targetId = null, payload = null, req = null }) {
+  try {
+    const ipAddress = req ? (req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1') : '127.0.0.1';
+    const userAgent = req ? req.headers['user-agent'] : null;
+    const payloadStr = payload ? JSON.stringify(payload) : null;
+    const logId = uuidv4();
+    await connection.query(
+      `INSERT INTO admin_audit_logs (id, admin_id, action_type, target_id, payload, ip_address, user_agent, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [logId, adminId, actionType, targetId, payloadStr, ipAddress, userAgent]
+    );
+  } catch (err) {
+    console.error('❌ Failed to log admin action:', err);
+  }
+}
 
 // ==========================================
 // OVERVIEW STATS
@@ -137,13 +157,25 @@ export const updateUserBalance = async (req, res) => {
       return res.status(400).json({ success: false, message: `Insufficient balance. User has ${user.balance} coins.` });
     }
 
-    await connection.query(
-      `INSERT INTO transactions (id, user_id, amount, type, source, description, created_at) VALUES (?, ?, ?, ?, 'MANUAL_ADJUSTMENT', ?, NOW())`,
-      [uuidv4(), userId, adjustVal, transType, description || `Admin manual ${transType.toLowerCase()} adjustment`]
-    );
+    // Use high-fidelity ledger wrapper
+    await recordLedgerTransaction(connection, {
+      userId,
+      amount: adjustVal,
+      type: transType,
+      source: 'MANUAL_ADJUSTMENT',
+      description: description || `Admin manual ${transType.toLowerCase()} adjustment`
+    });
 
-    const op = transType === 'CREDIT' ? '+' : '-';
-    await connection.query(`UPDATE users SET balance = balance ${op} ? WHERE id = ?`, [adjustVal, userId]);
+    // Audit Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'MANUAL_ADJUSTMENT',
+      targetId: userId,
+      payload: { amount: adjustVal, type: transType, description },
+      req
+    });
+
     await connection.commit();
 
     await sendNotification(userId, 'Wallet Updated', `Your balance was adjusted by admin: ${transType === 'CREDIT' ? '+' : '-'}${adjustVal} coins.`);
@@ -156,32 +188,62 @@ export const updateUserBalance = async (req, res) => {
 };
 
 export const banUser = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
     const userId = req.params.id;
     const { reason } = req.body;
-    const [rows] = await pool.query('SELECT id, name FROM users WHERE id = ? LIMIT 1', [userId]);
-    if (rows.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT id, name FROM users WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+    if (rows.length === 0) { await connection.rollback(); return res.status(404).json({ success: false, message: 'User not found' }); }
 
-    await pool.query('UPDATE users SET is_banned = 1, ban_reason = ? WHERE id = ?', [reason || 'Violated terms of service', userId]);
+    await connection.query('UPDATE users SET is_banned = 1, ban_reason = ? WHERE id = ?', [reason || 'Violated terms of service', userId]);
+
+    // Audit Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'BAN_USER',
+      targetId: userId,
+      payload: { reason: reason || 'Violated terms of service' },
+      req
+    });
+
+    await connection.commit();
     res.json({ success: true, message: `User ${rows[0].name} banned successfully` });
   } catch (error) {
+    await connection.rollback();
     console.error('Ban User Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
-  }
+  } finally { connection.release(); }
 };
 
 export const unbanUser = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
     const userId = req.params.id;
-    const [rows] = await pool.query('SELECT id, name FROM users WHERE id = ? LIMIT 1', [userId]);
-    if (rows.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT id, name FROM users WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+    if (rows.length === 0) { await connection.rollback(); return res.status(404).json({ success: false, message: 'User not found' }); }
 
-    await pool.query('UPDATE users SET is_banned = 0, ban_reason = NULL WHERE id = ?', [userId]);
+    await connection.query('UPDATE users SET is_banned = 0, ban_reason = NULL WHERE id = ?', [userId]);
+
+    // Audit Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'UNBAN_USER',
+      targetId: userId,
+      payload: {},
+      req
+    });
+
+    await connection.commit();
     res.json({ success: true, message: `User ${rows[0].name} unbanned successfully` });
   } catch (error) {
+    await connection.rollback();
     console.error('Unban User Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
-  }
+  } finally { connection.release(); }
 };
 
 // ==========================================
@@ -194,7 +256,7 @@ export const createOffer = async (req, res) => {
       external_id, title, description, category, icon_url, tracking_url, 
       total_reward, actual_price, is_active, type, reward_type, 
       estimated_time, difficulty, is_hot, extra_label, input_type, 
-      input_instruction, tiers 
+      input_instruction, tiers, daily_completion_cap, country_targeting 
     } = req.body;
     if (!title) return res.status(400).json({ success: false, message: 'Title is required' });
 
@@ -203,12 +265,13 @@ export const createOffer = async (req, res) => {
 
     const offerId = uuidv4();
     await connection.query(
-      `INSERT INTO offers (id, external_id, title, description, category, icon_url, tracking_url, total_reward, actual_price, is_active, type, reward_type, estimated_time, difficulty, is_hot, extra_label, input_type, input_instruction, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      `INSERT INTO offers (id, external_id, title, description, category, icon_url, tracking_url, total_reward, actual_price, is_active, type, reward_type, estimated_time, difficulty, is_hot, extra_label, input_type, input_instruction, daily_completion_cap, country_targeting, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [offerId, external_id || null, title, description || '', category || 'General', icon_url || '', tracking_url || '',
        parseFloat(total_reward || 0), parseFloat(actual_price || 0), is_active !== undefined ? (is_active ? 1 : 0) : 1,
        type || 'online', reward_type || 'Multi Reward', estimated_time || '', difficulty || 'Medium', is_hot ? 1 : 0,
-       extra_label || null, input_type || null, typeof input_instruction === 'object' ? JSON.stringify(input_instruction) : (input_instruction || null)]
+       extra_label || null, input_type || null, typeof input_instruction === 'object' ? JSON.stringify(input_instruction) : (input_instruction || null),
+       parseInt(daily_completion_cap || 0), country_targeting || 'IN']
     );
 
     if (Array.isArray(tiers)) {
@@ -219,6 +282,16 @@ export const createOffer = async (req, res) => {
         );
       }
     }
+
+    // Audit Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'CREATE_OFFER',
+      targetId: offerId,
+      payload: { title, external_id, total_reward, daily_completion_cap, country_targeting },
+      req
+    });
 
     await connection.commit();
     res.json({ success: true, message: 'Offer created successfully', offer_id: offerId });
@@ -237,7 +310,7 @@ export const updateOffer = async (req, res) => {
       external_id, title, description, category, icon_url, tracking_url, 
       total_reward, actual_price, is_active, type, reward_type, 
       estimated_time, difficulty, is_hot, extra_label, input_type, 
-      input_instruction, tiers 
+      input_instruction, tiers, daily_completion_cap, country_targeting 
     } = req.body;
 
     await connection.beginTransaction();
@@ -246,10 +319,11 @@ export const updateOffer = async (req, res) => {
 
     if (is_hot) await connection.query('UPDATE offers SET is_hot = 0');
     await connection.query(
-      `UPDATE offers SET external_id=?, title=?, description=?, category=?, icon_url=?, tracking_url=?, total_reward=?, actual_price=?, is_active=?, type=?, reward_type=?, estimated_time=?, difficulty=?, is_hot=?, extra_label=?, input_type=?, input_instruction=? WHERE id=?`,
+      `UPDATE offers SET external_id=?, title=?, description=?, category=?, icon_url=?, tracking_url=?, total_reward=?, actual_price=?, is_active=?, type=?, reward_type=?, estimated_time=?, difficulty=?, is_hot=?, extra_label=?, input_type=?, input_instruction=?, daily_completion_cap=?, country_targeting=? WHERE id=?`,
       [external_id || null, title, description || '', category || 'General', icon_url || '', tracking_url || '',
        parseFloat(total_reward || 0), parseFloat(actual_price || 0), is_active ? 1 : 0, type || 'online', reward_type || 'Multi Reward', estimated_time || '', difficulty || 'Medium', is_hot ? 1 : 0,
-       extra_label || null, input_type || null, typeof input_instruction === 'object' ? JSON.stringify(input_instruction) : (input_instruction || null), offerId]
+       extra_label || null, input_type || null, typeof input_instruction === 'object' ? JSON.stringify(input_instruction) : (input_instruction || null),
+       parseInt(daily_completion_cap || 0), country_targeting || 'IN', offerId]
     );
 
     if (tiers !== undefined && Array.isArray(tiers)) {
@@ -262,6 +336,16 @@ export const updateOffer = async (req, res) => {
       }
     }
 
+    // Audit Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'UPDATE_OFFER',
+      targetId: offerId,
+      payload: { title, external_id, total_reward, daily_completion_cap, country_targeting },
+      req
+    });
+
     await connection.commit();
     res.json({ success: true, message: 'Offer updated successfully' });
   } catch (error) {
@@ -272,18 +356,33 @@ export const updateOffer = async (req, res) => {
 };
 
 export const deleteOffer = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
     const offerId = req.params.id;
-    const [rows] = await pool.query('SELECT id FROM offers WHERE id = ?', [offerId]);
-    if (rows.length === 0) return res.status(404).json({ success: false, message: 'Offer not found' });
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT id, title FROM offers WHERE id = ? FOR UPDATE', [offerId]);
+    if (rows.length === 0) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Offer not found' }); }
 
-    await pool.query('DELETE FROM offer_tiers WHERE offer_id = ?', [offerId]);
-    await pool.query('DELETE FROM offers WHERE id = ?', [offerId]);
+    await connection.query('DELETE FROM offer_tiers WHERE offer_id = ?', [offerId]);
+    await connection.query('DELETE FROM offers WHERE id = ?', [offerId]);
+
+    // Audit Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'DELETE_OFFER',
+      targetId: offerId,
+      payload: { title: rows[0].title },
+      req
+    });
+
+    await connection.commit();
     res.json({ success: true, message: 'Offer deleted successfully' });
   } catch (error) {
+    await connection.rollback();
     console.error('Admin Delete Offer Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
-  }
+  } finally { connection.release(); }
 };
 
 // Admin list offers with extra details (completion count)
@@ -900,8 +999,15 @@ export const approveProof = async (req, res) => {
     const reward = parseFloat(submission.total_reward || 0);
     const offerTitle = submission.offer_title;
 
-    // 2. Update user balance
-    await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [reward, uid]);
+    // 2. Update user balance and log double-entry cryptographic transaction log
+    const ledgerResult = await recordLedgerTransaction(connection, {
+      userId: uid,
+      amount: reward,
+      type: 'CREDIT',
+      source: 'OFFLINE_OFFER',
+      referenceId: clickId,
+      description: `Completed offline task: ${offerTitle}`
+    });
 
     // 3. Update user progress status
     await connection.query(
@@ -911,20 +1017,22 @@ export const approveProof = async (req, res) => {
       [clickId]
     );
 
-    // 4. Record transaction ledger
-    const transId = uuidv4();
-    await connection.query(
-      `INSERT INTO transactions (id, user_id, amount, type, source, reference_id, description, created_at)
-       VALUES (?, ?, ?, 'CREDIT', 'OFFLINE_OFFER', ?, ?, NOW())`,
-      [transId, uid, reward, clickId, `Completed offline task: ${offerTitle}`]
-    );
-
-    // 5. Insert into offer_completions so it registers for leaderboard & top_offers count
+    // 4. Insert into offer_completions so it registers for leaderboard & top_offers count
     await connection.query(
       `INSERT INTO offer_completions (completion_id, user_id, offer_id, provider, payout_coins, status, offer_name, created_at)
        VALUES (?, ?, ?, 'manual', ?, 'COMPLETED', ?, NOW())`,
       [clickId, uid, submission.offer_id, reward, offerTitle]
     );
+
+    // 5. Audit Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'APPROVE_PROOF',
+      targetId: clickId,
+      payload: { userId: uid, reward, offerTitle },
+      req
+    });
 
     await connection.commit();
 
@@ -979,6 +1087,16 @@ export const rejectProof = async (req, res) => {
        WHERE click_id = ?`,
       [remark, clickId]
     );
+
+    // Audit Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'REJECT_PROOF',
+      targetId: clickId,
+      payload: { userId: uid, offerTitle, reason: remark },
+      req
+    });
 
     await connection.commit();
 

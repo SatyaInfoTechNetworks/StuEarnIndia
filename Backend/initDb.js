@@ -550,6 +550,54 @@ export async function initializeDatabase() {
          ON DUPLICATE KEY UPDATE method_id=VALUES(method_id), coin_cost=VALUES(coin_cost), monetary_value=VALUES(monetary_value), currency_symbol=VALUES(currency_symbol)`,
         [t.id, t.method_id, t.coin_cost, t.monetary_value, t.currency_symbol]
       );
+    // 23. device_fingerprints Table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS device_fingerprints (
+        id CHAR(36) PRIMARY KEY,
+        user_id CHAR(36) NOT NULL,
+        android_id VARCHAR(255) NOT NULL,
+        device_model VARCHAR(100) NULL,
+        os_version VARCHAR(50) NULL,
+        app_version VARCHAR(20) NULL,
+        ip_address VARCHAR(45) NOT NULL,
+        is_emulator BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_device_user (android_id, user_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 24. admin_audit_logs Table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS admin_audit_logs (
+        id CHAR(36) PRIMARY KEY,
+        admin_id CHAR(36) NOT NULL,
+        action_type VARCHAR(50) NOT NULL,
+        target_id VARCHAR(255) NULL,
+        payload JSON NULL,
+        ip_address VARCHAR(45) NOT NULL,
+        user_agent TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Extra Columns Migrations
+    await addColumnIfNotExists(connection, 'offers', 'daily_completion_cap', 'INT DEFAULT 0');
+    await addColumnIfNotExists(connection, 'offers', 'country_targeting', 'VARCHAR(255) DEFAULT \'IN\'');
+
+    await addColumnIfNotExists(connection, 'transactions', 'opening_balance', 'DECIMAL(10, 2) DEFAULT NULL');
+    await addColumnIfNotExists(connection, 'transactions', 'closing_balance', 'DECIMAL(10, 2) DEFAULT NULL');
+    await addColumnIfNotExists(connection, 'transactions', 'tamper_signature', 'VARCHAR(64) DEFAULT NULL');
+
+    // Index Optimizations
+    try {
+      console.log('⚡ Ensuring index optimizations...');
+      await connection.query('CREATE INDEX idx_user_offer_status ON user_offer_progress (user_id, offer_id, status)').catch(() => {});
+      await connection.query('CREATE INDEX idx_offer_type_status ON user_offer_progress (admin_status, last_updated DESC)').catch(() => {});
+      await connection.query('CREATE INDEX idx_user_trans_date ON transactions (user_id, created_at DESC)').catch(() => {});
+      await connection.query('CREATE INDEX idx_offer_active_hot ON offers (is_active, is_hot)').catch(() => {});
+    } catch (idxErr) {
+      console.log('⚠️ Index creation info:', idxErr.message);
     }
 
     console.log('✅ All database tables checked/created successfully.');

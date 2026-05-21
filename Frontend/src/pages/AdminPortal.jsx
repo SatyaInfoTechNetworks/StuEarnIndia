@@ -103,7 +103,9 @@ export default function AdminPortal() {
     extra_label: '',
     input_type: '',
     input_instruction: [],
-    tiers: []
+    tiers: [],
+    daily_completion_cap: 0,
+    country_targeting: 'IN'
   });
 
   // Withdrawals states
@@ -411,7 +413,9 @@ export default function AdminPortal() {
       extra_label: '',
       input_type: '',
       input_instruction: [],
-      tiers: []
+      tiers: [],
+      daily_completion_cap: 0,
+      country_targeting: 'IN'
     });
   };
 
@@ -533,7 +537,9 @@ export default function AdminPortal() {
             extra_label: fetched.extra_label || '',
             input_type: fetched.input_type || '',
             input_instruction: loadedInstructions,
-            tiers: loadedTiers
+            tiers: loadedTiers,
+            daily_completion_cap: fetched.daily_completion_cap || 0,
+            country_targeting: fetched.country_targeting || 'IN'
           });
         }
       });
@@ -1418,6 +1424,29 @@ export default function AdminPortal() {
                       value={offerForm.extra_label}
                       onChange={(e) => setOfferForm({ ...offerForm, extra_label: e.target.value })}
                     />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Daily Completion Cap</label>
+                      <input 
+                        type="number" 
+                        className="glass-input" 
+                        placeholder="0 for unlimited" 
+                        value={offerForm.daily_completion_cap}
+                        onChange={(e) => setOfferForm({ ...offerForm, daily_completion_cap: parseInt(e.target.value || 0) })}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Country Targeting (ISO Codes)</label>
+                      <input 
+                        type="text" 
+                        className="glass-input" 
+                        placeholder="e.g. IN,US or ALL" 
+                        value={offerForm.country_targeting}
+                        onChange={(e) => setOfferForm({ ...offerForm, country_targeting: e.target.value })}
+                      />
+                    </div>
                   </div>
 
                   {/* Offline Submissions Fields Schema Builder */}

@@ -18,14 +18,27 @@ function generateJwtToken(payload) {
 // Google Login
 export const loginGoogle = async (req, res) => {
   try {
-    const { uid, email, name, android_id } = req.body;
+    const { uid, email, name, android_id, device_model, os_version } = req.body;
 
     if (!uid || !email || !name) {
       return res.status(400).json({ success: false, message: 'Incomplete data' });
     }
 
-    // 1. Device Lock Check
+    // 1. Hardened Device Binding & Multi-Account Check
     if (android_id) {
+      const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+      
+      const [fingerprintRows] = await pool.query(
+        `SELECT u.uid FROM device_fingerprints df 
+         JOIN users u ON df.user_id = u.id 
+         WHERE df.android_id = ? AND u.uid != ? LIMIT 1`,
+        [android_id, uid]
+      );
+      if (fingerprintRows.length > 0) {
+        return res.json({ success: false, message: 'Device already registered with another account' });
+      }
+
+      // Legacy fallback check
       const [devRows] = await pool.query(
         'SELECT uid FROM users WHERE android_id = ? AND uid != ? LIMIT 1',
         [android_id, uid]
@@ -46,6 +59,17 @@ export const loginGoogle = async (req, res) => {
         'UPDATE users SET name = ?, email = ?, android_id = ? WHERE uid = ?',
         [name, email, android_id || user.android_id, uid]
       );
+
+      // Record/Update Device Fingerprint
+      if (android_id) {
+        const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+        await pool.query(
+          `INSERT INTO device_fingerprints (id, user_id, android_id, device_model, os_version, ip_address, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, NOW())
+           ON DUPLICATE KEY UPDATE device_model=VALUES(device_model), os_version=VALUES(os_version), ip_address=VALUES(ip_address)`,
+          [uuidv4(), user.id, android_id, device_model || null, os_version || null, ipAddress]
+        ).catch(dfErr => console.error('Failed to log device fingerprint:', dfErr));
+      }
 
       // Fetch fresh row
       const [updatedUserRows] = await pool.query('SELECT * FROM users WHERE uid = ? LIMIT 1', [uid]);
@@ -72,14 +96,25 @@ export const loginGoogle = async (req, res) => {
 // User Signup
 export const signupUser = async (req, res) => {
   try {
-    const { uid, name, email, phone_number, profile_pic, location, referred_by, fcm_token, android_id } = req.body;
+    const { uid, name, email, phone_number, profile_pic, location, referred_by, fcm_token, android_id, device_model, os_version } = req.body;
 
     if (!uid || !name || !email) {
       return res.status(400).json({ success: false, message: 'Incomplete data' });
     }
 
-    // 1. Device Lock Check
+    // 1. Hardened Device Binding & Multi-Account Check
     if (android_id) {
+      const [fingerprintRows] = await pool.query(
+        `SELECT u.uid FROM device_fingerprints df 
+         JOIN users u ON df.user_id = u.id 
+         WHERE df.android_id = ? AND u.uid != ? LIMIT 1`,
+        [android_id, uid]
+      );
+      if (fingerprintRows.length > 0) {
+        return res.json({ success: false, message: 'Device already registered with another account' });
+      }
+
+      // Legacy fallback check
       const [devRows] = await pool.query(
         'SELECT uid FROM users WHERE android_id = ? AND uid != ? LIMIT 1',
         [android_id, uid]
@@ -112,6 +147,17 @@ export const signupUser = async (req, res) => {
           uid
         ]
       );
+
+      // Record/Update Device Fingerprint
+      if (android_id) {
+        const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+        await pool.query(
+          `INSERT INTO device_fingerprints (id, user_id, android_id, device_model, os_version, ip_address, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, NOW())
+           ON DUPLICATE KEY UPDATE device_model=VALUES(device_model), os_version=VALUES(os_version), ip_address=VALUES(ip_address)`,
+          [uuidv4(), user.id, android_id, device_model || null, os_version || null, ipAddress]
+        ).catch(dfErr => console.error('Failed to log device fingerprint:', dfErr));
+      }
 
       // Handle referral mapping if referred_by is set
       if (referred_by) {
@@ -155,6 +201,17 @@ export const signupUser = async (req, res) => {
         referralCode
       ]
     );
+
+    // Record Device Fingerprint for New User
+    if (android_id) {
+      const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+      await pool.query(
+        `INSERT INTO device_fingerprints (id, user_id, android_id, device_model, os_version, ip_address, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE device_model=VALUES(device_model), os_version=VALUES(os_version), ip_address=VALUES(ip_address)`,
+        [uuidv4(), newUserId, android_id, device_model || null, os_version || null, ipAddress]
+      ).catch(dfErr => console.error('Failed to log device fingerprint:', dfErr));
+    }
 
     // Handle referral mapping if referred_by is set
     if (referred_by) {

@@ -44,7 +44,7 @@ export async function initializeDatabase() {
     await addColumnIfNotExists(connection, 'users', 'last_streak_claim_date', 'DATE NULL');
     await addColumnIfNotExists(connection, 'users', 'is_banned', 'BOOLEAN DEFAULT FALSE');
     await addColumnIfNotExists(connection, 'users', 'ban_reason', 'TEXT NULL');
-    // Custom 10-char alphanumeric public user ID (safe to share, not Firebase UID)
+    // Custom 10-char hexadecimal public user ID (safe to share, not Firebase UID)
     await addColumnIfNotExists(connection, 'users', 'user_id', 'VARCHAR(10) UNIQUE');
 
     // 2. offers Table

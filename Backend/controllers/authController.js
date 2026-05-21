@@ -131,7 +131,7 @@ export const signupUser = async (req, res) => {
 
     // 3. New User Registration
     const newUserId = uuidv4();
-    const publicUserId = await generateUniqueUserId(); // Custom 10-char alphanumeric ID
+    const publicUserId = await generateUniqueUserId(); // Custom 10-char hexadecimal ID
     
     // Generate referral code (Case-insensitive unique code, e.g. uppercase base36)
     const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();

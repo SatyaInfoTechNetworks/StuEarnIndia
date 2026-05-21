@@ -1,13 +1,12 @@
 import crypto from 'crypto';
 import pool from '../db.js';
 
-// Character set: uppercase + lowercase + digits (no confusing chars like 0/O, 1/l)
-const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+// Character set: 10-character hexadecimal (0-9, a-f)
+const CHARS = '0123456789abcdef';
 
 /**
- * Generates a cryptographically random 10-character alphanumeric user ID.
- * Uses a safe character set (mixed case + digits, no confusable characters).
- * Format example: "Xk7mP2nQwR"
+ * Generates a cryptographically random 10-character hexadecimal user ID.
+ * Format example: "3f7a2d9b6c"
  */
 export function generateUserId() {
   const bytes = crypto.randomBytes(10);

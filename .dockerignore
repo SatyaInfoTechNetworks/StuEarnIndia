@@ -1,0 +1,11 @@
+.git
+node_modules
+Backend/node_modules
+Frontend/node_modules
+Frontend/dist
+api (2).zip
+old
+*.log
+.vscode
+.idea
+.DS_Store

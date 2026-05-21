@@ -4,12 +4,9 @@ WORKDIR /app
 COPY Frontend/package*.json ./
 RUN npm ci
 
-# Pass the build-time environment variable for Vite
-ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-
 COPY Frontend/ .
 RUN npm run build
+
 
 # Stage 2: Serve with Nginx
 FROM nginx:alpine

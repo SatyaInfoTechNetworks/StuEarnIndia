@@ -702,7 +702,7 @@ export default function AdminPortal() {
           </span>
         </div>
 
-        <nav style={{ flex: 1, padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <nav style={{ flex: 1, padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
           <button 
             onClick={() => setActiveTab('overview')}
             className="btn" 
@@ -730,7 +730,7 @@ export default function AdminPortal() {
               textAlign: 'left'
             }}
           >
-            <UsersIcon size={18} style={{ color: activeTab === 'users' ? 'var(--primary)' : 'var(--text-muted)' }} /> User ledgers
+            <UsersIcon size={18} style={{ color: activeTab === 'users' ? 'var(--primary)' : 'var(--text-muted)' }} /> User Ledgers
           </button>
 
           <button 
@@ -769,21 +769,96 @@ export default function AdminPortal() {
           </button>
 
           <button 
-            onClick={() => setActiveTab('erasures')}
+            onClick={() => setActiveTab('payouts')}
             className="btn" 
             style={{ 
               justifyContent: 'flex-start',
-              background: activeTab === 'erasures' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'erasures' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'erasures' ? '1px solid var(--border-glass)' : 'none',
+              background: activeTab === 'payouts' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              color: activeTab === 'payouts' ? '#fff' : 'var(--text-secondary)',
+              border: activeTab === 'payouts' ? '1px solid var(--border-glass)' : 'none',
               padding: '12px 16px',
               textAlign: 'left'
             }}
           >
-            <Trash2 size={18} style={{ color: activeTab === 'erasures' ? 'var(--danger)' : 'var(--text-muted)' }} /> Data Erasures
-            {stats.pending_erasures > 0 && (
-              <span style={{ marginLeft: 'auto', background: 'var(--danger)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '99px', fontWeight: 700 }}>
-                {stats.pending_erasures}
+            <CreditCard size={18} style={{ color: activeTab === 'payouts' ? 'var(--primary)' : 'var(--text-muted)' }} /> Payout Methods
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('configs')}
+            className="btn" 
+            style={{ 
+              justifyContent: 'flex-start',
+              background: activeTab === 'configs' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              color: activeTab === 'configs' ? '#fff' : 'var(--text-secondary)',
+              border: activeTab === 'configs' ? '1px solid var(--border-glass)' : 'none',
+              padding: '12px 16px',
+              textAlign: 'left'
+            }}
+          >
+            <Settings size={18} style={{ color: activeTab === 'configs' ? 'var(--primary)' : 'var(--text-muted)' }} /> App Configs
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('banners')}
+            className="btn" 
+            style={{ 
+              justifyContent: 'flex-start',
+              background: activeTab === 'banners' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              color: activeTab === 'banners' ? '#fff' : 'var(--text-secondary)',
+              border: activeTab === 'banners' ? '1px solid var(--border-glass)' : 'none',
+              padding: '12px 16px',
+              textAlign: 'left'
+            }}
+          >
+            <Grid size={18} style={{ color: activeTab === 'banners' ? 'var(--primary)' : 'var(--text-muted)' }} /> Banners Manager
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('referrals')}
+            className="btn" 
+            style={{ 
+              justifyContent: 'flex-start',
+              background: activeTab === 'referrals' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              color: activeTab === 'referrals' ? '#fff' : 'var(--text-secondary)',
+              border: activeTab === 'referrals' ? '1px solid var(--border-glass)' : 'none',
+              padding: '12px 16px',
+              textAlign: 'left'
+            }}
+          >
+            <Percent size={18} style={{ color: activeTab === 'referrals' ? 'var(--primary)' : 'var(--text-muted)' }} /> Referral Settings
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('lifafas')}
+            className="btn" 
+            style={{ 
+              justifyContent: 'flex-start',
+              background: activeTab === 'lifafas' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              color: activeTab === 'lifafas' ? '#fff' : 'var(--text-secondary)',
+              border: activeTab === 'lifafas' ? '1px solid var(--border-glass)' : 'none',
+              padding: '12px 16px',
+              textAlign: 'left'
+            }}
+          >
+            <Gift size={18} style={{ color: activeTab === 'lifafas' ? 'var(--primary)' : 'var(--text-muted)' }} /> Surprise Envelopes
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('tickets')}
+            className="btn" 
+            style={{ 
+              justifyContent: 'flex-start',
+              background: activeTab === 'tickets' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              color: activeTab === 'tickets' ? '#fff' : 'var(--text-secondary)',
+              border: activeTab === 'tickets' ? '1px solid var(--border-glass)' : 'none',
+              padding: '12px 16px',
+              textAlign: 'left'
+            }}
+          >
+            <MessageSquare size={18} style={{ color: activeTab === 'tickets' ? 'var(--primary)' : 'var(--text-muted)' }} /> Support Tickets
+            {stats.open_tickets > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '99px', fontWeight: 700 }}>
+                {stats.open_tickets}
               </span>
             )}
           </button>
@@ -801,6 +876,41 @@ export default function AdminPortal() {
             }}
           >
             <Bell size={18} style={{ color: activeTab === 'push' ? 'var(--primary)' : 'var(--text-muted)' }} /> Broadcast Center
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('reports')}
+            className="btn" 
+            style={{ 
+              justifyContent: 'flex-start',
+              background: activeTab === 'reports' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              color: activeTab === 'reports' ? '#fff' : 'var(--text-secondary)',
+              border: activeTab === 'reports' ? '1px solid var(--border-glass)' : 'none',
+              padding: '12px 16px',
+              textAlign: 'left'
+            }}
+          >
+            <TrendingUp size={18} style={{ color: activeTab === 'reports' ? 'var(--primary)' : 'var(--text-muted)' }} /> Financial Reports
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('erasures')}
+            className="btn" 
+            style={{ 
+              justifyContent: 'flex-start',
+              background: activeTab === 'erasures' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              color: activeTab === 'erasures' ? '#fff' : 'var(--text-secondary)',
+              border: activeTab === 'erasures' ? '1px solid var(--border-glass)' : 'none',
+              padding: '12px 16px',
+              textAlign: 'left'
+            }}
+          >
+            <Trash2 size={18} style={{ color: activeTab === 'erasures' ? 'var(--danger)' : 'var(--text-muted)' }} /> Data Erasures
+            {stats.pending_erasures > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--danger)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '99px', fontWeight: 700 }}>
+                {stats.pending_erasures}
+              </span>
+            )}
           </button>
         </nav>
 
@@ -1374,66 +1484,57 @@ export default function AdminPortal() {
 
           {/* TAB 6: BROADCAST CENTER */}
           {activeTab === 'push' && (
-            <div className="glass-panel" style={{ padding: '30px', maxWidth: '600px', margin: '0 auto' }}>
-              <h3 style={{ fontSize: '1.25rem', marginBottom: '8px' }}>Broadcast Push Notification</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px' }}>Send custom notifications to mobile clients instantly using Firebase Cloud Messaging (FCM).</p>
+            <div>
+              <AdminNotifications getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+            </div>
+          )}
 
-              {fcmStatus && (
-                <div style={{ 
-                  background: fcmStatus === 'success' ? 'rgba(16, 185, 129, 0.1)' : fcmStatus === 'sending' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                  border: fcmStatus === 'success' ? '1px solid rgba(16, 185, 129, 0.25)' : fcmStatus === 'sending' ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  marginBottom: '24px',
-                  color: fcmStatus === 'success' ? 'var(--success)' : fcmStatus === 'sending' ? 'var(--warning)' : 'var(--danger)',
-                  fontSize: '0.9rem'
-                }}>
-                  {fcmStatus === 'sending' && 'Broadcasting signals via FCM...'}
-                  {fcmStatus === 'success' && 'Push notifications broadcast successfully.'}
-                  {fcmStatus === 'error' && 'Failed to trigger notifications. Make sure service-account.json is loaded at backend.'}
-                </div>
-              )}
+          {/* TAB 7: APP CONFIGS */}
+          {activeTab === 'configs' && (
+            <div>
+              <AdminConfigs getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+            </div>
+          )}
 
-              <form onSubmit={handlePushSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Target Specific User UUID (Optional)</label>
-                  <input 
-                    type="text" 
-                    className="glass-input" 
-                    placeholder="Leave blank to broadcast to ALL users globally"
-                    value={fcmTargetUserId}
-                    onChange={(e) => setFcmTargetUserId(e.target.value)}
-                  />
-                </div>
+          {/* TAB 8: BANNERS MANAGER */}
+          {activeTab === 'banners' && (
+            <div>
+              <AdminBanners getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+            </div>
+          )}
 
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Notification Title</label>
-                  <input 
-                    type="text" 
-                    className="glass-input" 
-                    placeholder="e.g. Earn 2x Coins on Jupiter Bank"
-                    value={fcmTitle}
-                    onChange={(e) => setFcmTitle(e.target.value)}
-                    required
-                  />
-                </div>
+          {/* TAB 9: PAYOUT METHODS */}
+          {activeTab === 'payouts' && (
+            <div>
+              <AdminPayouts getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+            </div>
+          )}
 
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Message Body</label>
-                  <textarea 
-                    className="glass-input" 
-                    rows={4}
-                    placeholder="Enter short description alert message..."
-                    value={fcmBody}
-                    onChange={(e) => setFcmBody(e.target.value)}
-                    required
-                  />
-                </div>
+          {/* TAB 10: REFERRAL SETTINGS */}
+          {activeTab === 'referrals' && (
+            <div>
+              <AdminReferrals getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+            </div>
+          )}
 
-                <button type="submit" className="btn btn-primary" style={{ padding: '12px', marginTop: '10px' }} disabled={fcmStatus === 'sending'}>
-                  {fcmStatus === 'sending' ? 'Sending Signals...' : 'Broadcast Notification'}
-                </button>
-              </form>
+          {/* TAB 11: SURPRISE ENVELOPES */}
+          {activeTab === 'lifafas' && (
+            <div>
+              <AdminLifafas getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+            </div>
+          )}
+
+          {/* TAB 12: SUPPORT TICKETS */}
+          {activeTab === 'tickets' && (
+            <div>
+              <AdminTickets getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+            </div>
+          )}
+
+          {/* TAB 13: FINANCIAL REPORTS */}
+          {activeTab === 'reports' && (
+            <div>
+              <AdminReports getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
             </div>
           )}
 

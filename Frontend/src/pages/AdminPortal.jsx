@@ -18,9 +18,29 @@ import {
   PlusCircle, 
   MinusCircle,
   Coins, 
-  AlertTriangle 
+  AlertTriangle,
+  RefreshCw,
+  Ban,
+  ShieldCheck,
+  Calendar,
+  Grid,
+  Settings,
+  CreditCard,
+  Gift,
+  Percent,
+  MessageSquare
 } from 'lucide-react';
 import { API_BASE } from '../config';
+
+// Import Admin Subcomponents
+import AdminTickets from '../components/admin/AdminTickets';
+import AdminNotifications from '../components/admin/AdminNotifications';
+import AdminBanners from '../components/admin/AdminBanners';
+import AdminConfigs from '../components/admin/AdminConfigs';
+import AdminPayouts from '../components/admin/AdminPayouts';
+import AdminReferrals from '../components/admin/AdminReferrals';
+import AdminLifafas from '../components/admin/AdminLifafas';
+import AdminReports from '../components/admin/AdminReports';
 
 export default function AdminPortal() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -33,15 +53,27 @@ export default function AdminPortal() {
   // Admin Data states
   const [stats, setStats] = useState({
     total_users: 0,
+    banned_users: 0,
+    new_users_today: 0,
     active_offers: 0,
     pending_withdrawals: 0,
     pending_withdrawals_value: 0,
-    pending_erasures: 0,
-    settled_payouts_value: 0
+    settled_payouts_value: 0,
+    total_coins_issued: 0,
+    total_completions: 0,
+    open_tickets: 0,
+    pending_erasures: 0
   });
 
   const [usersList, setUsersList] = useState([]);
   const [userSearch, setUserSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersLimit, setUsersLimit] = useState(15);
+  const [usersTotal, setUsersTotal] = useState(0);
+  const [usersPages, setUsersPages] = useState(1);
+  const [usersStatus, setUsersStatus] = useState('ALL'); // ALL, ACTIVE, BANNED
+  
   const [selectedUser, setSelectedUser] = useState(null);
   const [userTransactions, setUserTransactions] = useState([]);
   const [adjustBalanceModal, setAdjustBalanceModal] = useState(false);
@@ -71,6 +103,7 @@ export default function AdminPortal() {
 
   // Withdrawals states
   const [withdrawalsList, setWithdrawalsList] = useState([]);
+  const [withdrawalStatus, setWithdrawalStatus] = useState('PENDING'); // PENDING, APPROVED, REJECTED, ALL
   const [selectedWithdrawal, setSelectedWithdrawal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectModal, setRejectModal] = useState(false);
@@ -86,6 +119,15 @@ export default function AdminPortal() {
 
   // Global Loader/Notice
   const [actionNotice, setActionNotice] = useState(null);
+
+  // Debounce user search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(userSearch);
+      setUsersPage(1); // Reset page on search
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [userSearch]);
 
   // Check auth on load
   useEffect(() => {
@@ -136,6 +178,16 @@ export default function AdminPortal() {
     setTimeout(() => setActionNotice(null), 5000);
   };
 
+  // Helper check for 401
+  const checkResponseStatus = (res) => {
+    if (res.status === 401) {
+      handleLogout();
+      showNotice('error', 'Session expired. Please log in again.');
+      return false;
+    }
+    return true;
+  };
+
   const fetchDashboardData = async (tokenOverride) => {
     const headers = tokenOverride 
       ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenOverride}` }
@@ -144,24 +196,19 @@ export default function AdminPortal() {
     try {
       // 1. Stats
       const statsRes = await fetch(`${API_BASE}/api/admin/stats`, { headers });
+      if (!checkResponseStatus(statsRes)) return;
       const statsData = await statsRes.json();
       if (statsData.success) setStats(statsData.stats);
 
-      // 2. Users
-      fetchUsers(headers);
-
-      // 3. Offers
-      const offersRes = await fetch(`${API_BASE}/api/offers`, { headers });
+      // 2. Offers (Admin list includes completion counts)
+      const offersRes = await fetch(`${API_BASE}/api/admin/offers`, { headers });
+      if (!checkResponseStatus(offersRes)) return;
       const offersData = await offersRes.json();
       if (offersData.success) setOffersList(offersData.offers || []);
 
-      // 4. Withdrawals
-      const withdrawRes = await fetch(`${API_BASE}/api/admin/withdrawals`, { headers });
-      const withdrawData = await withdrawRes.json();
-      if (withdrawData.success) setWithdrawalsList(withdrawData.withdrawals || []);
-
-      // 5. Erasures
+      // 3. Erasures
       const erasureRes = await fetch(`${API_BASE}/api/admin/erasures`, { headers });
+      if (!checkResponseStatus(erasureRes)) return;
       const erasureData = await erasureRes.json();
       if (erasureData.success) setErasuresList(erasureData.requests || []);
 
@@ -170,33 +217,110 @@ export default function AdminPortal() {
     }
   };
 
-  const fetchUsers = async (customHeaders) => {
+  const fetchUsers = async () => {
     try {
-      const headers = customHeaders || getHeaders();
-      const res = await fetch(`${API_BASE}/api/admin/users?search=${userSearch}`, { headers });
+      const headers = getHeaders();
+      const statusParam = usersStatus !== 'ALL' ? `&status=${usersStatus.toLowerCase()}` : '';
+      const res = await fetch(`${API_BASE}/api/admin/users?search=${debouncedSearch}&page=${usersPage}&limit=${usersLimit}${statusParam}`, { headers });
+      if (!checkResponseStatus(res)) return;
       const data = await res.json();
-      if (data.success) setUsersList(data.users || []);
+      if (data.success) {
+        setUsersList(data.users || []);
+        if (data.pagination) {
+          setUsersTotal(data.pagination.total);
+          setUsersPages(data.pagination.pages);
+        }
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Error fetching users:", err);
     }
   };
 
+  // Fetch users when query, page or status changes
   useEffect(() => {
     if (isAuthenticated) {
       fetchUsers();
     }
-  }, [userSearch, isAuthenticated]);
+  }, [debouncedSearch, usersPage, usersStatus, isAuthenticated]);
+
+  const fetchWithdrawals = async () => {
+    try {
+      const statusParam = withdrawalStatus !== 'ALL' ? `?status=${withdrawalStatus}` : '';
+      const res = await fetch(`${API_BASE}/api/admin/withdrawals${statusParam}`, { headers: getHeaders() });
+      if (!checkResponseStatus(res)) return;
+      const data = await res.json();
+      if (data.success) setWithdrawalsList(data.withdrawals || []);
+    } catch (err) {
+      console.error("Error fetching withdrawals:", err);
+    }
+  };
+
+  // Fetch withdrawals when status tab changes
+  useEffect(() => {
+    if (isAuthenticated && activeTab === 'withdrawals') {
+      fetchWithdrawals();
+    }
+  }, [withdrawalStatus, activeTab, isAuthenticated]);
 
   const viewUserLedger = async (user) => {
     setSelectedUser(user);
     try {
       const res = await fetch(`${API_BASE}/api/admin/users/${user.id}/transactions`, { headers: getHeaders() });
+      if (!checkResponseStatus(res)) return;
       const data = await res.json();
       if (data.success) {
         setUserTransactions(data.transactions || []);
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleBanUser = async (userId) => {
+    const reason = window.prompt("Enter reason for banning this user:");
+    if (reason === null) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/ban`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ reason })
+      });
+      if (!checkResponseStatus(res)) return;
+      const data = await res.json();
+      if (data.success) {
+        showNotice('success', 'User banned successfully');
+        fetchUsers();
+        if (selectedUser && selectedUser.id === userId) {
+          setSelectedUser({ ...selectedUser, is_banned: 1, ban_reason: reason });
+        }
+      } else {
+        showNotice('error', data.message);
+      }
+    } catch (err) {
+      showNotice('error', 'Failed to ban user');
+    }
+  };
+
+  const handleUnbanUser = async (userId) => {
+    if (!window.confirm("Are you sure you want to unban this user?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/unban`, {
+        method: 'POST',
+        headers: getHeaders()
+      });
+      if (!checkResponseStatus(res)) return;
+      const data = await res.json();
+      if (data.success) {
+        showNotice('success', 'User unbanned successfully');
+        fetchUsers();
+        if (selectedUser && selectedUser.id === userId) {
+          setSelectedUser({ ...selectedUser, is_banned: 0, ban_reason: null });
+        }
+      } else {
+        showNotice('error', data.message);
+      }
+    } catch (err) {
+      showNotice('error', 'Failed to unban user');
     }
   };
 

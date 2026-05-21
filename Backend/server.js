@@ -67,16 +67,39 @@ import {
   listUsers,
   getUserTransactionsAdmin,
   updateUserBalance,
+  banUser,
+  unbanUser,
   createOffer,
   updateOffer,
   deleteOffer,
+  listAdminOffers,
   listWithdrawals,
   approveWithdrawal,
   rejectWithdrawal,
   listErasureRequests,
   approveErasureRequest,
   rejectErasureRequest,
-  triggerPushNotification
+  triggerPushNotification,
+  listNotificationHistory,
+  listAdminBanners,
+  createBanner,
+  updateBanner,
+  deleteBanner,
+  listAppConfigs,
+  updateAppConfig,
+  listPayoutMethods,
+  updatePayoutMethod,
+  getReferralSettings,
+  updateReferralSettings,
+  listLifafas,
+  createLifafa,
+  updateLifafa,
+  deleteLifafa,
+  listAdminTickets,
+  getAdminTicketDetail,
+  replyAdminTicket,
+  closeAdminTicket,
+  getAdminReports
 } from './controllers/adminController.js';
 
 // Middleware Imports
@@ -86,7 +109,22 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // Enable CORS and body parsing
-app.use(cors());
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  process.env.FRONTEND_URL,
+  process.env.ADMIN_URL
+].filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -214,19 +252,64 @@ app.post('/api/webhook/offer-completed', handleOfferCompleted);
 // ==========================================
 app.post('/api/admin/login', loginAdmin);
 app.get('/api/admin/stats', authenticateAdmin, getAdminStats);
+app.get('/api/admin/reports', authenticateAdmin, getAdminReports);
+
+// User Management
 app.get('/api/admin/users', authenticateAdmin, listUsers);
 app.get('/api/admin/users/:id/transactions', authenticateAdmin, getUserTransactionsAdmin);
 app.post('/api/admin/users/:id/balance', authenticateAdmin, updateUserBalance);
+app.post('/api/admin/users/:id/ban', authenticateAdmin, banUser);
+app.post('/api/admin/users/:id/unban', authenticateAdmin, unbanUser);
+
+// Offers Management
+app.get('/api/admin/offers', authenticateAdmin, listAdminOffers);
 app.post('/api/admin/offers', authenticateAdmin, createOffer);
 app.put('/api/admin/offers/:id', authenticateAdmin, updateOffer);
 app.delete('/api/admin/offers/:id', authenticateAdmin, deleteOffer);
+
+// Withdrawals
 app.get('/api/admin/withdrawals', authenticateAdmin, listWithdrawals);
 app.post('/api/admin/withdrawals/:id/approve', authenticateAdmin, approveWithdrawal);
 app.post('/api/admin/withdrawals/:id/reject', authenticateAdmin, rejectWithdrawal);
+
+// Payout Methods
+app.get('/api/admin/payout-methods', authenticateAdmin, listPayoutMethods);
+app.post('/api/admin/payout-methods/:id', authenticateAdmin, updatePayoutMethod);
+
+// Erasure
 app.get('/api/admin/erasures', authenticateAdmin, listErasureRequests);
 app.post('/api/admin/erasures/:id/approve', authenticateAdmin, approveErasureRequest);
 app.post('/api/admin/erasures/:id/reject', authenticateAdmin, rejectErasureRequest);
+
+// Notifications
 app.post('/api/admin/push', authenticateAdmin, triggerPushNotification);
+app.get('/api/admin/notifications', authenticateAdmin, listNotificationHistory);
+
+// Banners
+app.get('/api/admin/banners', authenticateAdmin, listAdminBanners);
+app.post('/api/admin/banners', authenticateAdmin, createBanner);
+app.put('/api/admin/banners/:id', authenticateAdmin, updateBanner);
+app.delete('/api/admin/banners/:id', authenticateAdmin, deleteBanner);
+
+// App Configs
+app.get('/api/admin/configs', authenticateAdmin, listAppConfigs);
+app.post('/api/admin/configs', authenticateAdmin, updateAppConfig);
+
+// Referral Settings
+app.get('/api/admin/referral-settings', authenticateAdmin, getReferralSettings);
+app.post('/api/admin/referral-settings', authenticateAdmin, updateReferralSettings);
+
+// Lifafas
+app.get('/api/admin/lifafas', authenticateAdmin, listLifafas);
+app.post('/api/admin/lifafas', authenticateAdmin, createLifafa);
+app.put('/api/admin/lifafas/:id', authenticateAdmin, updateLifafa);
+app.delete('/api/admin/lifafas/:id', authenticateAdmin, deleteLifafa);
+
+// Tickets
+app.get('/api/admin/tickets', authenticateAdmin, listAdminTickets);
+app.get('/api/admin/tickets/:id', authenticateAdmin, getAdminTicketDetail);
+app.post('/api/admin/tickets/:id/reply', authenticateAdmin, replyAdminTicket);
+app.post('/api/admin/tickets/:id/close', authenticateAdmin, closeAdminTicket);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

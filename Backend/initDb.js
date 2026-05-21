@@ -42,6 +42,10 @@ export async function initializeDatabase() {
     await addColumnIfNotExists(connection, 'users', 'last_spin_date', 'DATE NULL');
     await addColumnIfNotExists(connection, 'users', 'current_streak', 'INT DEFAULT 0');
     await addColumnIfNotExists(connection, 'users', 'last_streak_claim_date', 'DATE NULL');
+    await addColumnIfNotExists(connection, 'users', 'is_banned', 'BOOLEAN DEFAULT FALSE');
+    await addColumnIfNotExists(connection, 'users', 'ban_reason', 'TEXT NULL');
+    // Custom 10-char alphanumeric public user ID (safe to share, not Firebase UID)
+    await addColumnIfNotExists(connection, 'users', 'user_id', 'VARCHAR(10) UNIQUE');
 
     // 2. offers Table
     await connection.query(`
@@ -207,6 +211,8 @@ export async function initializeDatabase() {
     await connection.query(`
       CREATE TABLE IF NOT EXISTS banners (
         id CHAR(36) PRIMARY KEY,
+        title VARCHAR(255) NULL,
+        description TEXT NULL,
         image_url TEXT NOT NULL,
         action_url TEXT NULL,
         display_order INT DEFAULT 0,
@@ -214,6 +220,8 @@ export async function initializeDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+    await addColumnIfNotExists(connection, 'banners', 'title', 'VARCHAR(255) NULL');
+    await addColumnIfNotExists(connection, 'banners', 'description', 'TEXT NULL');
 
     // 11. lifafas Table
     await connection.query(`
@@ -334,17 +342,23 @@ export async function initializeDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
-    // 20. notifications Table
+    // 20. notifications (Push History) Table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS notifications (
         id CHAR(36) PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
         message TEXT NOT NULL,
-        target_type VARCHAR(50) NOT NULL DEFAULT 'specific',
-        target_uid VARCHAR(255) NULL,
+        target_type VARCHAR(50) NOT NULL DEFAULT 'broadcast',
+        target_user_id VARCHAR(255) NULL,
+        sent_count INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+    await addColumnIfNotExists(connection, 'notifications', 'target_user_id', 'VARCHAR(255) NULL');
+    await addColumnIfNotExists(connection, 'notifications', 'sent_count', 'INT DEFAULT 0');
+
+    // 22. referral_settings: ensure description_text column exists
+    await addColumnIfNotExists(connection, 'referral_settings', 'description_text', 'TEXT NULL');
 
     // 21. offer_completions Table
     await connection.query(`

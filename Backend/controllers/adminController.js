@@ -2,214 +2,212 @@ import pool from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { sendNotification, broadcastNotification } from '../utils/notifications.js';
 
-// Get administrative overview stats
+// ==========================================
+// OVERVIEW STATS
+// ==========================================
 export const getAdminStats = async (req, res) => {
   try {
-    // 1. Total Users
-    const [userCountRows] = await pool.query('SELECT COUNT(*) as count FROM users');
-    
-    // 2. Active Offers
-    const [offerCountRows] = await pool.query('SELECT COUNT(*) as count FROM offers WHERE is_active = 1');
-
-    // 3. Pending Withdrawals
-    const [pendingWithdrawRows] = await pool.query('SELECT COUNT(*) as count FROM withdrawals WHERE status = "PENDING"');
-    const [pendingWithdrawVal] = await pool.query('SELECT SUM(amount) as total FROM withdrawals WHERE status = "PENDING"');
-
-    // 4. Pending Erasures (Account Deletions)
-    let pendingErasureCount = 0;
-    try {
-      const [erasureCountRows] = await pool.query('SELECT COUNT(*) as count FROM deletion_requests WHERE status = "PENDING"');
-      pendingErasureCount = erasureCountRows[0].count;
-    } catch (e) {
-      // Ignore if table does not exist yet
-    }
-
-    // 5. Total Settled Payouts (APPROVED)
-    const [settledWithdrawVal] = await pool.query('SELECT SUM(amount) as total FROM withdrawals WHERE status = "APPROVED"');
+    const [userCount]         = await pool.query('SELECT COUNT(*) as c FROM users WHERE is_banned = 0 OR is_banned IS NULL');
+    const [bannedCount]       = await pool.query('SELECT COUNT(*) as c FROM users WHERE is_banned = 1');
+    const [todayUsers]        = await pool.query('SELECT COUNT(*) as c FROM users WHERE DATE(created_at) = CURDATE()');
+    const [offerCount]        = await pool.query('SELECT COUNT(*) as c FROM offers WHERE is_active = 1');
+    const [pendingWdCount]    = await pool.query('SELECT COUNT(*) as c FROM withdrawals WHERE status = "PENDING"');
+    const [pendingWdVal]      = await pool.query('SELECT COALESCE(SUM(amount),0) as t FROM withdrawals WHERE status = "PENDING"');
+    const [settledWdVal]      = await pool.query('SELECT COALESCE(SUM(amount),0) as t FROM withdrawals WHERE status = "APPROVED"');
+    const [coinsIssued]       = await pool.query('SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE type = "CREDIT"');
+    const [coinsSpent]        = await pool.query('SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE type = "DEBIT"');
+    const [completions]       = await pool.query('SELECT COUNT(*) as c FROM offer_completions');
+    const [openTickets]       = await pool.query('SELECT COUNT(*) as c FROM tickets WHERE status != "CLOSED"');
+    const [pendingErasures]   = await pool.query('SELECT COUNT(*) as c FROM deletion_requests WHERE status = "PENDING"').catch(() => [[{c:0}]]);
 
     res.json({
       success: true,
       stats: {
-        total_users: userCountRows[0].count,
-        active_offers: offerCountRows[0].count,
-        pending_withdrawals: pendingWithdrawRows[0].count,
-        pending_withdrawals_value: parseFloat(pendingWithdrawVal[0].total || 0),
-        pending_erasures: pendingErasureCount,
-        settled_payouts_value: parseFloat(settledWithdrawVal[0].total || 0)
+        total_users: userCount[0].c,
+        banned_users: bannedCount[0].c,
+        new_users_today: todayUsers[0].c,
+        active_offers: offerCount[0].c,
+        pending_withdrawals: pendingWdCount[0].c,
+        pending_withdrawals_value: parseFloat(pendingWdVal[0].t),
+        settled_payouts_value: parseFloat(settledWdVal[0].t),
+        total_coins_issued: parseFloat(coinsIssued[0].t),
+        total_coins_spent: parseFloat(coinsSpent[0].t),
+        total_completions: completions[0].c,
+        open_tickets: openTickets[0].c,
+        pending_erasures: pendingErasures[0].c
       }
     });
   } catch (error) {
-    console.error('Get Admin Stats Error:', error);
+    console.error('Admin Stats Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
-// List/Search Users
+// ==========================================
+// USER MANAGEMENT
+// ==========================================
 export const listUsers = async (req, res) => {
   try {
-    const { search } = req.query;
-    let query = 'SELECT id, uid, name, email, phone_number, balance, referral_code, referred_by, created_at FROM users';
+    const { search, page = 1, limit = 50, status } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let where = [];
     const params = [];
 
     if (search) {
-      query += ' WHERE name LIKE ? OR email LIKE ? OR referral_code LIKE ?';
-      const searchWild = `%${search.trim()}%`;
-      params.push(searchWild, searchWild, searchWild);
+      where.push('(u.name LIKE ? OR u.email LIKE ? OR u.referral_code LIKE ? OR u.user_id LIKE ?)');
+      const sw = `%${search.trim()}%`;
+      params.push(sw, sw, sw, sw);
     }
+    if (status === 'banned') { where.push('u.is_banned = 1'); }
+    else if (status === 'active') { where.push('(u.is_banned = 0 OR u.is_banned IS NULL)'); }
 
-    query += ' ORDER BY created_at DESC';
-    const [users] = await pool.query(query, params);
+    const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-    res.json({ success: true, users });
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) as total FROM users u ${whereClause}`, params
+    );
+
+    const [users] = await pool.query(
+      `SELECT u.id, u.user_id, u.uid, u.name, u.email, u.phone_number, u.balance,
+              u.referral_code, u.is_banned, u.ban_reason, u.created_at,
+              (SELECT COUNT(*) FROM referral_uses WHERE referrer_id = u.id) as referral_count
+       FROM users u ${whereClause}
+       ORDER BY u.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
+    );
+
+    res.json({
+      success: true,
+      users,
+      pagination: {
+        total: countRows[0].total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(countRows[0].total / parseInt(limit))
+      }
+    });
   } catch (error) {
     console.error('Admin List Users Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
-// View User Transactions Ledger
 export const getUserTransactionsAdmin = async (req, res) => {
   try {
     const userId = req.params.id;
-    const [rows] = await pool.query(
-      'SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC',
+    const [user] = await pool.query(
+      'SELECT id, user_id, name, email, balance, is_banned, ban_reason, created_at, referral_code FROM users WHERE id = ? LIMIT 1',
       [userId]
     );
-    res.json({ success: true, transactions: rows });
+    const [rows] = await pool.query(
+      'SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 200',
+      [userId]
+    );
+    res.json({ success: true, transactions: rows, user: user[0] || null });
   } catch (error) {
     console.error('Admin Get User Ledger Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
-// Manually Modify User Balance
 export const updateUserBalance = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const userId = req.params.id;
     const { amount, type, description } = req.body;
 
-    if (!amount || !type) {
-      return res.status(400).json({ success: false, message: 'Amount and type are required' });
-    }
-
+    if (!amount || !type) return res.status(400).json({ success: false, message: 'Amount and type are required' });
     const adjustVal = parseFloat(amount);
-    if (isNaN(adjustVal) || adjustVal <= 0) {
-      return res.status(400).json({ success: false, message: 'Amount must be positive' });
-    }
+    if (isNaN(adjustVal) || adjustVal <= 0) return res.status(400).json({ success: false, message: 'Amount must be positive' });
 
     await connection.beginTransaction();
+    const [userRows] = await connection.query('SELECT id, balance, name FROM users WHERE id = ? FOR UPDATE', [userId]);
+    if (userRows.length === 0) { await connection.rollback(); return res.status(404).json({ success: false, message: 'User not found' }); }
 
-    // 1. Verify user exists
-    const [userRows] = await connection.query('SELECT name FROM users WHERE id = ?', [userId]);
-    if (userRows.length === 0) {
+    const user = userRows[0];
+    const transType = type.toUpperCase() === 'CREDIT' ? 'CREDIT' : 'DEBIT';
+
+    // Guard against negative balance on debit
+    if (transType === 'DEBIT' && parseFloat(user.balance) < adjustVal) {
       await connection.rollback();
-      return res.status(404).json({ success: false, message: 'User not found' });
+      return res.status(400).json({ success: false, message: `Insufficient balance. User has ${user.balance} coins.` });
     }
 
-    // 2. Insert transaction
-    const transId = uuidv4();
-    const transType = type.toUpperCase() === 'CREDIT' ? 'CREDIT' : 'DEBIT';
-    const source = 'DAILY_BONUS'; // Fallback manual source
-    const descStr = description || `Manual adjustment by Admin (${transType})`;
-
     await connection.query(
-      `INSERT INTO transactions (id, user_id, amount, type, source, description, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [transId, userId, adjustVal, transType, source, descStr]
+      `INSERT INTO transactions (id, user_id, amount, type, source, description, created_at) VALUES (?, ?, ?, ?, 'MANUAL_ADJUSTMENT', ?, NOW())`,
+      [uuidv4(), userId, adjustVal, transType, description || `Admin manual ${transType.toLowerCase()} adjustment`]
     );
 
-    // 3. Update balance
-    const operator = transType === 'CREDIT' ? '+' : '-';
-    await connection.query(
-      `UPDATE users SET balance = balance ${operator} ? WHERE id = ?`,
-      [adjustVal, userId]
-    );
-
+    const op = transType === 'CREDIT' ? '+' : '-';
+    await connection.query(`UPDATE users SET balance = balance ${op} ? WHERE id = ?`, [adjustVal, userId]);
     await connection.commit();
 
-    // Notify user of balance adjustment
-    await sendNotification(
-      userId,
-      "Wallet Updated",
-      `Your balance was adjusted by admin. Amount: ${transType === 'CREDIT' ? '+' : '-'}${adjustVal} coins.`
-    );
-
+    await sendNotification(userId, 'Wallet Updated', `Your balance was adjusted by admin: ${transType === 'CREDIT' ? '+' : '-'}${adjustVal} coins.`);
     res.json({ success: true, message: 'User balance adjusted successfully' });
   } catch (error) {
     await connection.rollback();
     console.error('Update Balance Error:', error);
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });
-  } finally {
-    connection.release();
+  } finally { connection.release(); }
+};
+
+export const banUser = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { reason } = req.body;
+    const [rows] = await pool.query('SELECT id, name FROM users WHERE id = ? LIMIT 1', [userId]);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
+
+    await pool.query('UPDATE users SET is_banned = 1, ban_reason = ? WHERE id = ?', [reason || 'Violated terms of service', userId]);
+    res.json({ success: true, message: `User ${rows[0].name} banned successfully` });
+  } catch (error) {
+    console.error('Ban User Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
-// Create Offer (with Tiers)
+export const unbanUser = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const [rows] = await pool.query('SELECT id, name FROM users WHERE id = ? LIMIT 1', [userId]);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
+
+    await pool.query('UPDATE users SET is_banned = 0, ban_reason = NULL WHERE id = ?', [userId]);
+    res.json({ success: true, message: `User ${rows[0].name} unbanned successfully` });
+  } catch (error) {
+    console.error('Unban User Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==========================================
+// OFFER MANAGEMENT
+// ==========================================
 export const createOffer = async (req, res) => {
   const connection = await pool.getConnection();
   try {
-    const {
-      external_id, title, description, category, icon_url, tracking_url,
-      total_reward, is_active, type, reward_type, estimated_time, difficulty, is_hot,
-      tiers
-    } = req.body;
-
-    if (!title) {
-      return res.status(400).json({ success: false, message: 'Title is required' });
-    }
+    const { external_id, title, description, category, icon_url, tracking_url, total_reward, is_active, type, reward_type, estimated_time, difficulty, is_hot, tiers } = req.body;
+    if (!title) return res.status(400).json({ success: false, message: 'Title is required' });
 
     await connection.beginTransaction();
-
-    // If marked hot, turn off other hot offers
-    if (is_hot) {
-      await connection.query('UPDATE offers SET is_hot = 0');
-    }
+    if (is_hot) await connection.query('UPDATE offers SET is_hot = 0');
 
     const offerId = uuidv4();
-
-    // 1. Insert Offer details
     await connection.query(
-      `INSERT INTO offers (
-        id, external_id, title, description, category, icon_url, tracking_url, 
-        total_reward, is_active, type, reward_type, estimated_time, difficulty, is_hot, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [
-        offerId,
-        external_id || null,
-        title,
-        description || '',
-        category || 'General',
-        icon_url || '',
-        tracking_url || '',
-        parseFloat(total_reward || 0),
-        is_active !== undefined ? (is_active ? 1 : 0) : 1,
-        type || 'online',
-        reward_type || 'Multi Reward',
-        estimated_time || '',
-        difficulty || 'Medium',
-        is_hot ? 1 : 0
-      ]
+      `INSERT INTO offers (id, external_id, title, description, category, icon_url, tracking_url, total_reward, is_active, type, reward_type, estimated_time, difficulty, is_hot, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [offerId, external_id || null, title, description || '', category || 'General', icon_url || '', tracking_url || '',
+       parseFloat(total_reward || 0), is_active !== undefined ? (is_active ? 1 : 0) : 1,
+       type || 'online', reward_type || 'Multi Reward', estimated_time || '', difficulty || 'Medium', is_hot ? 1 : 0]
     );
 
-    // 2. Insert associated Tiers if provided
     if (Array.isArray(tiers)) {
       for (const t of tiers) {
-        const tierId = uuidv4();
-        const stepsJson = t.steps ? JSON.stringify(t.steps) : '[]';
-
         await connection.query(
-          `INSERT INTO offer_tiers (id, offer_id, tier_title, app_tier_title, reward, steps, sequence) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            tierId,
-            offerId,
-            t.backend_title || t.title,
-            t.title,
-            parseFloat(t.reward || 0),
-            stepsJson,
-            parseInt(t.sequence || 1)
-          ]
+          `INSERT INTO offer_tiers (id, offer_id, tier_title, app_tier_title, reward, steps, sequence) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), offerId, t.backend_title || t.title, t.title, parseFloat(t.reward || 0), JSON.stringify(t.steps || []), parseInt(t.sequence || 1)]
         );
       }
     }
@@ -220,81 +218,32 @@ export const createOffer = async (req, res) => {
     await connection.rollback();
     console.error('Admin Create Offer Error:', error);
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });
-  } finally {
-    connection.release();
-  }
+  } finally { connection.release(); }
 };
 
-// Update Offer (replaces tiers)
 export const updateOffer = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const offerId = req.params.id;
-    const {
-      external_id, title, description, category, icon_url, tracking_url,
-      total_reward, is_active, type, reward_type, estimated_time, difficulty, is_hot,
-      tiers
-    } = req.body;
+    const { external_id, title, description, category, icon_url, tracking_url, total_reward, is_active, type, reward_type, estimated_time, difficulty, is_hot, tiers } = req.body;
 
     await connection.beginTransaction();
-
-    // Verify offer exists
     const [offerRows] = await connection.query('SELECT id FROM offers WHERE id = ?', [offerId]);
-    if (offerRows.length === 0) {
-      await connection.rollback();
-      return res.status(404).json({ success: false, message: 'Offer not found' });
-    }
+    if (offerRows.length === 0) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Offer not found' }); }
 
-    // If marked hot, turn off other hot offers
-    if (is_hot) {
-      await connection.query('UPDATE offers SET is_hot = 0');
-    }
-
-    // 1. Update basic offer parameters
+    if (is_hot) await connection.query('UPDATE offers SET is_hot = 0');
     await connection.query(
-      `UPDATE offers SET 
-        external_id = ?, title = ?, description = ?, category = ?, 
-        icon_url = ?, tracking_url = ?, total_reward = ?, is_active = ?, 
-        type = ?, reward_type = ?, estimated_time = ?, difficulty = ?, is_hot = ?
-       WHERE id = ?`,
-      [
-        external_id || null,
-        title,
-        description || '',
-        category || 'General',
-        icon_url || '',
-        tracking_url || '',
-        parseFloat(total_reward || 0),
-        is_active ? 1 : 0,
-        type || 'online',
-        reward_type || 'Multi Reward',
-        estimated_time || '',
-        difficulty || 'Medium',
-        is_hot ? 1 : 0,
-        offerId
-      ]
+      `UPDATE offers SET external_id=?, title=?, description=?, category=?, icon_url=?, tracking_url=?, total_reward=?, is_active=?, type=?, reward_type=?, estimated_time=?, difficulty=?, is_hot=? WHERE id=?`,
+      [external_id || null, title, description || '', category || 'General', icon_url || '', tracking_url || '',
+       parseFloat(total_reward || 0), is_active ? 1 : 0, type || 'online', reward_type || 'Multi Reward', estimated_time || '', difficulty || 'Medium', is_hot ? 1 : 0, offerId]
     );
 
-    // 2. Delete old tiers & insert new tiers if provided
     if (tiers !== undefined && Array.isArray(tiers)) {
       await connection.query('DELETE FROM offer_tiers WHERE offer_id = ?', [offerId]);
-
       for (const t of tiers) {
-        const tierId = uuidv4();
-        const stepsJson = t.steps ? JSON.stringify(t.steps) : '[]';
-
         await connection.query(
-          `INSERT INTO offer_tiers (id, offer_id, tier_title, app_tier_title, reward, steps, sequence) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            tierId,
-            offerId,
-            t.backend_title || t.title,
-            t.title,
-            parseFloat(t.reward || 0),
-            stepsJson,
-            parseInt(t.sequence || 1)
-          ]
+          `INSERT INTO offer_tiers (id, offer_id, tier_title, app_tier_title, reward, steps, sequence) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), offerId, t.backend_title || t.title, t.title, parseFloat(t.reward || 0), JSON.stringify(t.steps || []), parseInt(t.sequence || 1)]
         );
       }
     }
@@ -305,21 +254,17 @@ export const updateOffer = async (req, res) => {
     await connection.rollback();
     console.error('Admin Update Offer Error:', error);
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });
-  } finally {
-    connection.release();
-  }
+  } finally { connection.release(); }
 };
 
-// Delete Offer
 export const deleteOffer = async (req, res) => {
   try {
     const offerId = req.params.id;
-    
-    // Cascading deletes on offer_tiers happens automatically if schema setup correctly,
-    // otherwise we do hard delete
+    const [rows] = await pool.query('SELECT id FROM offers WHERE id = ?', [offerId]);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: 'Offer not found' });
+
     await pool.query('DELETE FROM offer_tiers WHERE offer_id = ?', [offerId]);
     await pool.query('DELETE FROM offers WHERE id = ?', [offerId]);
-
     res.json({ success: true, message: 'Offer deleted successfully' });
   } catch (error) {
     console.error('Admin Delete Offer Error:', error);
@@ -327,67 +272,78 @@ export const deleteOffer = async (req, res) => {
   }
 };
 
-// List all withdrawals requests
+// Admin list offers with extra details (completion count)
+export const listAdminOffers = async (req, res) => {
+  try {
+    const [offers] = await pool.query(`
+      SELECT o.*,
+             (SELECT COUNT(*) FROM offer_completions WHERE offer_id = o.external_id OR offer_id = o.id) as completion_count,
+             (SELECT COUNT(*) FROM offer_tiers WHERE offer_id = o.id) as tier_count
+      FROM offers o
+      ORDER BY o.created_at DESC
+    `);
+    res.json({ success: true, offers });
+  } catch (error) {
+    console.error('Admin List Offers Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==========================================
+// WITHDRAWAL MANAGEMENT
+// ==========================================
 export const listWithdrawals = async (req, res) => {
   try {
-    const { status } = req.query;
-    let query = `
-      SELECT w.id, w.user_id, w.amount, w.method, w.details, w.status, w.created_at,
-             u.name as user_name, u.email as user_email
-      FROM withdrawals w
-      JOIN users u ON w.user_id = u.id
-    `;
-    const params = [];
+    const { status = 'PENDING', page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    if (status) {
-      query += ' WHERE w.status = ?';
+    let whereClause = '';
+    const params = [];
+    if (status && status !== 'ALL') {
+      whereClause = 'WHERE w.status = ?';
       params.push(status);
     }
 
-    query += ' ORDER BY w.created_at DESC';
+    const [rows] = await pool.query(
+      `SELECT w.id, w.user_id, w.amount, w.method, w.details, w.status, w.created_at,
+              u.name as user_name, u.email as user_email, u.user_id as user_public_id
+       FROM withdrawals w JOIN users u ON w.user_id = u.id
+       ${whereClause}
+       ORDER BY w.created_at DESC LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
+    );
 
-    const [rows] = await pool.query(query, params);
-    res.json({ success: true, withdrawals: rows });
+    const [countRows] = await pool.query(`SELECT COUNT(*) as total FROM withdrawals w ${whereClause}`, params);
+
+    res.json({ success: true, withdrawals: rows, total: countRows[0].total });
   } catch (error) {
     console.error('Admin List Withdrawals Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
-// Approve Withdrawal Request
 export const approveWithdrawal = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
     const withdrawalId = req.params.id;
+    await connection.beginTransaction();
 
-    // 1. Verify withdrawal status is pending
-    const [rows] = await pool.query('SELECT * FROM withdrawals WHERE id = ? LIMIT 1', [withdrawalId]);
-    if (rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Withdrawal not found' });
-    }
-    const withdrawal = rows[0];
+    const [rows] = await connection.query('SELECT * FROM withdrawals WHERE id = ? FOR UPDATE', [withdrawalId]);
+    if (rows.length === 0) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Withdrawal not found' }); }
+    if (rows[0].status !== 'PENDING') { await connection.rollback(); return res.status(400).json({ success: false, message: 'Already processed' }); }
 
-    if (withdrawal.status !== 'PENDING') {
-      return res.status(400).json({ success: false, message: 'Withdrawal request already processed' });
-    }
+    await connection.query('UPDATE withdrawals SET status = "APPROVED" WHERE id = ?', [withdrawalId]);
+    await connection.commit();
 
-    // 2. Mark as APPROVED
-    await pool.query('UPDATE withdrawals SET status = "APPROVED" WHERE id = ?', [withdrawalId]);
-
-    // Send push notification
-    await sendNotification(
-      withdrawal.user_id,
-      "Withdrawal Settled",
-      `Your payout withdrawal of ₹${parseFloat(withdrawal.amount).toFixed(2)} was successfully processed!`
-    );
-
-    res.json({ success: true, message: 'Withdrawal approved successfully' });
+    await sendNotification(rows[0].user_id, 'Withdrawal Settled', `Your payout of ₹${parseFloat(rows[0].amount).toFixed(2)} has been processed!`);
+    res.json({ success: true, message: 'Withdrawal approved' });
   } catch (error) {
-    console.error('Admin Approve Withdrawal Error:', error);
+    await connection.rollback();
+    console.error('Approve Withdrawal Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
-  }
+  } finally { connection.release(); }
 };
 
-// Reject Withdrawal Request (Refunds balance)
 export const rejectWithdrawal = async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -395,80 +351,35 @@ export const rejectWithdrawal = async (req, res) => {
     const { reason } = req.body;
 
     await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT * FROM withdrawals WHERE id = ? FOR UPDATE', [withdrawalId]);
+    if (rows.length === 0) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Withdrawal not found' }); }
+    if (rows[0].status !== 'PENDING') { await connection.rollback(); return res.status(400).json({ success: false, message: 'Already processed' }); }
 
-    // 1. Verify pending status
-    const [rows] = await connection.query('SELECT * FROM withdrawals WHERE id = ? LIMIT 1 FOR UPDATE', [withdrawalId]);
-    if (rows.length === 0) {
-      await connection.rollback();
-      return res.status(404).json({ success: false, message: 'Withdrawal not found' });
-    }
     const withdrawal = rows[0];
-
-    if (withdrawal.status !== 'PENDING') {
-      await connection.rollback();
-      return res.status(400).json({ success: false, message: 'Withdrawal request already processed' });
-    }
-
-    // 2. Mark withdrawal status as REJECTED
     await connection.query('UPDATE withdrawals SET status = "REJECTED" WHERE id = ?', [withdrawalId]);
 
-    // 3. Refund User balance - Create CREDIT transaction
-    const transId = uuidv4();
     const refundAmt = parseFloat(withdrawal.amount);
-    const refundReason = reason || 'Payout request rejected';
-
     await connection.query(
-      `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
-       VALUES (?, ?, ?, 'CREDIT', 'WITHDRAWAL', ?, ?, NOW())`,
-      [
-        transId,
-        withdrawal.user_id,
-        refundAmt,
-        `Refund: ${refundReason}`,
-        withdrawalId
-      ]
+      `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) VALUES (?, ?, ?, 'CREDIT', 'WITHDRAWAL', ?, ?, NOW())`,
+      [uuidv4(), withdrawal.user_id, refundAmt, `Refund: ${reason || 'Payout rejected'}`, withdrawalId]
     );
-
-    // 4. Update user balance
-    await connection.query(
-      'UPDATE users SET balance = balance + ? WHERE id = ?',
-      [refundAmt, withdrawal.user_id]
-    );
-
+    await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [refundAmt, withdrawal.user_id]);
     await connection.commit();
 
-    // Send push notification
-    await sendNotification(
-      withdrawal.user_id,
-      "Withdrawal Rejected",
-      `Your withdrawal request was rejected and ₹${refundAmt.toFixed(2)} was refunded to your wallet.`
-    );
-
-    res.json({ success: true, message: 'Withdrawal rejected and balance refunded successfully' });
+    await sendNotification(withdrawal.user_id, 'Withdrawal Rejected', `Your withdrawal was rejected and ₹${refundAmt.toFixed(2)} refunded to your wallet.`);
+    res.json({ success: true, message: 'Withdrawal rejected and balance refunded' });
   } catch (error) {
     await connection.rollback();
-    console.error('Admin Reject Withdrawal Error:', error);
+    console.error('Reject Withdrawal Error:', error);
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });
-  } finally {
-    connection.release();
-  }
+  } finally { connection.release(); }
 };
 
-// List erasure/account deletion requests
+// ==========================================
+// ERASURE / GDPR
+// ==========================================
 export const listErasureRequests = async (req, res) => {
   try {
-    // Ensure table exists
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS deletion_requests (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id CHAR(36),
-        email VARCHAR(255) NOT NULL,
-        reason TEXT,
-        status ENUM('PENDING', 'APPROVED', 'REJECTED') DEFAULT 'PENDING',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )`
-    );
-
     const [rows] = await pool.query('SELECT * FROM deletion_requests ORDER BY created_at DESC');
     res.json({ success: true, requests: rows });
   } catch (error) {
@@ -477,100 +388,446 @@ export const listErasureRequests = async (req, res) => {
   }
 };
 
-// Approve Erasure (Hard Purge User!)
 export const approveErasureRequest = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const requestId = req.params.id;
-
-    // Verify request
     const [reqRows] = await connection.query('SELECT * FROM deletion_requests WHERE id = ? LIMIT 1', [requestId]);
-    if (reqRows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Erasure request not found' });
-    }
+    if (reqRows.length === 0) return res.status(404).json({ success: false, message: 'Erasure request not found' });
+    if (reqRows[0].status !== 'PENDING') return res.status(400).json({ success: false, message: 'Request already processed' });
+
     const request = reqRows[0];
-
-    if (request.status !== 'PENDING') {
-      return res.status(400).json({ success: false, message: 'Request already processed' });
-    }
-
     await connection.beginTransaction();
 
     let userId = request.user_id;
     if (!userId) {
       const [uRows] = await connection.query('SELECT id FROM users WHERE email = ? LIMIT 1', [request.email]);
-      if (uRows.length > 0) {
-        userId = uRows[0].id;
-      }
+      if (uRows.length > 0) userId = uRows[0].id;
     }
 
-    // Purge user data (cascade deletes should trigger if foreign keys have ON DELETE CASCADE,
-    // otherwise we clear records manually for safety)
     if (userId) {
       await connection.query('DELETE FROM transactions WHERE user_id = ?', [userId]);
       await connection.query('DELETE FROM withdrawals WHERE user_id = ?', [userId]);
       await connection.query('DELETE FROM user_offer_progress WHERE user_id = ?', [userId]);
       await connection.query('DELETE FROM referral_uses WHERE referrer_id = ? OR referred_user_id = ?', [userId, userId]);
       await connection.query('DELETE FROM offer_likes WHERE user_id = ?', [userId]);
+      await connection.query('DELETE FROM tickets WHERE user_id = ?', [userId]);
       await connection.query('DELETE FROM users WHERE id = ?', [userId]);
     }
 
-    // Update status to APPROVED
     await connection.query('UPDATE deletion_requests SET status = "APPROVED" WHERE id = ?', [requestId]);
-
     await connection.commit();
-    res.json({ success: true, message: 'User account and transaction history purged successfully' });
+    res.json({ success: true, message: 'User account purged successfully' });
   } catch (error) {
     await connection.rollback();
     console.error('Admin Approve Erasure Error:', error);
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });
-  } finally {
-    connection.release();
-  }
+  } finally { connection.release(); }
 };
 
-// Reject Erasure (Dismiss)
 export const rejectErasureRequest = async (req, res) => {
   try {
-    const requestId = req.params.id;
-
-    await pool.query('UPDATE deletion_requests SET status = "REJECTED" WHERE id = ?', [requestId]);
-
-    res.json({ success: true, message: 'Deletion request dismissed and user retained' });
+    await pool.query('UPDATE deletion_requests SET status = "REJECTED" WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'Deletion request dismissed' });
   } catch (error) {
     console.error('Admin Reject Erasure Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
-// Trigger FCM Push Notifications
+// ==========================================
+// PUSH NOTIFICATIONS + HISTORY
+// ==========================================
 export const triggerPushNotification = async (req, res) => {
   try {
     const { title, body, user_id } = req.body;
+    if (!title || !body) return res.status(400).json({ success: false, message: 'Title and body are required' });
 
-    if (!title || !body) {
-      return res.status(400).json({ success: false, message: 'Title and body are required' });
-    }
+    let sentCount = 0;
+    let targetType = 'broadcast';
 
     if (user_id) {
-      // Send to specific user
-      const success = await sendNotification(user_id, title, body);
-      if (success) {
-        return res.json({ success: true, message: 'Push notification sent to specific user successfully' });
-      } else {
-        return res.status(500).json({ success: false, message: 'Failed to send push notification' });
-      }
+      // Find internal ID by public user_id or internal id
+      const [userRows] = await pool.query('SELECT id FROM users WHERE user_id = ? OR id = ? LIMIT 1', [user_id, user_id]);
+      if (userRows.length === 0) return res.status(404).json({ success: false, message: 'Target user not found' });
+      const success = await sendNotification(userRows[0].id, title, body);
+      sentCount = success ? 1 : 0;
+      targetType = 'specific';
     } else {
-      // Broadcast globally
       const success = await broadcastNotification(title, body);
-      if (success) {
-        return res.json({ success: true, message: 'Global broadcast notification sent successfully' });
-      } else {
-        return res.status(500).json({ success: false, message: 'Failed to broadcast notifications' });
-      }
+      const [cnt] = await pool.query('SELECT COUNT(*) as c FROM users WHERE fcm_token IS NOT NULL AND fcm_token != ""');
+      sentCount = success ? cnt[0].c : 0;
     }
+
+    // Log notification history
+    await pool.query(
+      `INSERT INTO notifications (id, title, message, target_type, target_user_id, sent_count, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [uuidv4(), title, body, targetType, user_id || null, sentCount]
+    );
+
+    res.json({ success: true, message: `Notification sent successfully`, sent_count: sentCount });
   } catch (error) {
     console.error('Admin Push Notification Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const listNotificationHistory = async (req, res) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const [rows] = await pool.query('SELECT * FROM notifications ORDER BY created_at DESC LIMIT ? OFFSET ?', [parseInt(limit), offset]);
+    const [cnt] = await pool.query('SELECT COUNT(*) as total FROM notifications');
+    res.json({ success: true, notifications: rows, total: cnt[0].total });
+  } catch (error) {
+    console.error('Notification History Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==========================================
+// BANNER MANAGEMENT
+// ==========================================
+export const listAdminBanners = async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM banners ORDER BY display_order ASC, created_at DESC');
+    res.json({ success: true, banners: rows });
+  } catch (error) {
+    console.error('Admin List Banners Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const createBanner = async (req, res) => {
+  try {
+    const { title, description, image_url, action_url, display_order, is_active } = req.body;
+    if (!image_url) return res.status(400).json({ success: false, message: 'Image URL is required' });
+
+    const id = uuidv4();
+    await pool.query(
+      `INSERT INTO banners (id, title, description, image_url, action_url, display_order, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [id, title || '', description || '', image_url, action_url || '', parseInt(display_order || 0), is_active !== false ? 1 : 0]
+    );
+    res.json({ success: true, message: 'Banner created', id });
+  } catch (error) {
+    console.error('Create Banner Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const updateBanner = async (req, res) => {
+  try {
+    const bannerId = req.params.id;
+    const { title, description, image_url, action_url, display_order, is_active } = req.body;
+    await pool.query(
+      `UPDATE banners SET title=?, description=?, image_url=?, action_url=?, display_order=?, is_active=? WHERE id=?`,
+      [title || '', description || '', image_url || '', action_url || '', parseInt(display_order || 0), is_active ? 1 : 0, bannerId]
+    );
+    res.json({ success: true, message: 'Banner updated' });
+  } catch (error) {
+    console.error('Update Banner Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const deleteBanner = async (req, res) => {
+  try {
+    await pool.query('DELETE FROM banners WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'Banner deleted' });
+  } catch (error) {
+    console.error('Delete Banner Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==========================================
+// APP CONFIG MANAGEMENT
+// ==========================================
+export const listAppConfigs = async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM app_configs ORDER BY config_key ASC');
+    res.json({ success: true, configs: rows });
+  } catch (error) {
+    console.error('List App Configs Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const updateAppConfig = async (req, res) => {
+  try {
+    const { config_key, config_value } = req.body;
+    if (!config_key) return res.status(400).json({ success: false, message: 'config_key is required' });
+
+    await pool.query(
+      `INSERT INTO app_configs (config_key, config_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
+      [config_key, config_value]
+    );
+    res.json({ success: true, message: 'Config updated' });
+  } catch (error) {
+    console.error('Update App Config Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==========================================
+// PAYOUT METHODS MANAGEMENT
+// ==========================================
+export const listPayoutMethods = async (req, res) => {
+  try {
+    const [methods] = await pool.query('SELECT * FROM payout_methods ORDER BY is_active DESC, name ASC');
+    const [tiers] = await pool.query('SELECT * FROM payout_tiers ORDER BY method_id, coin_cost ASC');
+    res.json({ success: true, methods, tiers });
+  } catch (error) {
+    console.error('List Payout Methods Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const updatePayoutMethod = async (req, res) => {
+  try {
+    const methodId = req.params.id;
+    const { name, description, icon_url, min_coins, conversion_rate, processing_time, is_active } = req.body;
+    await pool.query(
+      `UPDATE payout_methods SET name=?, description=?, icon_url=?, min_coins=?, conversion_rate=?, processing_time=?, is_active=? WHERE id=?`,
+      [name, description, icon_url, parseInt(min_coins || 0), parseFloat(conversion_rate || 0), processing_time, is_active ? 1 : 0, methodId]
+    );
+    res.json({ success: true, message: 'Payout method updated' });
+  } catch (error) {
+    console.error('Update Payout Method Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==========================================
+// REFERRAL SETTINGS
+// ==========================================
+export const getReferralSettings = async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM referral_settings LIMIT 1');
+    res.json({ success: true, settings: rows[0] || { bonus_coins: 10, commission_percent: 10, offers_required: 2 } });
+  } catch (error) {
+    console.error('Get Referral Settings Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const updateReferralSettings = async (req, res) => {
+  try {
+    const { bonus_coins, commission_percent, offers_required, description_text } = req.body;
+    const [existing] = await pool.query('SELECT id FROM referral_settings LIMIT 1');
+
+    if (existing.length > 0) {
+      await pool.query(
+        'UPDATE referral_settings SET bonus_coins=?, commission_percent=?, offers_required=?, description_text=? WHERE id=?',
+        [parseFloat(bonus_coins || 10), parseInt(commission_percent || 10), parseInt(offers_required || 2), description_text || '', existing[0].id]
+      );
+    } else {
+      await pool.query(
+        'INSERT INTO referral_settings (bonus_coins, commission_percent, offers_required, description_text) VALUES (?, ?, ?, ?)',
+        [parseFloat(bonus_coins || 10), parseInt(commission_percent || 10), parseInt(offers_required || 2), description_text || '']
+      );
+    }
+    res.json({ success: true, message: 'Referral settings updated' });
+  } catch (error) {
+    console.error('Update Referral Settings Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==========================================
+// LIFAFA (SURPRISE ENVELOPE) MANAGEMENT
+// ==========================================
+export const listLifafas = async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT l.*, 
+             (SELECT COUNT(*) FROM lifafa_claims WHERE lifafa_id = l.lifafa_id) as actual_claims
+      FROM lifafas l ORDER BY l.created_at DESC
+    `);
+    res.json({ success: true, lifafas: rows });
+  } catch (error) {
+    console.error('List Lifafas Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const createLifafa = async (req, res) => {
+  try {
+    const { lifafa_id, bonus_amount, total_limit, required_offers_count, expires_at, is_active } = req.body;
+    if (!lifafa_id || !bonus_amount || !total_limit) {
+      return res.status(400).json({ success: false, message: 'lifafa_id, bonus_amount, total_limit are required' });
+    }
+
+    await pool.query(
+      `INSERT INTO lifafas (id, lifafa_id, bonus_amount, total_limit, required_offers_count, expires_at, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [uuidv4(), lifafa_id, parseFloat(bonus_amount), parseInt(total_limit), parseInt(required_offers_count || 0), expires_at || null, is_active !== false ? 1 : 0]
+    );
+    res.json({ success: true, message: 'Lifafa created' });
+  } catch (error) {
+    console.error('Create Lifafa Error:', error);
+    res.status(500).json({ success: false, message: error.message.includes('Duplicate') ? 'Lifafa ID already exists' : 'Server error' });
+  }
+};
+
+export const updateLifafa = async (req, res) => {
+  try {
+    const lifafaId = req.params.id;
+    const { bonus_amount, total_limit, required_offers_count, expires_at, is_active } = req.body;
+    await pool.query(
+      'UPDATE lifafas SET bonus_amount=?, total_limit=?, required_offers_count=?, expires_at=?, is_active=? WHERE id=?',
+      [parseFloat(bonus_amount), parseInt(total_limit), parseInt(required_offers_count || 0), expires_at || null, is_active ? 1 : 0, lifafaId]
+    );
+    res.json({ success: true, message: 'Lifafa updated' });
+  } catch (error) {
+    console.error('Update Lifafa Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const deleteLifafa = async (req, res) => {
+  try {
+    await pool.query('DELETE FROM lifafas WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'Lifafa deleted' });
+  } catch (error) {
+    console.error('Delete Lifafa Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==========================================
+// SUPPORT TICKETS
+// ==========================================
+export const listAdminTickets = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let whereClause = '';
+    const params = [];
+    if (status && status !== 'ALL') {
+      whereClause = 'WHERE t.status = ?';
+      params.push(status);
+    }
+
+    const [rows] = await pool.query(
+      `SELECT t.id, t.subject, t.status, t.created_at,
+              u.name as user_name, u.email as user_email, u.user_id as user_public_id,
+              (SELECT COUNT(*) FROM ticket_replies WHERE ticket_id = t.id) as reply_count,
+              (SELECT message FROM ticket_replies WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1) as last_message
+       FROM tickets t JOIN users u ON t.user_id = u.id
+       ${whereClause}
+       ORDER BY t.created_at DESC LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
+    );
+
+    const [cnt] = await pool.query(`SELECT COUNT(*) as total FROM tickets t ${whereClause}`, params);
+    res.json({ success: true, tickets: rows, total: cnt[0].total });
+  } catch (error) {
+    console.error('Admin List Tickets Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const getAdminTicketDetail = async (req, res) => {
+  try {
+    const ticketId = req.params.id;
+    const [ticketRows] = await pool.query(
+      `SELECT t.*, u.name as user_name, u.email as user_email, u.user_id as user_public_id
+       FROM tickets t JOIN users u ON t.user_id = u.id WHERE t.id = ? LIMIT 1`,
+      [ticketId]
+    );
+    if (ticketRows.length === 0) return res.status(404).json({ success: false, message: 'Ticket not found' });
+
+    const [replies] = await pool.query(
+      'SELECT * FROM ticket_replies WHERE ticket_id = ? ORDER BY created_at ASC',
+      [ticketId]
+    );
+
+    res.json({ success: true, ticket: ticketRows[0], replies });
+  } catch (error) {
+    console.error('Admin Get Ticket Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const replyAdminTicket = async (req, res) => {
+  try {
+    const ticketId = req.params.id;
+    const { message, close } = req.body;
+    if (!message) return res.status(400).json({ success: false, message: 'Message is required' });
+
+    const [ticketRows] = await pool.query('SELECT * FROM tickets WHERE id = ? LIMIT 1', [ticketId]);
+    if (ticketRows.length === 0) return res.status(404).json({ success: false, message: 'Ticket not found' });
+
+    await pool.query(
+      `INSERT INTO ticket_replies (id, ticket_id, sender_type, message, created_at) VALUES (?, ?, 'ADMIN', ?, NOW())`,
+      [uuidv4(), ticketId, message]
+    );
+
+    const newStatus = close ? 'CLOSED' : 'REPLIED';
+    await pool.query('UPDATE tickets SET status = ? WHERE id = ?', [newStatus, ticketId]);
+
+    // Notify user
+    await sendNotification(ticketRows[0].user_id, 'Support Reply', 'Admin replied to your support ticket. Tap to view.');
+    res.json({ success: true, message: 'Reply sent successfully' });
+  } catch (error) {
+    console.error('Admin Reply Ticket Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const closeAdminTicket = async (req, res) => {
+  try {
+    await pool.query('UPDATE tickets SET status = "CLOSED" WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'Ticket closed' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==========================================
+// REPORTS
+// ==========================================
+export const getAdminReports = async (req, res) => {
+  try {
+    // Users joined per day (last 30 days)
+    const [userGrowth] = await pool.query(`
+      SELECT DATE(created_at) as date, COUNT(*) as count
+      FROM users WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      GROUP BY DATE(created_at) ORDER BY date ASC
+    `);
+
+    // Revenue per day (last 30 days) — from settled withdrawals
+    const [revenue] = await pool.query(`
+      SELECT DATE(created_at) as date, SUM(amount) as total
+      FROM withdrawals WHERE status = 'APPROVED' AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      GROUP BY DATE(created_at) ORDER BY date ASC
+    `);
+
+    // Coins issued per day (last 30 days)
+    const [coinsIssued] = await pool.query(`
+      SELECT DATE(created_at) as date, SUM(amount) as total
+      FROM transactions WHERE type = 'CREDIT' AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      GROUP BY DATE(created_at) ORDER BY date ASC
+    `);
+
+    // Top offers by completion count
+    const [topOffers] = await pool.query(`
+      SELECT o.title, o.category, COUNT(oc.id) as completions, SUM(oc.payout_coins) as coins_paid
+      FROM offers o LEFT JOIN offer_completions oc ON (oc.offer_id = o.external_id OR oc.offer_id = o.id)
+      GROUP BY o.id, o.title, o.category
+      ORDER BY completions DESC LIMIT 10
+    `);
+
+    // Withdrawal breakdown by method
+    const [withdrawalByMethod] = await pool.query(`
+      SELECT method, status, COUNT(*) as count, SUM(amount) as total
+      FROM withdrawals GROUP BY method, status ORDER BY total DESC
+    `);
+
+    res.json({ success: true, reports: { user_growth: userGrowth, revenue, coins_issued: coinsIssued, top_offers: topOffers, withdrawal_by_method: withdrawalByMethod } });
+  } catch (error) {
+    console.error('Admin Reports Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };

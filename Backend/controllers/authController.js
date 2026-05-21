@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import pool from '../db.js';
+import { generateUniqueUserId } from '../utils/userId.js';
 
 // Generates legacy token
 function generateLegacyToken(userId) {
@@ -130,17 +131,19 @@ export const signupUser = async (req, res) => {
 
     // 3. New User Registration
     const newUserId = uuidv4();
+    const publicUserId = await generateUniqueUserId(); // Custom 10-char alphanumeric ID
     
     // Generate referral code (Case-insensitive unique code, e.g. uppercase base36)
     const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     await pool.query(
       `INSERT INTO users 
-        (id, uid, name, email, phone_number, profile_pic, location, referred_by, fcm_token, android_id, referral_code, balance, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, NOW())`,
+        (id, uid, user_id, name, email, phone_number, profile_pic, location, referred_by, fcm_token, android_id, referral_code, balance, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, NOW())`,
       [
         newUserId,
         uid,
+        publicUserId,
         name,
         email,
         phone_number || null,

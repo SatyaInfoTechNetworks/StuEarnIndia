@@ -63,6 +63,14 @@ import {
   replyToTicket
 } from './controllers/ticketController.js';
 import {
+  listVisitTasks,
+  claimVisitReward,
+  adminListVisitTasks,
+  adminCreateVisitTask,
+  adminUpdateVisitTask,
+  adminDeleteVisitTask
+} from './controllers/visitEarnController.js';
+import {
   getAdminStats,
   listUsers,
   getUserTransactionsAdmin,
@@ -168,10 +176,11 @@ app.post(['/api/user/daily-checkin', '/api/user/streak.php', '/api/user/streak']
 app.get(['/api/user/streak', '/api/user/streak.php'], authenticateUser, getStreakStatus);
 app.get(['/api/user/spin', '/api/user/spin.php'], authenticateUser, getSpinStatus);
 app.post(['/api/user/spin', '/api/user/spin.php'], authenticateUser, performSpin);
-app.get(['/api/user/scratch', '/api/user/scratch.php'], authenticateUser, getScratchStatus);
-app.post(['/api/user/scratch', '/api/user/scratch.php'], authenticateUser, performScratch);
-app.get(['/api/user/watch', '/api/user/watch.php'], authenticateUser, getVideoAdStatus);
-app.post(['/api/user/watch', '/api/user/watch.php'], authenticateUser, claimVideoAdReward);
+
+// Visit & Earn user endpoints
+app.get('/api/visit-earn', authenticateUser, listVisitTasks);
+app.post('/api/visit-earn/claim', authenticateUser, claimVisitReward);
+
 app.post(['/api/user/delete-account', '/api/delete_account.php'], requestAccountDeletion);
 
 // ==========================================
@@ -332,6 +341,12 @@ app.post('/api/admin/proofs/:clickId/reject', authenticateAdmin, rejectProof);
 
 // Reset Daily Spins
 app.post('/api/admin/users/reset-spins', authenticateAdmin, resetAllDailySpins);
+
+// Visit & Earn Management
+app.get('/api/admin/visit-earn', authenticateAdmin, adminListVisitTasks);
+app.post('/api/admin/visit-earn', authenticateAdmin, adminCreateVisitTask);
+app.put('/api/admin/visit-earn/:id', authenticateAdmin, adminUpdateVisitTask);
+app.delete('/api/admin/visit-earn/:id', authenticateAdmin, adminDeleteVisitTask);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

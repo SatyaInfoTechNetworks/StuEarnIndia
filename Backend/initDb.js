@@ -366,6 +366,32 @@ export async function initializeDatabase() {
     // 22. referral_settings: ensure description_text column exists
     await addColumnIfNotExists(connection, 'referral_settings', 'description_text', 'TEXT NULL');
 
+    // 25. visit_earn_tasks Table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS visit_earn_tasks (
+        id CHAR(36) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        coins INT NOT NULL DEFAULT 0,
+        visit_url TEXT NOT NULL,
+        timer_seconds INT DEFAULT 30,
+        is_ad BOOLEAN DEFAULT FALSE,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 26. user_visit_progress Table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS user_visit_progress (
+        id CHAR(36) PRIMARY KEY,
+        user_id CHAR(36) NOT NULL,
+        task_id CHAR(36) NOT NULL,
+        completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_id) REFERENCES visit_earn_tasks(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     // 21. offer_completions Table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS offer_completions (

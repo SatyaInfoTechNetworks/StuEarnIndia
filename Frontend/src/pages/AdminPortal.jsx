@@ -118,6 +118,18 @@ export default function AdminPortal() {
     country_targeting: 'IN'
   });
 
+  // Visit and Earn states
+  const [visitTasksList, setVisitTasksList] = useState([]);
+  const [editingVisitTask, setEditingVisitTask] = useState(null);
+  const [visitTaskForm, setVisitTaskForm] = useState({
+    title: '',
+    coins: 0,
+    visit_url: '',
+    timer_seconds: 30,
+    is_ad: false,
+    is_active: true
+  });
+
   // Withdrawals states
   const [withdrawalsList, setWithdrawalsList] = useState([]);
   const [withdrawalStatus, setWithdrawalStatus] = useState('PENDING'); // PENDING, APPROVED, REJECTED, ALL
@@ -302,6 +314,93 @@ export default function AdminPortal() {
       fetchProofs();
     }
   }, [activeTab, isAuthenticated]);
+
+  const fetchVisitTasks = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/visit-earn`, { headers: getHeaders() });
+      if (!checkResponseStatus(res)) return;
+      const data = await res.json();
+      if (data.success) setVisitTasksList(data.tasks || []);
+    } catch (err) {
+      console.error("Error fetching visit tasks:", err);
+    }
+  };
+
+  // Fetch visit tasks when tab is visit-earn
+  useEffect(() => {
+    if (isAuthenticated && activeTab === 'visit-earn') {
+      fetchVisitTasks();
+    }
+  }, [activeTab, isAuthenticated]);
+
+  const resetVisitTaskForm = () => {
+    setEditingVisitTask(null);
+    setVisitTaskForm({
+      title: '',
+      coins: 0,
+      visit_url: '',
+      timer_seconds: 30,
+      is_ad: false,
+      is_active: true
+    });
+  };
+
+  const handleVisitTaskSubmit = async (e) => {
+    e.preventDefault();
+    if (!visitTaskForm.title || !visitTaskForm.visit_url) return;
+    try {
+      const url = editingVisitTask 
+        ? `${API_BASE}/api/admin/visit-earn/${editingVisitTask.id}` 
+        : `${API_BASE}/api/admin/visit-earn`;
+      const method = editingVisitTask ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: getHeaders(),
+        body: JSON.stringify(visitTaskForm)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotice('success', editingVisitTask ? 'Visit task updated successfully' : 'Visit task created successfully');
+        resetVisitTaskForm();
+        fetchVisitTasks();
+      } else {
+        showNotice('error', data.message);
+      }
+    } catch (err) {
+      showNotice('error', 'Failed to save visit task');
+    }
+  };
+
+  const handleEditVisitTaskClick = (task) => {
+    setEditingVisitTask(task);
+    setVisitTaskForm({
+      title: task.title || '',
+      coins: task.coins || 0,
+      visit_url: task.visit_url || '',
+      timer_seconds: task.timer_seconds || 30,
+      is_ad: task.is_ad ? true : false,
+      is_active: task.is_active ? true : false
+    });
+  };
+
+  const handleDeleteVisitTask = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this Visit & Earn task?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/visit-earn/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotice('success', 'Visit task deleted successfully');
+        fetchVisitTasks();
+      } else {
+        showNotice('error', data.message);
+      }
+    } catch (err) {
+      showNotice('error', 'Failed to delete visit task');
+    }
+  };
 
   const viewUserLedger = async (user) => {
     setSelectedUser(user);
@@ -929,6 +1028,21 @@ export default function AdminPortal() {
             }}
           >
             <Layers size={18} style={{ color: activeTab === 'offers' ? 'var(--primary)' : 'var(--text-muted)' }} /> Offer Builder
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('visit-earn')}
+            className="btn" 
+            style={{ 
+              justifyContent: 'flex-start',
+              background: activeTab === 'visit-earn' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              color: activeTab === 'visit-earn' ? '#fff' : 'var(--text-secondary)',
+              border: activeTab === 'visit-earn' ? '1px solid var(--border-glass)' : 'none',
+              padding: '12px 16px',
+              textAlign: 'left'
+            }}
+          >
+            <Coins size={18} style={{ color: activeTab === 'visit-earn' ? 'var(--primary)' : 'var(--text-muted)' }} /> Visit & Earn
           </button>
 
           <button 
@@ -1850,7 +1964,223 @@ export default function AdminPortal() {
             </div>
           )}
 
-          {/* TAB 4: WITHDRAWALS QUEUE */}
+          {/* TAB 4: VISIT & EARN MANAGER */}
+          {activeTab === 'visit-earn' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '30px', alignItems: 'start' }}>
+              {/* Left: Task List */}
+              <div className="glass-panel" style={{ padding: '30px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', margin: 0 }}>Visit & Earn Tasks</h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      Manage URL visit tasks users can complete daily for coin rewards.
+                    </p>
+                  </div>
+                  <button className="btn btn-secondary" style={{ padding: '8px 16px', gap: '6px' }} onClick={fetchVisitTasks}>
+                    <RefreshCw size={16} /> Refresh
+                  </button>
+                </div>
+
+                <div className="table-container">
+                  <table className="glass-table">
+                    <thead>
+                      <tr>
+                        <th>Title</th>
+                        <th style={{ textAlign: 'center' }}>Coins</th>
+                        <th>Visit Link</th>
+                        <th style={{ textAlign: 'center' }}>Timer</th>
+                        <th style={{ textAlign: 'center' }}>Ad?</th>
+                        <th style={{ textAlign: 'center' }}>Status</th>
+                        <th style={{ textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visitTasksList.map(task => (
+                        <tr key={task.id} style={{ background: editingVisitTask?.id === task.id ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
+                          <td>
+                            <strong style={{ color: '#fff', fontSize: '0.9rem' }}>{task.title}</strong>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <strong style={{ color: 'var(--accent)' }}>{task.coins}</strong>
+                          </td>
+                          <td>
+                            <a
+                              href={task.visit_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ color: 'var(--primary-hover)', fontSize: '0.78rem', maxWidth: '200px', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                              title={task.visit_url}
+                            >
+                              {task.visit_url}
+                            </a>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{task.timer_seconds}s</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {task.is_ad ? (
+                              <span className="badge" style={{ background: 'rgba(168,85,247,0.12)', color: 'var(--primary-hover)', border: '1px solid rgba(168,85,247,0.25)', fontSize: '0.72rem' }}>
+                                Ad Required
+                              </span>
+                            ) : (
+                              <span className="badge" style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.07)', fontSize: '0.72rem' }}>
+                                No Ad
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className="badge" style={{
+                              background: task.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                              color: task.is_active ? 'var(--success)' : 'var(--danger)',
+                              border: task.is_active ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(239,68,68,0.2)',
+                            }}>
+                              {task.is_active ? 'Live' : 'Paused'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ padding: '6px 10px', fontSize: '0.75rem', gap: '4px' }}
+                                onClick={() => handleEditVisitTaskClick(task)}
+                              >
+                                <Edit3 size={12} /> Edit
+                              </button>
+                              <button
+                                className="btn btn-danger"
+                                style={{ padding: '6px 10px', fontSize: '0.75rem', gap: '4px' }}
+                                onClick={() => handleDeleteVisitTask(task.id)}
+                              >
+                                <Trash2 size={12} /> Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {visitTasksList.length === 0 && (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px' }}>
+                            No Visit & Earn tasks configured yet. Create your first one →
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Right: Create / Edit Form */}
+              <div className="glass-panel" style={{ padding: '30px' }}>
+                <h3 style={{
+                  fontSize: '1.15rem',
+                  marginBottom: '20px',
+                  paddingBottom: '12px',
+                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span>{editingVisitTask ? '✏️ Edit Task' : '＋ Create Task'}</span>
+                  {editingVisitTask && (
+                    <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.7rem' }} onClick={resetVisitTaskForm}>
+                      Cancel
+                    </button>
+                  )}
+                </h3>
+
+                <form onSubmit={handleVisitTaskSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Task Title</label>
+                    <input
+                      type="text"
+                      className="glass-input"
+                      placeholder="e.g. Visit TechCrunch & Earn"
+                      value={visitTaskForm.title}
+                      onChange={(e) => setVisitTaskForm({ ...visitTaskForm, title: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Visit URL</label>
+                    <input
+                      type="url"
+                      className="glass-input"
+                      placeholder="https://example.com"
+                      value={visitTaskForm.visit_url}
+                      onChange={(e) => setVisitTaskForm({ ...visitTaskForm, visit_url: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Coins Reward</label>
+                      <input
+                        type="number"
+                        className="glass-input"
+                        placeholder="e.g. 50"
+                        min="1"
+                        step="1"
+                        value={visitTaskForm.coins}
+                        onChange={(e) => setVisitTaskForm({ ...visitTaskForm, coins: parseInt(e.target.value || 0) })}
+                        required
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Timer (seconds)</label>
+                      <input
+                        type="number"
+                        className="glass-input"
+                        placeholder="e.g. 30"
+                        min="5"
+                        step="1"
+                        value={visitTaskForm.timer_seconds}
+                        onChange={(e) => setVisitTaskForm({ ...visitTaskForm, timer_seconds: parseInt(e.target.value || 30) })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Ad Required Before Visit?</label>
+                    <select
+                      className="glass-input"
+                      style={{ background: '#0a0b10', color: '#fff' }}
+                      value={visitTaskForm.is_ad ? 'yes' : 'no'}
+                      onChange={(e) => setVisitTaskForm({ ...visitTaskForm, is_ad: e.target.value === 'yes' })}
+                    >
+                      <option value="no">No — Direct Redirect</option>
+                      <option value="yes">Yes — Watch Ad First, Then Redirect</option>
+                    </select>
+                    {visitTaskForm.is_ad && (
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
+                        User will be shown an interstitial ad before being redirected to the visit URL. The timer starts after redirect.
+                      </p>
+                    )}
+                  </div>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.875rem', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <input
+                      type="checkbox"
+                      checked={visitTaskForm.is_active}
+                      onChange={(e) => setVisitTaskForm({ ...visitTaskForm, is_active: e.target.checked })}
+                    />
+                    <span>
+                      <strong style={{ display: 'block', fontSize: '0.85rem' }}>Task is Active (Live)</strong>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Uncheck to hide from users without deleting.</span>
+                    </span>
+                  </label>
+
+                  <button type="submit" className="btn btn-primary" style={{ padding: '12px', marginTop: '4px', fontSize: '0.9rem' }}>
+                    {editingVisitTask ? 'Save Changes' : 'Publish Task'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: WITHDRAWALS QUEUE */}
           {activeTab === 'withdrawals' && (
             <div className="glass-panel" style={{ padding: '30px' }}>
               <div className="table-container">

@@ -1,60 +1,74 @@
-# StuEarn India - Android App API Integration Guide
+# StuEarn India — Android App API Integration Guide
 
-This guide is the complete, high-fidelity technical specification for integrating the **Android App client** with the modern Node.js/Express backend services. All backend services are optimized, hardened, and securely bound to the relational database.
+> **Last Updated**: 2026-05-23  
+> **Backend Version**: Node.js/Express v3 (MySQL 8.0, Firebase Auth)  
+> **Maintained By**: SatyaInfoTech Networks
+
+This guide is the complete, high-fidelity technical specification for integrating the **Android App client** with the modern Node.js/Express backend. All services are secured, optimised, and bound to the production relational database.
 
 ---
 
 ## 1. Global Specifications
 
-* **Base URL**: `https://stuearn-api.satyainfotechnetworks.com`
-* **Request Format**: All requests sending payloads must specify header `'Content-Type': 'application/json'` and transmit structured JSON.
-* **Authentication Header Requirement**:
-  * All protected user endpoints require the standard header:
-    * `Authorization`: `Bearer <jwt_token>` (Generated during Google login/signup verification)
-  * Backward compatibility support is also maintained for:
-    * `token`: `<legacy_base64_token>` (Passable directly as a header or query parameter)
-* **Anti-Spoofing Layer (App Check)**:
-  * When Firebase App Check middleware is activated on the server, all authentication endpoints (`/api/auth/*`) require:
-    * `X-App-Check`: `<firebase_app_check_token>`
+| Property | Value |
+|---|---|
+| **Base URL** | `https://stuearn-api.satyainfotechnetworks.com` |
+| **Content-Type** | `application/json` for all body payloads |
+| **Auth Header** | `Authorization: Bearer <jwt_token>` |
+| **Legacy Auth** | `token: <base64_legacy_token>` *(header or query param)* |
+| **App Check Header** | `X-App-Check: <firebase_app_check_token>` *(on `/api/auth/*` when enabled)* |
 
 > [!IMPORTANT]
-> **Identifier Architectural Scope**:
-> * **Firebase UID (`uid`)**: This is strictly utilized *only* for the initial registration (signup) and login/checking pipelines under `/api/auth/*`.
-> * **User UUID (`id`) / Public ID (`user_id`)**: All remaining application endpoints (e.g. wallet ledger, task list progress, daily check-ins, withdrawals, support tickets, etc.) are mapped and processed using the unique User UUID (`id`) or the public 10-character hex identifier (`user_id`) returned during signup/login. Do *not* pass the Firebase UID for these operations.
+> **Identity Architecture — Two-Tier ID System**
+>
+> The system uses **two separate identity layers** that must never be mixed:
+>
+> | Layer | Identifier | Used For |
+> |---|---|---|
+> | Firebase Auth | `uid` (Google Firebase UID) | **Signup & Login only** (`/api/auth/*`) |
+> | App Identity | `id` (UUID v4) / `user_id` (10-char hex) | **Everything else** — wallet, tasks, withdrawals, tickets, visit-earn, streaks, spins |
+>
+> The `uid` is stored internally but is **never passed** by the Android app beyond the authentication handshake. Use `id` or `user_id` returned from the login/signup response for all subsequent calls.
 
 ---
 
 ## 2. Onboarding & Anti-Cloning Device Telemetry
 
-To prevent account duplication, emulator farms, and self-referral abuse, the authentication pipeline validates physical device metadata.
+To prevent account duplication and emulator farm abuse, the authentication pipeline validates physical device metadata via `android_id` (Android `Secure.ANDROID_ID`).
 
-### A. Google Login Check
-Verify if a Gmail user already has an active profile before executing signup screens.
+---
 
-* **Endpoint**: `POST /api/auth/check_uid` (Legacy: `/api/auth/check_uid.php`)
-* **Request Body**:
+### 2.1 · Google Login Check
+
+Verify if a Gmail user already has an active profile before showing signup screens.
+
+- **Endpoint**: `POST /api/auth/check_uid`
+- **Legacy Alias**: `/api/auth/check_uid.php`
+
+**Request Body:**
 ```json
 {
-  "uid": "google-firebase-uid-114061911747377543839",
+  "uid": "114061911747377543839",
   "fcm_token": "optional_fcm_token_string"
 }
 ```
-* **Success Response (Profile Exists - Returns Session Tokens)**:
+
+**Response — Profile Exists:**
 ```json
 {
   "success": true,
   "exist": true,
   "is_new_user": false,
   "message": "Login successful",
-  "token": "dXNlcl9pZDoxMTQwNjE5MTE3...", // Legacy token
-  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...", // JWT Token (Include in Authorization Bearer)
+  "token": "dXNlcl9pZDoxMTQwNjE5MTE3...",
+  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
     "id": "e30e716c-7e61-46ab-bb1e-a4b11a511ff3",
-    "uid": "google-firebase-uid-114061911747377543839",
-    "user_id": "3fbd3265b7", // 10-char hex identifier
+    "uid": "114061911747377543839",
+    "user_id": "3fbd3265b7",
     "name": "Devraj Devraj",
     "email": "devraj1625r@gmail.com",
-    "balance": 0.00,
+    "balance": 150.00,
     "referral_code": "G77703",
     "android_id": "a987d65c432b10",
     "daily_spins_count": 5,
@@ -62,7 +76,8 @@ Verify if a Gmail user already has an active profile before executing signup scr
   }
 }
 ```
-* **Response (User Not Registered)**:
+
+**Response — User Not Registered:**
 ```json
 {
   "success": false,
@@ -74,27 +89,34 @@ Verify if a Gmail user already has an active profile before executing signup scr
 
 ---
 
-### B. User Registration (Signup)
-Launches a new profile and permanently binds the hardware device ID.
+### 2.2 · User Registration (Signup)
 
-* **Endpoint**: `POST /api/auth/signup` (Legacy: `/api/auth/signup.php`)
-* **Request Body**:
+Launches a new profile and permanently binds the hardware device ID for anti-cloning enforcement.
+
+- **Endpoint**: `POST /api/auth/signup`
+- **Legacy Alias**: `/api/auth/signup.php`
+
+**Request Body:**
 ```json
 {
-  "uid": "google-firebase-uid-114061911747377543839",
+  "uid": "114061911747377543839",
   "name": "Devraj Devraj",
   "email": "devraj1625r@gmail.com",
   "phone_number": "+918854557875",
   "profile_pic": "https://lh3.googleusercontent.com/a/ACg8oc...",
   "location": "Hyderabad, India",
-  "referred_by": "REFCODE2763", // Optional: referral code of the inviter
-  "android_id": "a987d65c432b10", // Secure.ANDROID_ID (Anti-fraud validation)
+  "referred_by": "REFCODE2763",
+  "android_id": "a987d65c432b10",
   "device_model": "OnePlus 11R",
   "os_version": "Android 14",
   "fcm_token": "fcm_token_string"
 }
 ```
-* **Success Response**:
+
+> [!NOTE]
+> `referred_by` is optional. Pass the referral code of the inviting user, not their UUID.
+
+**Success Response:**
 ```json
 {
   "success": true,
@@ -103,7 +125,7 @@ Launches a new profile and permanently binds the hardware device ID.
   "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6...",
   "user": {
     "id": "e30e716c-7e61-46ab-bb1e-a4b11a511ff3",
-    "uid": "google-firebase-uid-114061911747377543839",
+    "uid": "114061911747377543839",
     "user_id": "3fbd3265b7",
     "name": "Devraj Devraj",
     "email": "devraj1625r@gmail.com",
@@ -112,7 +134,8 @@ Launches a new profile and permanently binds the hardware device ID.
   }
 }
 ```
-* **Anti-Cloning Error Response (Device Multi-Account Prevention)**:
+
+**Anti-Cloning Error (Device Multi-Account Prevention):**
 ```json
 {
   "success": false,
@@ -122,29 +145,32 @@ Launches a new profile and permanently binds the hardware device ID.
 
 ---
 
-## 3. Retrieving & Accessing User Profile Data
+## 3. User Profile
 
-Authenticated routes are provided to sync user balances, game currencies, streaks, and account configurations.
+---
 
-### A. Get Profile Details
-Fetches active state variables for user account views.
+### 3.1 · Get Profile Details
 
-* **Endpoint**: `GET /api/user/profile` (Legacy: `/api/user/profile.php`)
-* **Headers**: `Authorization: Bearer <jwt_token>`
-* **Success Response**:
+Fetches the full account state for home/profile screens.
+
+- **Endpoint**: `GET /api/user/profile`
+- **Legacy Alias**: `/api/user/profile.php`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+**Response:**
 ```json
 {
   "success": true,
   "user": {
     "id": "e30e716c-7e61-46ab-bb1e-a4b11a511ff3",
     "user_id": "3fbd3265b7",
-    "uid": "google-firebase-uid-114061911747377543839",
+    "uid": "114061911747377543839",
     "name": "Devraj Devraj",
     "email": "devraj1625r@gmail.com",
     "phone_number": "+918854557875",
     "profile_pic": "https://lh3.googleusercontent.com/...",
     "location": "Hyderabad, India",
-    "balance": 150.00, // Current coins
+    "balance": 150.00,
     "referral_code": "G77703",
     "referred_by": null,
     "android_id": "a987d65c432b10",
@@ -156,37 +182,46 @@ Fetches active state variables for user account views.
 }
 ```
 
-### B. Update FCM Token
-Updates pushing parameters when the device updates token parameters dynamically.
+---
 
-* **Endpoint**: `POST /api/user/fcm-token` (Legacy: `/api/user/update_fcm.php`)
-* **Headers**: `Authorization: Bearer <jwt_token>`
-* **Request Body**:
+### 3.2 · Update FCM Token
+
+Updates the FCM push notification token when the device refreshes it.
+
+- **Endpoint**: `POST /api/user/fcm-token`
+- **Legacy Alias**: `/api/user/update_fcm.php`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+**Request Body:**
 ```json
-{
-  "fcm_token": "new_fcm_token_string"
-}
+{ "fcm_token": "new_fcm_token_string" }
 ```
-* **Success Response**:
+
+**Response:**
 ```json
-{
-  "success": true,
-  "message": "FCM Token updated successfully"
-}
+{ "success": true, "message": "FCM Token updated successfully" }
 ```
 
 ---
 
-## 4. Offers, Tiers, & Offline Evidence Verification
+## 4. Offers, Tiers & Offline Proof Verification
 
-### A. List Active Offers (with targeting parameters)
-Fetch all campaigns, including daily caps and targeting parameters.
+---
 
-* **Endpoint**: `GET /api/offers` (Legacy: `/api/offers/list.php`)
-* **Query Parameters (Optional)**:
-  * `user_id`: Filters out already finished offers from list.
-  * `country`: Current country string/ISO (e.g. `IN`) to process active regional filters.
-* **Success Response**:
+### 4.1 · List Active Offers
+
+Fetch all campaigns with user-completion awareness and regional targeting.
+
+- **Endpoint**: `GET /api/offers`
+- **Legacy Alias**: `/api/offers/list.php`
+- **Query Params** *(optional)*:
+
+| Param | Description |
+|---|---|
+| `user_id` | Filters out already completed offers for this user |
+| `country` | ISO country code (e.g. `IN`) to apply regional targeting rules |
+
+**Response:**
 ```json
 {
   "success": true,
@@ -195,16 +230,15 @@ Fetch all campaigns, including daily caps and targeting parameters.
       "id": "77492c19-74d1-4171-87ab-89cd23ef981a",
       "external_id": "kotak_cherry_01",
       "title": "Install & Review Kotak Cherry",
-      "description": "Download Kotak Cherry app, register and submit KYC proof.",
+      "description": "Download Kotak Cherry, register and submit KYC proof.",
       "category": "Finance",
       "iconUrl": "https://stuearn.com/icons/kotak.png",
       "trackingUrl": "https://tracking.stuearn.com/click?offer_id=kotak&pub_id={user_id}",
       "totalReward": 500.00,
-      "type": "offline", // "online" (auto server postback) vs "offline" (manual proof)
+      "type": "offline",
       "extraLabel": "Hot Payout",
       "estimatedTime": "10 Mins",
       "difficulty": "Medium",
-      "likesCount": 42,
       "dailyCompletionCap": 100,
       "completionsToday": 14,
       "isCapped": false,
@@ -222,18 +256,25 @@ Fetch all campaigns, including daily caps and targeting parameters.
 }
 ```
 
-### B. Trigger Offer (Click Registration)
-Call this immediately when a user clicks the offer button. It logs a click action and outputs a `click_id`.
+> [!NOTE]
+> `type` is either `"online"` (automated server postback webhook — no user proof needed) or `"offline"` (manual proof submission reviewed by admin).
 
-* **Endpoint**: `POST /api/offers/start` (Legacy: `/api/offers/start.php`)
-* **Headers**: `Authorization: Bearer <jwt_token>`
-* **Request Body**:
+---
+
+### 4.2 · Trigger Offer Click (Click Registration)
+
+Call immediately when a user taps the offer start button. Logs the click and returns a `click_id`.
+
+- **Endpoint**: `POST /api/offers/start`
+- **Legacy Alias**: `/api/offers/start.php`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+**Request Body:**
 ```json
-{
-  "offer_id": "77492c19-74d1-4171-87ab-89cd23ef981a"
-}
+{ "offer_id": "77492c19-74d1-4171-87ab-89cd23ef981a" }
 ```
-* **Success Response**:
+
+**Response:**
 ```json
 {
   "success": true,
@@ -241,13 +282,20 @@ Call this immediately when a user clicks the offer button. It logs a click actio
 }
 ```
 
-### C. Submit Verification Proof (Offline Campaigns)
-For manual campaigns, upload files or input keys.
-> [!TIP]
-> Upload screenshots or documents to **Firebase Storage** first on the Android app, obtain the public download URL, and pass the URL string inside the `input_data` object matching the schema labels.
+---
 
-* **Endpoint**: `POST /api/offers/submit-proof` (Legacy: `/api/offers/submit_proof.php`)
-* **Request Body**:
+### 4.3 · Submit Verification Proof (Offline Campaigns)
+
+For manual campaigns, submit user-collected evidence for admin review.
+
+> [!TIP]
+> Upload screenshots or documents to **Firebase Storage** on the Android client first, then pass the public download URL string inside `input_data`, keyed to match the offer's field labels.
+
+- **Endpoint**: `POST /api/offers/submit-proof`
+- **Legacy Alias**: `/api/offers/submit_proof.php`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+**Request Body:**
 ```json
 {
   "click_id": "a6f87d4c-e832-4752-9b2f-410a8274dcd9",
@@ -257,24 +305,131 @@ For manual campaigns, upload files or input keys.
   }
 }
 ```
-* **Success Response**:
+
+**Response:**
 ```json
-{
-  "success": true,
-  "message": "Proof submitted successfully"
-}
+{ "success": true, "message": "Proof submitted successfully" }
 ```
 
 ---
 
-## 5. Wallet, Transactions, & Strict Integer Cashouts
+## 5. Visit & Earn
 
-### A. Fetch Balance & Transaction Ledger
-Get ledger entries representing credits/debits.
+> [!IMPORTANT]
+> **New Feature — replaces Watch & Earn and Scratch & Win.**
+> Both the Watch & Earn (video ads) and Scratch & Win features have been **permanently decommissioned**. Their endpoints are removed from the backend.
 
-* **Endpoint**: `GET /api/wallet/transactions`
-* **Headers**: `Authorization: Bearer <jwt_token>`
-* **Success Response**:
+Visit & Earn tasks give users coins for visiting a sponsored URL and staying for a configured countdown timer. If a task has `is_ad: true`, the Android app must display an interstitial ad *before* redirecting the user to `visit_url`; the timer begins after the redirect.
+
+---
+
+### 5.1 · List Available Visit Tasks
+
+Returns all active visit tasks the authenticated user has **not yet completed today**.
+
+- **Endpoint**: `GET /api/visit-earn`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+**Response:**
+```json
+{
+  "success": true,
+  "tasks": [
+    {
+      "id": "b3c1d2e4-0001-4abc-8def-11223344aabb",
+      "title": "Visit TechCrunch & Earn",
+      "coins": 50,
+      "visit_url": "https://techcrunch.com",
+      "timer_seconds": 30,
+      "is_ad": false
+    },
+    {
+      "id": "c4d5e6f7-0002-4abc-8def-aabbccddeeff",
+      "title": "Explore PhonePe Blog",
+      "coins": 80,
+      "visit_url": "https://blog.phonepe.com",
+      "timer_seconds": 60,
+      "is_ad": true
+    }
+  ]
+}
+```
+
+**Field Reference:**
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `UUID` | Task identifier — pass back in claim request |
+| `title` | `string` | Display name of the task |
+| `coins` | `integer` | Reward coins for completing the task |
+| `visit_url` | `string` | URL to open in WebView / browser |
+| `timer_seconds` | `integer` | Number of seconds user must stay on the URL |
+| `is_ad` | `boolean` | If `true`, show an interstitial ad **before** opening `visit_url` |
+
+---
+
+### 5.2 · Claim Visit & Earn Reward
+
+Call this **after** the countdown timer completes. The server validates the task exists, is active, and hasn't already been claimed by this user today before crediting the wallet.
+
+- **Endpoint**: `POST /api/visit-earn/claim`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+**Request Body:**
+```json
+{ "task_id": "b3c1d2e4-0001-4abc-8def-11223344aabb" }
+```
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "message": "Reward claimed successfully! Added 50 coins to your wallet.",
+  "reward": 50,
+  "new_balance": 200.00
+}
+```
+
+**Error — Already Claimed Today:**
+```json
+{
+  "success": false,
+  "message": "You have already completed this visit task today."
+}
+```
+
+**Error — Task Not Found / Inactive:**
+```json
+{
+  "success": false,
+  "message": "Task not found or inactive."
+}
+```
+
+> [!IMPORTANT]
+> **Android Integration Flow for Visit & Earn:**
+> 1. Fetch task list from `GET /api/visit-earn` on screen load.
+> 2. When user taps a task:
+>    - If `is_ad == true` → show interstitial ad → on ad completion, open `visit_url` in WebView.
+>    - If `is_ad == false` → directly open `visit_url` in WebView.
+> 3. Start a countdown timer for `timer_seconds`.
+> 4. When timer reaches zero → call `POST /api/visit-earn/claim` with `task_id`.
+> 5. Show the coins credited and update the wallet balance from `new_balance`.
+
+---
+
+## 6. Wallet, Transactions & Strict Integer Cashouts
+
+---
+
+### 6.1 · Fetch Transaction Ledger
+
+Returns full credit/debit history for the authenticated user.
+
+- **Endpoint**: `GET /api/wallet/transactions`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+**Response:**
 ```json
 {
   "success": true,
@@ -286,25 +441,56 @@ Get ledger entries representing credits/debits.
       "source": "OFFLINE_OFFER",
       "description": "Completed manual verification: Kotak Cherry",
       "created_at": "2026-05-21T06:15:00Z"
+    },
+    {
+      "id": "trans-uuid-1234",
+      "amount": 50,
+      "type": "CREDIT",
+      "source": "VISIT_EARN",
+      "description": "Completed Visit & Earn task: Visit TechCrunch & Earn",
+      "created_at": "2026-05-23T09:00:00Z"
     }
   ]
 }
 ```
 
-### B. Request Cash Settlement (Withdrawal)
-Submit a cashout payout. 
+**Transaction `source` Values:**
 
-* **Endpoint**: `POST /api/wallet/withdraw` (Legacy: `/api/wallet/withdraw.php`)
-* **Headers**: `Authorization: Bearer <jwt_token>`
-* **Request Body**:
+| Source | Origin |
+|---|---|
+| `OFFLINE_OFFER` | Manual proof offer approved by admin |
+| `ONLINE_OFFER` | Automatic webhook postback from ad network |
+| `VISIT_EARN` | Visit & Earn task completion |
+| `DAILY_CHECKIN` | Daily streak check-in reward |
+| `SPIN_WIN` | Spin wheel prize |
+| `REFERRAL_BONUS` | Referral commission |
+| `ADMIN_CREDIT` | Manual admin balance adjustment |
+| `DEBIT_WITHDRAWAL` | Cashout request debit |
+| `ADMIN_DEBIT` | Manual admin deduction |
+
+---
+
+### 6.2 · Request Cash Settlement (Withdrawal)
+
+Submit a cashout request. The amount is immediately debited from the wallet and placed in pending state for admin approval.
+
+- **Endpoint**: `POST /api/wallet/withdraw`
+- **Legacy Alias**: `/api/wallet/withdraw.php`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+> [!CAUTION]
+> The `amount` field **must be a whole integer**. Fractional (float/double) values are rejected at validation. The Android client must enforce this with integer-only input validation before calling this endpoint.
+
+**Request Body:**
 ```json
 {
-  "amount": 200,      // Integer value ONLY (Fractional float/double amounts will be rejected)
-  "method": "UPI",    // Payment method ID/name
-  "details": "devraj@upi" // UPI ID or banking detail parameters
+  "amount": 200,
+  "method": "UPI",
+  "details": "devraj@upi"
 }
 ```
-* **Success Response**:
+
+**Success Response:**
 ```json
 {
   "success": true,
@@ -312,7 +498,8 @@ Submit a cashout payout.
   "transactionId": "withdrawal-uuid-555"
 }
 ```
-* **Rejection Error (Float / Double validation fail)**:
+
+**Rejection — Float/Double Validation Failure:**
 ```json
 {
   "success": false,
@@ -322,44 +509,57 @@ Submit a cashout payout.
 
 ---
 
-## 6. Daily Check-In, Streaks, & Spin Wheel Gamification
-
-### A. Streak Status & Claim Check-In
-* **Check Status**: `GET /api/user/streak`
-* **Claim Daily checkin reward**: `POST /api/user/daily-checkin`
-  * **Headers**: `Authorization: Bearer <jwt_token>`
-  * **Success Response**:
-  ```json
-  {
-    "success": true,
-    "message": "Check-in successful! Streak incremented.",
-    "reward": 10.00,
-    "new_balance": 160.00
-  }
-  ```
-
-### B. Play Spin & Win Wheel
-* **Check Spins Left**: `GET /api/user/spin`
-  * *Response*: `{ "success": true, "spins_left": 5 }`
-* **Perform Spin play**: `POST /api/user/spin`
-  * **Headers**: `Authorization: Bearer <jwt_token>`
-  * **Success Response**:
-  ```json
-  {
-    "success": true,
-    "reward": 15.00,
-    "new_balance": 175.00
-  }
-  ```
+## 7. Daily Check-In, Streaks & Spin Wheel
 
 ---
 
-## 7. Support Ticketing Center
+### 7.1 · Streak Status & Daily Check-In
 
-### A. List Support Tickets
-* **Endpoint**: `GET /api/tickets`
-* **Headers**: `Authorization: Bearer <jwt_token>`
-* **Response**:
+- **Check Streak Status**: `GET /api/user/streak`  *(Auth required)*
+  - Returns current streak day, last check-in timestamp, and whether today's reward is available.
+
+- **Claim Daily Check-In**: `POST /api/user/daily-checkin`  *(Auth required)*
+
+**Claim Response:**
+```json
+{
+  "success": true,
+  "message": "Check-in successful! Streak incremented.",
+  "reward": 10.00,
+  "new_balance": 160.00
+}
+```
+
+---
+
+### 7.2 · Spin & Win Wheel
+
+- **Check Spins Left**: `GET /api/user/spin`  *(Auth required)*
+  - Response: `{ "success": true, "spins_left": 5 }`
+
+- **Perform a Spin**: `POST /api/user/spin`  *(Auth required)*
+
+**Spin Response:**
+```json
+{
+  "success": true,
+  "reward": 15.00,
+  "new_balance": 175.00
+}
+```
+
+---
+
+## 8. Support Ticketing
+
+---
+
+### 8.1 · List User Tickets
+
+- **Endpoint**: `GET /api/tickets`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+**Response:**
 ```json
 {
   "success": true,
@@ -375,10 +575,14 @@ Submit a cashout payout.
 }
 ```
 
-### B. Create Ticket
-* **Endpoint**: `POST /api/tickets`
-* **Headers**: `Authorization: Bearer <jwt_token>`
-* **Request Body**:
+---
+
+### 8.2 · Create Ticket
+
+- **Endpoint**: `POST /api/tickets`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+**Request Body:**
 ```json
 {
   "subject": "Missing Coins for Kotak Cherry",
@@ -386,7 +590,8 @@ Submit a cashout payout.
   "message": "I completed KYC 3 days ago but haven't received coins."
 }
 ```
-* **Success Response**:
+
+**Response:**
 ```json
 {
   "success": true,
@@ -395,19 +600,176 @@ Submit a cashout payout.
 }
 ```
 
-### C. Chat Reply to Ticket
-* **Endpoint**: `POST /api/tickets/:id/reply`
-* **Headers**: `Authorization: Bearer <jwt_token>`
-* **Request Body**:
+---
+
+### 8.3 · Reply to a Ticket
+
+- **Endpoint**: `POST /api/tickets/:id/reply`
+- **Auth**: `Authorization: Bearer <jwt_token>`
+
+**Request Body:**
 ```json
-{
-  "message": "Here is my registered mobile: +918854557875"
-}
+{ "message": "Here is my registered mobile: +918854557875" }
 ```
-* **Success Response**:
+
+**Response:**
+```json
+{ "success": true, "message": "Reply sent successfully" }
+```
+
+---
+
+## 9. App Configuration & System Metadata
+
+These endpoints serve app-wide configuration values fetched at startup.
+
+---
+
+### 9.1 · Fetch App Configs
+
+Returns all key-value configuration pairs set by the admin panel (spin probabilities, maintenance state, minimum withdrawal, loyalty rewards, etc.)
+
+- **Endpoint**: `GET /api/app/config`
+- **Auth**: None required
+
+**Response:**
 ```json
 {
   "success": true,
-  "message": "Reply sent successfully"
+  "configs": {
+    "maintenance_mode": "0",
+    "min_withdrawal": "100",
+    "daily_spin_limit": "5",
+    "loyalty_day_1_reward": "5",
+    "loyalty_day_7_reward": "50",
+    "spin_jackpot_probability": "1",
+    "referral_reward_referrer": "20",
+    "referral_reward_referee": "10"
+  }
 }
 ```
+
+---
+
+### 9.2 · Fetch Active Banners
+
+Returns promotional banners to display in the home screen carousel.
+
+- **Endpoint**: `GET /api/banners`
+
+**Response:**
+```json
+{
+  "success": true,
+  "banners": [
+    {
+      "id": "banner-uuid-001",
+      "image_url": "https://cdn.stuearn.com/banners/diwali.jpg",
+      "action_url": "https://stuearn.com/offers",
+      "is_active": 1
+    }
+  ]
+}
+```
+
+---
+
+### 9.3 · Fetch Ticker / Marquee Messages
+
+Returns scrolling ticker messages for the app header.
+
+- **Endpoint**: `GET /api/tickers`
+
+**Response:**
+```json
+{
+  "success": true,
+  "tickers": [
+    {
+      "id": "ticker-uuid-001",
+      "message": "🎉 New offers added! Complete tasks and earn big today.",
+      "is_active": 1
+    }
+  ]
+}
+```
+
+---
+
+### 9.4 · Leaderboard
+
+Returns the top earners leaderboard for a given period.
+
+- **Endpoint**: `GET /api/leaderboard`
+- **Query Params** *(optional)*: `period=weekly` or `period=monthly`
+
+**Response:**
+```json
+{
+  "success": true,
+  "leaderboard": [
+    {
+      "rank": 1,
+      "user_id": "3fbd3265b7",
+      "name": "Devraj Devraj",
+      "profile_pic": "https://lh3.googleusercontent.com/...",
+      "total_earned": 4500.00
+    }
+  ]
+}
+```
+
+---
+
+## 10. Deep Link Registry
+
+The app supports the following deep link URI scheme for in-app navigation:
+
+| Deep Link | Destination |
+|---|---|
+| `stuearn://home` | Home screen |
+| `stuearn://offers` | Offers wall / task list |
+| `stuearn://visit-earn` | Visit & Earn task list screen |
+| `stuearn://wallet` | Wallet / transactions screen |
+| `stuearn://withdraw` | Withdrawal request screen |
+| `stuearn://spin` | Spin & Win wheel screen |
+| `stuearn://leaderboard` | Leaderboard screen |
+| `stuearn://ticket/new` | Open new support ticket form |
+| `stuearn://ticket/:id` | Open specific support ticket thread |
+| `stuearn://referral` | Referral code sharing screen |
+
+---
+
+## 11. Decommissioned Features
+
+The following features have been permanently removed from both the backend and Android app:
+
+| Feature | Reason | Replacement |
+|---|---|---|
+| **Watch & Earn** (video rewarded ads) | Deprecated — ad fill rates and UX friction were poor | **Visit & Earn** (Section 5) |
+| **Scratch & Win** (scratch card mini-game) | Deprecated — replaced by more structured reward system | Spin & Win (Section 7.2) |
+
+> [!WARNING]
+> Do **not** call `/api/user/watch` or `/api/user/scratch` — these routes no longer exist. Calling them will return `404 Not Found`. Remove any legacy calls to these endpoints from the Android codebase.
+
+---
+
+## 12. Ad Network S2S Postback Webhooks
+
+These endpoints are called **server-to-server** by ad networks when a user completes an offer. They are not called by the Android app directly.
+
+| Network | Postback URL |
+|---|---|
+| CPX Research | `GET /api/postback/cpx` |
+| Pubscale | `GET /api/postback/pubscale` |
+| Adjump | `GET /api/postback/adjump` |
+| Growdeck | `GET /api/postback/growdeck` |
+| Offermaru | `GET /api/postback/offermaru` |
+| OpinionUniverse | `GET /api/postback/opinionuniverse` |
+| PlaytimeAds | `GET /api/postback/playtimeads` |
+
+All postback endpoints validate a shared secret key and then credit the user's wallet via the internal ledger transaction system.
+
+---
+
+*For backend admin panel access and route-level details, refer to the admin portal at `/admin` and the source code in `Backend/server.js` and `Backend/controllers/`.*

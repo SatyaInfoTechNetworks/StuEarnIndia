@@ -1,56 +1,63 @@
 # StuEarn India - Android App API Integration Guide
 
-This guide is prepared specifically for the **Android App Developer / Agent** to easily integrate with the modern Node.js/Express backend. All legacy PHP endpoints have been seamlessly migrated, optimized, and secured.
+This guide is the complete, high-fidelity technical specification for integrating the **Android App client** with the modern Node.js/Express backend services. All backend services are optimized, hardened, and securely bound to the relational database.
 
 ---
 
 ## 1. Global Specifications
 
 * **Base URL**: `https://stuearn-api.satyainfotechnetworks.com`
-* **Headers Required for Authenticated Routes**:
-  * `Authorization`: `Bearer <jwt_token>` (Modern standard, recommended)
-  * Alternatively, `token`: `<legacy_base64_token>` (Retained for backwards compatibility)
-  * `X-App-Check`: `<firebase_app_check_token>` (Required if Firebase App Check middleware is enabled)
+* **Request Format**: All requests sending payloads must specify header `'Content-Type': 'application/json'` and transmit structured JSON.
+* **Authentication Header Requirement**:
+  * All protected user endpoints require the standard header:
+    * `Authorization`: `Bearer <jwt_token>` (Generated during Google login/signup verification)
+  * Backward compatibility support is also maintained for:
+    * `token`: `<legacy_base64_token>` (Passable directly as a header or query parameter)
+* **Anti-Spoofing Layer (App Check)**:
+  * When Firebase App Check middleware is activated on the server, all authentication endpoints (`/api/auth/*`) require:
+    * `X-App-Check`: `<firebase_app_check_token>`
 
 ---
 
-## 2. Authentication & Onboarding
+## 2. Onboarding & Anti-Cloning Device Telemetry
 
-All onboarding and sign-in endpoints have been hardened with **Device Fingerprint Telemetry** to prevent account cloning, emulation farms, and self-referral loops.
+To prevent account duplication, emulator farms, and self-referral abuse, the authentication pipeline validates physical device metadata.
 
-### A. Google Login Check (Standard Check)
-Quickly determine if a Firebase UID already exists in the system before triggering registration.
+### A. Google Login Check
+Verify if a Gmail user already has an active profile before executing signup screens.
 
-* **Endpoint**: `POST /api/auth/check_uid` (Legacy fallback: `/api/auth/check_uid.php`)
-* **Headers**: `X-App-Check` (if enabled)
+* **Endpoint**: `POST /api/auth/check_uid` (Legacy: `/api/auth/check_uid.php`)
 * **Request Body**:
 ```json
 {
-  "uid": "firebase-google-uid-123456",
-  "fcm_token": "fcm_push_token_here" // Optional: Update FCM token during checking
+  "uid": "google-firebase-uid-114061911747377543839",
+  "fcm_token": "optional_fcm_token_string"
 }
 ```
-* **Response (User Found - Proceed to Login)**:
+* **Success Response (Profile Exists - Returns Session Tokens)**:
 ```json
 {
   "success": true,
   "exist": true,
   "is_new_user": false,
   "message": "Login successful",
-  "token": "dXNlcl9pZDoxNzY2MzQ5Mjgy",
-  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token": "dXNlcl9pZDoxMTQwNjE5MTE3...", // Legacy token
+  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...", // JWT Token (Include in Authorization Bearer)
   "user": {
     "id": "e30e716c-7e61-46ab-bb1e-a4b11a511ff3",
-    "uid": "firebase-google-uid-123456",
-    "user_id": "8f3a9e2d7c",
-    "name": "Jane Doe",
-    "email": "jane@example.com",
-    "balance": 150.00,
-    "referral_code": "STU888"
+    "uid": "google-firebase-uid-114061911747377543839",
+    "user_id": "3fbd3265b7", // 10-char hex identifier
+    "name": "Devraj Devraj",
+    "email": "devraj1625r@gmail.com",
+    "balance": 0.00,
+    "referral_code": "G77703",
+    "android_id": "a987d65c432b10",
+    "daily_spins_count": 5,
+    "current_streak": 2
   }
 }
 ```
-* **Response (User Not Found - Must Trigger Signup)**:
+* **Response (User Not Registered)**:
 ```json
 {
   "success": false,
@@ -62,150 +69,147 @@ Quickly determine if a Firebase UID already exists in the system before triggeri
 
 ---
 
-### B. Google Login / Authentication
-Verify Google Credentials and securely bind the current physical device to the user account.
-
-* **Endpoint**: `POST /api/auth/google` (Legacy: `/api/auth/google.php`)
-* **Headers**: `X-App-Check` (if enabled)
-* **Request Body**:
-```json
-{
-  "uid": "firebase-google-uid-123456",
-  "email": "jane@example.com",
-  "name": "Jane Doe",
-  "android_id": "a987d65c432b10", // Secure.ANDROID_ID (Crucial for anti-fraud)
-  "device_model": "Pixel 7 Pro",   // Build.MODEL
-  "os_version": "Android 14"       // Build.VERSION.RELEASE
-}
-```
-
-> [!WARNING]
-> If `android_id` is passed and has already been bound to *another* existing account (UID), the system blocks the request to prevent account cloning.
-> **Fraud Response (HTTP 200 or 400)**:
-> ```json
-> {
->   "success": false,
->   "message": "Device already registered with another account"
-> }
-> ```
-
-* **Success Response**:
-```json
-{
-  "success": true,
-  "message": "Login successful",
-  "token": "dXNlcl9pZDoxNzY2MzQ5Mjgy",
-  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": "e30e716c-7e61-46ab-bb1e-a4b11a511ff3",
-    "uid": "firebase-google-uid-123456",
-    "user_id": "8f3a9e2d7c",
-    "name": "Jane Doe",
-    "email": "jane@example.com",
-    "balance": 150.00,
-    "referral_code": "STU27A1B"
-  }
-}
-```
-
----
-
-### C. User Registration (Signup)
-Create a new user profile with absolute device mapping telemetry.
+### B. User Registration (Signup)
+Launches a new profile and permanently binds the hardware device ID.
 
 * **Endpoint**: `POST /api/auth/signup` (Legacy: `/api/auth/signup.php`)
-* **Headers**: `X-App-Check` (if enabled)
 * **Request Body**:
 ```json
 {
-  "uid": "firebase-google-uid-123456",
-  "name": "Jane Doe",
-  "email": "jane@example.com",
-  "phone_number": "9876543210",
-  "profile_pic": "https://lh3.googleusercontent.com/a/avatar",
-  "location": "IN",                    // User's country code or location
-  "referred_by": "REFCODE999",          // Optional Referral Code
-  "android_id": "a987d65c432b10",      // Secure.ANDROID_ID (Required for anti-fraud)
-  "device_model": "Pixel 7 Pro",        // Build.MODEL
-  "os_version": "Android 14",           // Build.VERSION.RELEASE
-  "fcm_token": "fcm_push_token_here"
+  "uid": "google-firebase-uid-114061911747377543839",
+  "name": "Devraj Devraj",
+  "email": "devraj1625r@gmail.com",
+  "phone_number": "+918854557875",
+  "profile_pic": "https://lh3.googleusercontent.com/a/ACg8oc...",
+  "location": "Hyderabad, India",
+  "referred_by": "REFCODE2763", // Optional: referral code of the inviter
+  "android_id": "a987d65c432b10", // Secure.ANDROID_ID (Anti-fraud validation)
+  "device_model": "OnePlus 11R",
+  "os_version": "Android 14",
+  "fcm_token": "fcm_token_string"
 }
 ```
-
-> [!WARNING]
-> Duplicate hardware bindings trigger immediate fraud prevention:
-> ```json
-> {
->   "success": false,
->   "message": "Device already registered with another account"
-> }
-> ```
-
 * **Success Response**:
 ```json
 {
   "success": true,
   "message": "User created successfully",
-  "token": "dXNlcl9pZDoxNzY2MzQ5Mjgy",
-  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token": "dXNlcl9pZDoxMTQw...",
+  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6...",
   "user": {
     "id": "e30e716c-7e61-46ab-bb1e-a4b11a511ff3",
-    "uid": "firebase-google-uid-123456",
-    "user_id": "8f3a9e2d7c", // Custom 10-char public user ID
-    "name": "Jane Doe",
-    "email": "jane@example.com",
-    "profile_pic": "https://lh3.googleusercontent.com/a/avatar",
-    "location": "IN",
+    "uid": "google-firebase-uid-114061911747377543839",
+    "user_id": "3fbd3265b7",
+    "name": "Devraj Devraj",
+    "email": "devraj1625r@gmail.com",
     "balance": 0.00,
-    "referral_code": "STU27A1B",
-    "referred_by": "referred_user_internal_uuid",
-    "created_at": "2026-05-21T06:00:00Z"
+    "referral_code": "G77703"
   }
+}
+```
+* **Anti-Cloning Error Response (Device Multi-Account Prevention)**:
+```json
+{
+  "success": false,
+  "message": "Device already registered with another account"
 }
 ```
 
 ---
 
-## 3. Offers & Offline Campaigns Integration
+## 3. Retrieving & Accessing User Profile Data
 
-The offers subsystem supports advanced **Daily Completion Caps** and **Dynamic Country Targeting**.
+Authenticated routes are provided to sync user balances, game currencies, streaks, and account configurations.
 
-### A. List Active Campaigns (with Geotargeting & Limits)
-Retrieve active offers filtered dynamically by country code and decorated with daily limits.
+### A. Get Profile Details
+Fetches active state variables for user account views.
+
+* **Endpoint**: `GET /api/user/profile` (Legacy: `/api/user/profile.php`)
+* **Headers**: `Authorization: Bearer <jwt_token>`
+* **Success Response**:
+```json
+{
+  "success": true,
+  "user": {
+    "id": "e30e716c-7e61-46ab-bb1e-a4b11a511ff3",
+    "user_id": "3fbd3265b7",
+    "uid": "google-firebase-uid-114061911747377543839",
+    "name": "Devraj Devraj",
+    "email": "devraj1625r@gmail.com",
+    "phone_number": "+918854557875",
+    "profile_pic": "https://lh3.googleusercontent.com/...",
+    "location": "Hyderabad, India",
+    "balance": 150.00, // Current coins
+    "referral_code": "G77703",
+    "referred_by": null,
+    "android_id": "a987d65c432b10",
+    "daily_spins_count": 5,
+    "current_streak": 2,
+    "is_banned": 0,
+    "created_at": "2026-05-21T06:00:00Z"
+  }
+}
+```
+
+### B. Update FCM Token
+Updates pushing parameters when the device updates token parameters dynamically.
+
+* **Endpoint**: `POST /api/user/fcm-token` (Legacy: `/api/user/update_fcm.php`)
+* **Headers**: `Authorization: Bearer <jwt_token>`
+* **Request Body**:
+```json
+{
+  "fcm_token": "new_fcm_token_string"
+}
+```
+* **Success Response**:
+```json
+{
+  "success": true,
+  "message": "FCM Token updated successfully"
+}
+```
+
+---
+
+## 4. Offers, Tiers, & Offline Evidence Verification
+
+### A. List Active Offers (with targeting parameters)
+Fetch all campaigns, including daily caps and targeting parameters.
 
 * **Endpoint**: `GET /api/offers` (Legacy: `/api/offers/list.php`)
-* **Headers**: `Authorization: Bearer <jwt_token>`
 * **Query Parameters (Optional)**:
-  * `user_id`: Filter out already completed campaigns.
-  * `country`: **NEW** - Pass the current country ISO-2 code (e.g. `IN`, `US`) to dynamically filter target regional offers at the database layer.
-* **Response**:
+  * `user_id`: Filters out already finished offers from list.
+  * `country`: Current country string/ISO (e.g. `IN`) to process active regional filters.
+* **Success Response**:
 ```json
 {
   "success": true,
   "offers": [
     {
       "id": "77492c19-74d1-4171-87ab-89cd23ef981a",
+      "external_id": "kotak_cherry_01",
       "title": "Install & Review Kotak Cherry",
-      "description": "Download Kotak Cherry app, register and submit registered mobile number.",
+      "description": "Download Kotak Cherry app, register and submit KYC proof.",
       "category": "Finance",
       "iconUrl": "https://stuearn.com/icons/kotak.png",
       "trackingUrl": "https://tracking.stuearn.com/click?offer_id=kotak&pub_id={user_id}",
       "totalReward": 500.00,
-      "type": "offline",
+      "type": "offline", // "online" (auto server postback) vs "offline" (manual proof)
       "extraLabel": "Hot Payout",
       "estimatedTime": "10 Mins",
       "difficulty": "Medium",
       "likesCount": 42,
-      "dailyCompletionCap": 100,      // Max allowed completions today across all users (0 = unlimited)
-      "completionsToday": 14,          // Completed count today
-      "isCapped": false,               // True if completionsToday >= dailyCompletionCap
-      "countryTargeting": "IN,US",     // Allowed regions (comma-separated, null or * = all)
+      "dailyCompletionCap": 100,
+      "completionsToday": 14,
+      "isCapped": false,
+      "countryTargeting": "IN,US",
       "tiers": [
         {
           "id": "tier-1-uuid",
-          "title": "Registration complete",
+          "title": "KYC Complete",
           "reward": "500.00",
-          "steps": ["Install app", "Complete full KYC registration"]
+          "steps": ["Register account", "Verify Aadhar and PAN details"]
         }
       ]
     }
@@ -213,10 +217,8 @@ Retrieve active offers filtered dynamically by country code and decorated with d
 }
 ```
 
----
-
-### B. Trigger/Start a Campaign
-Generate a unique `click_id` before launching target affiliate links. 
+### B. Trigger Offer (Click Registration)
+Call this immediately when a user clicks the offer button. It logs a click action and outputs a `click_id`.
 
 * **Endpoint**: `POST /api/offers/start` (Legacy: `/api/offers/start.php`)
 * **Headers**: `Authorization: Bearer <jwt_token>`
@@ -226,18 +228,6 @@ Generate a unique `click_id` before launching target affiliate links.
   "offer_id": "77492c19-74d1-4171-87ab-89cd23ef981a"
 }
 ```
-
-> [!IMPORTANT]
-> The backend automatically validates whether:
-> 1. The offer is capped (`isCapped` = true). If so, it rejects starting:
->    ```json
->    { "success": false, "message": "Daily completion limit reached for this offer" }
->    ```
-> 2. The user's region matches the targeting boundaries:
->    ```json
->    { "success": false, "message": "This offer is not available in your region" }
->    ```
-
 * **Success Response**:
 ```json
 {
@@ -246,27 +236,23 @@ Generate a unique `click_id` before launching target affiliate links.
 }
 ```
 
-> [!IMPORTANT]
-> The resulting `click_id` is essential for submitting proof files/keys back to the backend. The app **MUST** store this click ID during the campaign runtime.
-
----
-
-### C. Submit Manual Verification Evidence (Offline Proofs)
-For manual campaigns (where `type = "offline"`), submit the proof items defined in the offer's `input_instruction` schema.
+### C. Submit Verification Proof (Offline Campaigns)
+For manual campaigns, upload files or input keys.
+> [!TIP]
+> Upload screenshots or documents to **Firebase Storage** first on the Android app, obtain the public download URL, and pass the URL string inside the `input_data` object matching the schema labels.
 
 * **Endpoint**: `POST /api/offers/submit-proof` (Legacy: `/api/offers/submit_proof.php`)
-* **Headers**: `Authorization: Bearer <jwt_token>`
 * **Request Body**:
 ```json
 {
   "click_id": "a6f87d4c-e832-4752-9b2f-410a8274dcd9",
   "input_data": {
     "Registered Phone Number": "9988776655",
-    "Upload Completion Screenshot": "https://firebasestorage.googleapis.com/.../screenshot1.png"
+    "Upload KYC Screenshot": "https://firebasestorage.googleapis.com/.../proof.png"
   }
 }
 ```
-* **Response**:
+* **Success Response**:
 ```json
 {
   "success": true,
@@ -274,17 +260,16 @@ For manual campaigns (where `type = "offline"`), submit the proof items defined 
 }
 ```
 
-> [!TIP]
-> Upload screenshots or documents to **Firebase Storage** first on the Android app, obtain the public download URL, and pass the URL string inside the `input_data` object matching the schema labels.
-
 ---
 
-## 4. Wallet & Cash Settlements
+## 5. Wallet, Transactions, & Strict Integer Cashouts
 
-### A. Get Balance & Wallet Ledger
+### A. Fetch Balance & Transaction Ledger
+Get ledger entries representing credits/debits.
+
 * **Endpoint**: `GET /api/wallet/transactions`
 * **Headers**: `Authorization: Bearer <jwt_token>`
-* **Response**:
+* **Success Response**:
 ```json
 {
   "success": true,
@@ -293,84 +278,99 @@ For manual campaigns (where `type = "offline"`), submit the proof items defined 
       "id": "trans-uuid-9999",
       "amount": 500.00,
       "type": "CREDIT",
-      "source": "OFFLINE_OFFER", // CREDITED via manual proof verification passing
-      "description": "Completed offline task: Install & Review Kotak Cherry",
+      "source": "OFFLINE_OFFER",
+      "description": "Completed manual verification: Kotak Cherry",
       "created_at": "2026-05-21T06:15:00Z"
     }
   ]
 }
 ```
 
----
-
-### B. Request Cash Withdrawal
-Submit a request to withdraw coins/money using direct UPI ID or banking details.
+### B. Request Cash Settlement (Withdrawal)
+Submit a cashout payout. 
 
 * **Endpoint**: `POST /api/wallet/withdraw` (Legacy: `/api/wallet/withdraw.php`)
 * **Headers**: `Authorization: Bearer <jwt_token>`
 * **Request Body**:
 ```json
 {
-  "amount": 200.00,
-  "method": "UPI",
-  "details": "devraj@upi"
+  "amount": 200,      // Integer value ONLY (Fractional float/double amounts will be rejected)
+  "method": "UPI",    // Payment method ID/name
+  "details": "devraj@upi" // UPI ID or banking detail parameters
 }
 ```
-* **Response**:
+* **Success Response**:
 ```json
 {
   "success": true,
-  "message": "Withdrawal request submitted successfully"
+  "message": "Withdrawal submitted successfully!",
+  "transactionId": "withdrawal-uuid-555"
+}
+```
+* **Rejection Error (Float / Double validation fail)**:
+```json
+{
+  "success": false,
+  "message": "Invalid withdrawal amount. Only whole integers are accepted. Fractional (float or double) coin values are not allowed."
 }
 ```
 
 ---
 
-## 5. Daily Gamification & Streaks
+## 6. Daily Check-In, Streaks, & Spin Wheel Gamification
 
-### A. Fetch Streak Status
-* **Endpoint**: `GET /api/user/streak` (Legacy: `/api/user/streak.php`)
-* **Headers**: `Authorization: Bearer <jwt_token>`
-* **Response**:
-```json
-{
-  "success": true,
-  "current_streak": 3,
-  "is_today_claimed": false
-}
-```
+### A. Streak Status & Claim Check-In
+* **Check Status**: `GET /api/user/streak`
+* **Claim Daily checkin reward**: `POST /api/user/daily-checkin`
+  * **Headers**: `Authorization: Bearer <jwt_token>`
+  * **Success Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Check-in successful! Streak incremented.",
+    "reward": 10.00,
+    "new_balance": 160.00
+  }
+  ```
 
-### B. Claim Daily Check-In
-* **Endpoint**: `POST /api/user/daily-checkin`
-* **Headers**: `Authorization: Bearer <jwt_token>`
-* **Response**:
-```json
-{
-  "success": true,
-  "message": "Check-in successful! Streak incremented.",
-  "reward": 10.00,
-  "new_balance": 160.00
-}
-```
-
-### C. Spin the Wheel Status & Play
-* **Check Status**: `GET /api/user/spin`
-* **Perform Spin**: `POST /api/user/spin`
-  * *Request Body*: None
-  * *Response*:
-```json
-{
-  "success": true,
-  "reward": 15.00,
-  "new_balance": 175.00
-}
-```
+### B. Play Spin & Win Wheel
+* **Check Spins Left**: `GET /api/user/spin`
+  * *Response*: `{ "success": true, "spins_left": 5 }`
+* **Perform Spin play**: `POST /api/user/spin`
+  * **Headers**: `Authorization: Bearer <jwt_token>`
+  * **Success Response**:
+  ```json
+  {
+    "success": true,
+    "reward": 15.00,
+    "new_balance": 175.00
+  }
+  ```
 
 ---
 
-## 6. Support Ticketing Center
+## 7. Support Ticketing Center
 
-### A. Create Support Ticket
+### A. List Support Tickets
+* **Endpoint**: `GET /api/tickets`
+* **Headers**: `Authorization: Bearer <jwt_token>`
+* **Response**:
+```json
+{
+  "success": true,
+  "tickets": [
+    {
+      "id": "ticket-uuid-777",
+      "subject": "Missing Coins for Kotak Cherry",
+      "category": "Offer Issue",
+      "status": "OPEN",
+      "created_at": "2026-05-21T06:30:00Z"
+    }
+  ]
+}
+```
+
+### B. Create Ticket
 * **Endpoint**: `POST /api/tickets`
 * **Headers**: `Authorization: Bearer <jwt_token>`
 * **Request Body**:
@@ -378,10 +378,10 @@ Submit a request to withdraw coins/money using direct UPI ID or banking details.
 {
   "subject": "Missing Coins for Kotak Cherry",
   "category": "Offer Issue",
-  "message": "I completed the task Kotak Cherry 3 days ago but haven't received my coins yet."
+  "message": "I completed KYC 3 days ago but haven't received coins."
 }
 ```
-* **Response**:
+* **Success Response**:
 ```json
 {
   "success": true,
@@ -390,16 +390,16 @@ Submit a request to withdraw coins/money using direct UPI ID or banking details.
 }
 ```
 
-### B. Reply to Ticket / Chat
+### C. Chat Reply to Ticket
 * **Endpoint**: `POST /api/tickets/:id/reply`
 * **Headers**: `Authorization: Bearer <jwt_token>`
 * **Request Body**:
 ```json
 {
-  "message": "Here is my registered email: test@example.com"
+  "message": "Here is my registered mobile: +918854557875"
 }
 ```
-* **Response**:
+* **Success Response**:
 ```json
 {
   "success": true,

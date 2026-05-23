@@ -2182,6 +2182,34 @@ export default function AdminPortal() {
                       <label className="text-muted text-xs font-weight-bold mb-1">Balance</label>
                       <input type="number" className="form-control" step="0.01" value={editUserForm.balance} onChange={e => setEditUserForm({ ...editUserForm, balance: e.target.value })} required />
                     </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Public Hex ID (10-char)</label>
+                      <input type="text" className="form-control font-mono" value={editUserForm.user_id} onChange={e => setEditUserForm({ ...editUserForm, user_id: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Google UID</label>
+                      <input type="text" className="form-control" value={editUserForm.uid} onChange={e => setEditUserForm({ ...editUserForm, uid: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Android Device ID</label>
+                      <input type="text" className="form-control" value={editUserForm.android_id} onChange={e => setEditUserForm({ ...editUserForm, android_id: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Referred By (User ID/Code)</label>
+                      <input type="text" className="form-control font-mono" value={editUserForm.referred_by} onChange={e => setEditUserForm({ ...editUserForm, referred_by: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Check-in Streak (Days)</label>
+                      <input type="number" className="form-control" value={editUserForm.current_streak} onChange={e => setEditUserForm({ ...editUserForm, current_streak: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Lucky Spins Claimed (Today)</label>
+                      <input type="number" className="form-control" value={editUserForm.daily_spins_count} onChange={e => setEditUserForm({ ...editUserForm, daily_spins_count: e.target.value })} />
+                    </div>
+                    <div className="col-md-12 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">FCM Push Token</label>
+                      <textarea className="form-control font-mono" rows={3} value={editUserForm.fcm_token || ''} onChange={e => setEditUserForm({ ...editUserForm, fcm_token: e.target.value })} />
+                    </div>
                   </div>
                   <div className="d-flex mt-4 pb-3">
                     <button type="submit" className="btn btn-primary flex-fill rounded-pill py-2 mr-2">Save Changes</button>

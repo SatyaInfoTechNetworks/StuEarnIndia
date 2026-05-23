@@ -191,7 +191,11 @@ export const updateUser = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const userId = req.params.id;
-    const { name, email, phone_number, location, referral_code, balance } = req.body;
+    const { 
+      name, email, phone_number, location, referral_code, balance,
+      android_id, fcm_token, daily_spins_count, current_streak,
+      referred_by, user_id, uid
+    } = req.body;
 
     await connection.beginTransaction();
 
@@ -246,7 +250,14 @@ export const updateUser = async (req, res) => {
         phone_number = ?, 
         location = ?, 
         referral_code = ?, 
-        balance = ? 
+        balance = ?,
+        android_id = ?,
+        fcm_token = ?,
+        daily_spins_count = ?,
+        current_streak = ?,
+        referred_by = ?,
+        user_id = ?,
+        uid = ?
        WHERE id = ?`,
       [
         name !== undefined ? name : user.name,
@@ -255,6 +266,13 @@ export const updateUser = async (req, res) => {
         location !== undefined ? location : user.location,
         referral_code !== undefined ? referral_code : user.referral_code,
         balance !== undefined ? parseFloat(balance) : user.balance,
+        android_id !== undefined ? android_id : user.android_id,
+        fcm_token !== undefined ? fcm_token : user.fcm_token,
+        daily_spins_count !== undefined ? parseInt(daily_spins_count || 0) : user.daily_spins_count,
+        current_streak !== undefined ? parseInt(current_streak || 0) : user.current_streak,
+        referred_by !== undefined ? referred_by : user.referred_by,
+        user_id !== undefined ? user_id : user.user_id,
+        uid !== undefined ? uid : user.uid,
         userId
       ]
     );
@@ -265,7 +283,7 @@ export const updateUser = async (req, res) => {
       adminId,
       actionType: 'UPDATE_USER_INFO',
       targetId: userId,
-      payload: { name, email, phone_number, location, referral_code, balance },
+      payload: { name, email, phone_number, location, referral_code, balance, android_id, fcm_token, daily_spins_count, current_streak, referred_by, user_id, uid },
       req
     });
 

@@ -409,7 +409,14 @@ export default function AdminPortal() {
       phone_number: user.phone_number || '',
       location: user.location || '',
       referral_code: user.referral_code || '',
-      balance: user.balance || 0
+      balance: user.balance || 0,
+      android_id: user.android_id || '',
+      fcm_token: user.fcm_token || '',
+      daily_spins_count: user.daily_spins_count || 0,
+      current_streak: user.current_streak || 0,
+      referred_by: user.referred_by || '',
+      user_id: user.user_id || '',
+      uid: user.uid || ''
     });
     setEditUserModal(true);
   };
@@ -1238,6 +1245,7 @@ export default function AdminPortal() {
                   <table className="glass-table">
                     <thead>
                       <tr>
+                        <th>User ID</th>
                         <th>Name</th>
                         <th>Email</th>
                         <th>Referral Code</th>
@@ -1248,6 +1256,9 @@ export default function AdminPortal() {
                     <tbody>
                       {usersList.map(u => (
                         <tr key={u.id} style={{ cursor: 'pointer' }} onClick={() => viewUserLedger(u)}>
+                          <td>
+                            <code style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>{u.user_id || 'N/A'}</code>
+                          </td>
                           <td>
                             <strong style={{ color: selectedUser?.id === u.id ? 'var(--primary-hover)' : '#fff' }}>{u.name || 'Anonymous'}</strong>
                           </td>
@@ -1343,7 +1354,7 @@ export default function AdminPortal() {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.8rem', marginTop: '4px' }}>
                       <div>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>User ID</span>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>User ID (Public)</span>
                         <strong style={{ color: '#fff' }}>{selectedUser.user_id || 'N/A'}</strong>
                       </div>
                       <div>
@@ -1357,6 +1368,26 @@ export default function AdminPortal() {
                       <div>
                         <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Location</span>
                         <strong style={{ color: '#fff' }}>{selectedUser.location || 'Not Provided'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Android ID</span>
+                        <strong style={{ color: '#fff', wordBreak: 'break-all' }}>{selectedUser.android_id || 'N/A'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Current Streak</span>
+                        <strong style={{ color: '#fff' }}>{selectedUser.current_streak || 0} days</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Daily Spins Left</span>
+                        <strong style={{ color: '#fff' }}>{selectedUser.daily_spins_count || 0}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Referred By (User ID)</span>
+                        <span style={{ color: 'var(--text-muted)' }}>{selectedUser.referred_by || 'Organic / Direct'}</span>
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>FCM Push Token</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', wordBreak: 'break-all' }}>{selectedUser.fcm_token || 'None'}</span>
                       </div>
                       <div style={{ gridColumn: 'span 2' }}>
                         <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Firebase UID</span>
@@ -1421,39 +1452,81 @@ export default function AdminPortal() {
               {/* Existing Offers */}
               <div className="glass-panel" style={{ padding: '30px' }}>
                 <h3 style={{ fontSize: '1.25rem', marginBottom: '20px' }}>Active Earning Tasks</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }}>
-                  {offersList.map(o => (
-                    <div key={o.id} className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', border: editingOffer?.id === o.id ? '1px solid var(--primary-hover)' : '1px solid var(--border-glass)' }}>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        {o.icon_url ? (
-                          <img src={o.icon_url} alt="" style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover' }} />
-                        ) : (
-                          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center' }}><Layers size={18} /></div>
-                        )}
-                        <div>
-                          <h4 style={{ fontSize: '1rem', margin: 0 }}>{o.title}</h4>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }} className="badge badge-pending">{o.category || 'General'}</span>
-                        </div>
-                      </div>
-                      
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Reward Pool</span>
-                          <p style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent)' }}>{parseFloat(o.total_reward || 0).toFixed(2)} coins</p>
-                        </div>
-                        {o.is_hot === 1 && <span className="badge badge-completed" style={{ background: 'rgba(168,85,247,0.1)', color: 'var(--primary-hover)', border: '1px solid rgba(168,85,247,0.2)' }}>Hot</span>}
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '10px', marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
-                        <button className="btn btn-secondary" style={{ flex: 1, padding: '6px', fontSize: '0.8rem' }} onClick={() => handleEditOfferClick(o)}>
-                          <Edit3 size={12} /> Edit
-                        </button>
-                        <button className="btn btn-danger" style={{ padding: '6px' }} onClick={() => handleDeleteOffer(o.id)}>
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="table-container">
+                  <table className="glass-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '60px' }}>Icon</th>
+                        <th>Offer Title & Details</th>
+                        <th style={{ textAlign: 'center' }}>Category</th>
+                        <th style={{ textAlign: 'center' }}>Reward</th>
+                        <th style={{ textAlign: 'center' }}>Status</th>
+                        <th style={{ textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {offersList.map(o => (
+                        <tr key={o.id} style={{ background: editingOffer?.id === o.id ? 'rgba(255, 255, 255, 0.03)' : 'transparent' }}>
+                          <td>
+                            {o.icon_url ? (
+                              <img src={o.icon_url} alt="" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Layers size={18} style={{ color: 'var(--text-muted)' }} />
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{o.title}</strong>
+                              {o.is_hot === 1 && (
+                                <span className="badge badge-completed" style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'rgba(168,85,247,0.1)', color: 'var(--primary-hover)', border: '1px solid rgba(168,85,247,0.2)' }}>
+                                  Hot
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', maxWidth: '320px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={o.description}>
+                              {o.description || 'No instructions provided.'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className="badge badge-pending" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                              {o.category || 'General'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <strong style={{ color: 'var(--success)', fontSize: '0.95rem' }}>
+                              ₹{parseFloat(o.total_reward || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </strong>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className={`badge ${o.is_active ? 'badge-completed' : 'badge-failed'}`} style={{
+                              background: o.is_active ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                              color: o.is_active ? 'var(--success)' : 'var(--danger)',
+                              border: o.is_active ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)'
+                            }}>
+                              {o.is_active ? 'Active' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                              <button className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem', gap: '4px' }} onClick={() => handleEditOfferClick(o)}>
+                                <Edit3 size={12} /> Edit
+                              </button>
+                              <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '0.75rem', gap: '4px' }} onClick={() => handleDeleteOffer(o.id)}>
+                                <Trash2 size={12} /> Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {offersList.length === 0 && (
+                        <tr>
+                          <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>No active earning tasks.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -1502,12 +1575,18 @@ export default function AdminPortal() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label">Category</label>
-                      <input 
-                        type="text" 
+                      <select 
                         className="glass-input" 
                         value={offerForm.category}
                         onChange={(e) => setOfferForm({ ...offerForm, category: e.target.value })}
-                      />
+                        style={{ background: '#0a0b10', color: '#fff' }}
+                      >
+                        <option value="Top Offers">Top Offers</option>
+                        <option value="New Apps">New Apps</option>
+                        <option value="Install & Earn">Install & Earn</option>
+                        <option value="Surveys">Surveys</option>
+                        <option value="General">General</option>
+                      </select>
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label">User Reward (Coins)</label>
@@ -2224,6 +2303,79 @@ export default function AdminPortal() {
                   value={editUserForm.balance}
                   onChange={(e) => setEditUserForm({ ...editUserForm, balance: e.target.value })}
                   required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Public User ID</label>
+                <input 
+                  type="text" 
+                  className="glass-input" 
+                  value={editUserForm.user_id}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, user_id: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Firebase UID</label>
+                <input 
+                  type="text" 
+                  className="glass-input" 
+                  value={editUserForm.uid}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, uid: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Android Device ID</label>
+                <input 
+                  type="text" 
+                  className="glass-input" 
+                  value={editUserForm.android_id}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, android_id: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Daily Spins Count</label>
+                <input 
+                  type="number" 
+                  className="glass-input" 
+                  value={editUserForm.daily_spins_count}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, daily_spins_count: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Current Streak Days</label>
+                <input 
+                  type="number" 
+                  className="glass-input" 
+                  value={editUserForm.current_streak}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, current_streak: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Referred By (User UUID)</label>
+                <input 
+                  type="text" 
+                  className="glass-input" 
+                  placeholder="Direct / Organic"
+                  value={editUserForm.referred_by}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, referred_by: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">FCM Push Notification Token</label>
+                <textarea 
+                  rows={2}
+                  className="glass-input" 
+                  value={editUserForm.fcm_token}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, fcm_token: e.target.value })}
                 />
               </div>
 

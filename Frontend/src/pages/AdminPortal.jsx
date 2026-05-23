@@ -69,7 +69,7 @@ export default function AdminPortal() {
     title: '',
     external_id: '',
     description: '',
-    category: 'General',
+    category: 'Top Offers',
     icon_url: '',
     tracking_url: '',
     total_reward: 0,
@@ -1084,7 +1084,9 @@ export default function AdminPortal() {
             <div className="row mb-2 align-items-center">
               <div className="col-sm-6">
                 <h1 className="m-0 font-weight-bold text-dark text-capitalize">
-                  {activeTab === 'overview' ? 'Dashboard' : 
+                  {isCreatingOffer ? 'Launch New Offer' :
+                   editingOffer ? 'Edit Offer Data' :
+                   activeTab === 'overview' ? 'Dashboard' : 
                    activeTab === 'users' ? 'User Database' : 
                    activeTab === 'offers' ? 'Offer Inventory' : 
                    activeTab === 'referrals' ? 'Referral Engine Configuration' : 
@@ -1099,6 +1101,13 @@ export default function AdminPortal() {
                    activeTab === 'tickets' ? 'Support Tickets' : 
                    activeTab === 'configs' ? 'System Config' : activeTab}
                 </h1>
+              </div>
+              <div className="col-sm-6 text-right">
+                {activeTab === 'offers' && !isCreatingOffer && !editingOffer && (
+                  <button className="btn btn-primary elevation-1 font-weight-bold px-4 rounded-pill" onClick={() => { resetOfferForm(); setIsCreatingOffer(true); }}>
+                    <i className="fas fa-plus mr-1"></i> Create Offer
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1223,9 +1232,14 @@ export default function AdminPortal() {
                             </td>
                             <td className="text-muted text-xs">{new Date(u.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                             <td className="text-right pr-4">
-                              <button className="btn btn-outline-primary btn-xs font-weight-bold px-3 rounded-pill" onClick={() => viewUserLedger(u)}>
-                                View Profile
-                              </button>
+                              <div className="btn-group">
+                                <button className="btn btn-outline-primary btn-xs font-weight-bold px-3 rounded-pill mr-2" onClick={() => viewUserLedger(u)}>
+                                  View Profile
+                                </button>
+                                <button className="btn btn-outline-danger btn-xs font-weight-bold px-3 rounded-pill" onClick={(e) => { e.stopPropagation(); handleDeleteUser(u.id); }}>
+                                  <i className="fas fa-trash-alt mr-1"></i> Delete
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1255,14 +1269,8 @@ export default function AdminPortal() {
             {activeTab === 'offers' && (
               <div>
                 {(!isCreatingOffer && !editingOffer) ? (
-                  /* Main inventory view */
+                  /* Main inventory view without duplicate card header titles */
                   <div className="card card-white shadow-none border rounded-lg">
-                    <div className="card-header border-0 bg-transparent d-flex justify-content-between align-items-center">
-                      <h3 className="card-title font-weight-bold text-dark">Offer Inventory</h3>
-                      <button className="btn btn-primary rounded-pill font-weight-bold px-4 shadow-sm" onClick={() => { resetOfferForm(); setIsCreatingOffer(true); }}>
-                        <i className="fas fa-plus mr-1"></i> Create Offer
-                      </button>
-                    </div>
                     <div className="card-body p-0 table-responsive">
                       <table className="table table-hover align-middle mb-0">
                         <thead>
@@ -1970,7 +1978,7 @@ export default function AdminPortal() {
                       <button className="btn btn-outline-primary btn-sm rounded-pill font-weight-bold py-2" onClick={() => triggerEditUser(selectedUser)}>
                         <i className="fas fa-edit mr-1"></i> Edit Profile Details
                       </button>
-                      <button className="btn btn-outline-danger btn-sm rounded-pill font-weight-bold py-2" onClick={() => handleDeleteUser(selectedUser.id)}>
+                      <button className="btn btn-danger btn-sm rounded-pill font-weight-bold py-2 shadow-sm text-white" onClick={() => handleDeleteUser(selectedUser.id)}>
                         <i className="fas fa-trash mr-1"></i> Delete User Row
                       </button>
                       {selectedUser.is_banned ? (

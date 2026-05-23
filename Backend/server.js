@@ -23,6 +23,7 @@ import {
   getVideoAdStatus,
   claimVideoAdReward,
   requestAccountDeletion,
+  serveDeleteAccountHTML,
   getAppConfig
 } from './controllers/userController.js';
 import { listOffers, getOfferById, startOffer, likeOffer, submitProof, getHotOffers, getOfferHistory } from './controllers/offerController.js';
@@ -182,7 +183,8 @@ app.post(['/api/user/spin', '/api/user/spin.php'], authenticateUser, performSpin
 app.get('/api/visit-earn', authenticateUser, listVisitTasks);
 app.post('/api/visit-earn/claim', authenticateUser, claimVisitReward);
 
-app.post(['/api/user/delete-account', '/api/delete_account.php'], requestAccountDeletion);
+app.get(['/delete_account.php', '/api/delete_account.php'], serveDeleteAccountHTML);
+app.post(['/api/user/delete-account', '/delete_account.php', '/api/delete_account.php'], requestAccountDeletion);
 
 // ==========================================
 // 3. OFFERS ROUTES

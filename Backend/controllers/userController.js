@@ -618,11 +618,86 @@ export const claimVideoAdReward = async (req, res) => {
 // ACCOUNT DELETION
 // ----------------------------------------------------
 
+const renderDeleteAccountHTML = (message = '', messageType = '') => {
+  let alertHtml = '';
+  if (message) {
+    const alertClass = messageType === 'success' 
+      ? 'bg-green-100 text-green-700' 
+      : (messageType === 'warning' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700');
+    alertHtml = `
+      <div class="mb-4 p-4 rounded ${alertClass}">
+        ${message}
+      </div>
+    `;
+  }
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request Account Deletion - StuEarn</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center px-4">
+    <div class="max-w-md w-full bg-white rounded-lg shadow-md overflow-hidden">
+        <div class="bg-purple-600 px-6 py-4">
+            <h2 class="text-xl font-bold text-white">Request Account Deletion</h2>
+            <p class="text-purple-200 text-sm mt-1">StuEarn India</p>
+        </div>
+        
+        <div class="p-6">
+            ${alertHtml}
+            
+            <p class="text-gray-600 mb-6 text-sm">
+                We are sorry to see you go. Please fill out the form below to request the deletion of your account and all associated data. This action is irreversible once processed.
+            </p>
+            
+            <form method="POST" action="">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="email">
+                        Email Address
+                    </label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:border-purple-500" id="email" name="email" type="email" placeholder="user@example.com" required>
+                </div>
+                
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="reason">
+                        Reason for Deletion (Optional)
+                    </label>
+                    <textarea class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:border-purple-500" id="reason" name="reason" rows="3" placeholder="Why are you leaving?"></textarea>
+                </div>
+                
+                <div class="flex items-center justify-between">
+                    <button class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full transition duration-150 ease-in-out" type="submit">
+                        Submit Deletion Request
+                    </button>
+                </div>
+            </form>
+        </div>
+        <div class="bg-gray-50 px-6 py-3 border-t border-gray-200">
+            <p class="text-xs text-gray-500 text-center">
+                Data deletion requests are typically processed within 24-48 hours.
+            </p>
+        </div>
+    </div>
+</body>
+</html>`;
+};
+
+export const serveDeleteAccountHTML = (req, res) => {
+  res.send(renderDeleteAccountHTML());
+};
+
 export const requestAccountDeletion = async (req, res) => {
+  const wantsHtml = req.path.includes('delete_account.php') || (req.accepts('html') && !req.xhr);
   try {
     const { email, reason } = req.body;
 
     if (!email) {
+      if (wantsHtml) {
+        return res.send(renderDeleteAccountHTML('Email is required.', 'error'));
+      }
       return res.status(400).json({ success: false, message: 'Email address is required.' });
     }
 
@@ -637,6 +712,9 @@ export const requestAccountDeletion = async (req, res) => {
     );
 
     if (checkRows.length > 0) {
+      if (wantsHtml) {
+        return res.send(renderDeleteAccountHTML('A deletion request for this email is already pending.', 'warning'));
+      }
       return res.json({ success: false, message: 'A deletion request for this email is already pending.' });
     }
 
@@ -646,12 +724,19 @@ export const requestAccountDeletion = async (req, res) => {
       [userId, email, reason || '']
     );
 
+    if (wantsHtml) {
+      return res.send(renderDeleteAccountHTML('Your account deletion request has been submitted successfully. We will process it shortly.', 'success'));
+    }
+
     res.json({
       success: true,
       message: 'Your account deletion request has been submitted successfully. We will process it shortly.'
     });
   } catch (error) {
     console.error('Account Deletion Request Error:', error);
+    if (wantsHtml) {
+      return res.send(renderDeleteAccountHTML('An error occurred. Please try again later.', 'error'));
+    }
     res.status(500).json({ success: false, message: 'Server error. Please try again later.' });
   }
 };

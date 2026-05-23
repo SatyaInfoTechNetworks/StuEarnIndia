@@ -16,8 +16,9 @@ export default function AdminPortal() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   
-  // Navigation
-  const [activeTab, setActiveTab] = useState('overview');
+  // Navigation (Aligned exactly with legacy PHP pages)
+  const [activeTab, setActiveTab] = useState('overview'); // overview, users, offers, referrals, erasures, banners, push, lifafas, withdrawals, payouts, reports, proofs, tickets, configs
+  const [isCreatingOffer, setIsCreatingOffer] = useState(false);
 
   // Admin Data states
   const [stats, setStats] = useState({
@@ -124,7 +125,7 @@ export default function AdminPortal() {
   // Global Loader/Notice
   const [actionNotice, setActionNotice] = useState(null);
 
-  // Dynamic Theme Load and Cleanup
+  // Dynamic Theme Load and Cleanup (Same as AdminLTE 3 / Bootstrap 4 Template)
   useEffect(() => {
     // Add AdminLTE CSS
     const linkLte = document.createElement('link');
@@ -582,11 +583,12 @@ export default function AdminPortal() {
   // Offers Manager methods
   const resetOfferForm = () => {
     setEditingOffer(null);
+    setIsCreatingOffer(false);
     setOfferForm({
       title: '',
       external_id: '',
       description: '',
-      category: 'General',
+      category: 'Top Offers',
       icon_url: '',
       tracking_url: '',
       total_reward: 0,
@@ -627,24 +629,6 @@ export default function AdminPortal() {
   const updateTierField = (index, field, value) => {
     const updated = [...offerForm.tiers];
     updated[index][field] = value;
-    setOfferForm({ ...offerForm, tiers: updated });
-  };
-
-  const updateTierStep = (tierIndex, stepIndex, value) => {
-    const updated = [...offerForm.tiers];
-    updated[tierIndex].steps[stepIndex] = value;
-    setOfferForm({ ...offerForm, tiers: updated });
-  };
-
-  const addStepToTier = (tierIndex) => {
-    const updated = [...offerForm.tiers];
-    updated[tierIndex].steps.push('');
-    setOfferForm({ ...offerForm, tiers: updated });
-  };
-
-  const removeStepFromTier = (tierIndex, stepIndex) => {
-    const updated = [...offerForm.tiers];
-    updated[tierIndex].steps = updated[tierIndex].steps.filter((_, idx) => idx !== stepIndex);
     setOfferForm({ ...offerForm, tiers: updated });
   };
 
@@ -710,7 +694,7 @@ export default function AdminPortal() {
             title: fetched.title || '',
             external_id: fetched.external_id || '',
             description: fetched.description || '',
-            category: fetched.category || 'General',
+            category: fetched.category || 'Top Offers',
             icon_url: fetched.icon_url || '',
             tracking_url: fetched.tracking_url || '',
             total_reward: parseFloat(fetched.total_reward || 0),
@@ -733,7 +717,7 @@ export default function AdminPortal() {
   };
 
   const handleDeleteOffer = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this offer?")) return;
+    if (!window.confirm("Are you sure you want to archive this offer?")) return;
     try {
       const res = await fetch(`${API_BASE}/api/admin/offers/${id}`, {
         method: 'DELETE',
@@ -741,11 +725,11 @@ export default function AdminPortal() {
       });
       const data = await res.json();
       if (data.success) {
-        showNotice('success', 'Offer deleted successfully');
+        showNotice('success', 'Offer archived successfully');
         fetchDashboardData();
       }
     } catch (err) {
-      showNotice('error', 'Failed to delete offer');
+      showNotice('error', 'Failed to archive offer');
     }
   };
 
@@ -880,58 +864,6 @@ export default function AdminPortal() {
     }
   };
 
-  const addInstructionField = () => {
-    setOfferForm({
-      ...offerForm,
-      input_instruction: [
-        ...(offerForm.input_instruction || []),
-        { label: '', type: 'text' }
-      ]
-    });
-  };
-
-  const removeInstructionField = (idx) => {
-    const updated = offerForm.input_instruction.filter((_, i) => i !== idx);
-    setOfferForm({ ...offerForm, input_instruction: updated });
-  };
-
-  const updateInstructionField = (idx, key, val) => {
-    const updated = [...offerForm.input_instruction];
-    updated[idx] = { ...updated[idx], [key]: val };
-    setOfferForm({ ...offerForm, input_instruction: updated });
-  };
-
-  // FCM Sender
-  const handlePushSubmit = async (e) => {
-    e.preventDefault();
-    if (!fcmTitle || !fcmBody) return;
-    
-    setFcmStatus('sending');
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/push`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({
-          title: fcmTitle,
-          body: fcmBody,
-          user_id: fcmTargetUserId || undefined
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setFcmStatus('success');
-        setFcmTitle('');
-        setFcmBody('');
-        setFcmTargetUserId('');
-        setTimeout(() => setFcmStatus(null), 3000);
-      } else {
-        setFcmStatus('error');
-      }
-    } catch (err) {
-      setFcmStatus('error');
-    }
-  };
-
   if (!isAuthenticated) {
     return (
       <div className="login-page bg-light" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -980,36 +912,37 @@ export default function AdminPortal() {
 
   return (
     <div className="wrapper">
-      {/* Navbar Header */}
+      {/* Header / Navbar */}
       <nav className="main-header navbar navbar-expand navbar-white navbar-light border-bottom-0 shadow-xs">
         <ul className="navbar-nav">
           <li className="nav-item">
             <a className="nav-link" data-widget="pushmenu" href="#" role="button"><i className="fas fa-bars"></i></a>
           </li>
           <li className="nav-item d-none d-sm-inline-block">
-            <a href="#" onClick={() => setActiveTab('overview')} className="nav-link font-weight-bold text-dark">Dashboard Home</a>
+            <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('overview'); }} className="nav-link font-weight-bold text-dark">Home</a>
           </li>
         </ul>
         <ul className="navbar-nav ml-auto">
           <li className="nav-item">
             <span className="nav-link text-secondary font-weight-bold text-sm">
-              Active Database: <strong className="text-teal text-success"><i className="fas fa-database mr-1"></i>AppDatabase</strong>
+              Active Database: <strong className="text-success"><i className="fas fa-database mr-1"></i>AppDatabase</strong>
             </span>
           </li>
         </ul>
       </nav>
 
-      {/* Sidebar Navigation */}
+      {/* Sidebar (Same Menu Names & Hierarchy as sidebar.php) */}
       <aside className="main-sidebar sidebar-dark-primary elevation-4">
-        <a href="#" onClick={() => setActiveTab('overview')} className="brand-link border-bottom-0 text-center py-3">
-          <span className="brand-text font-weight-bold text-lg text-white">StuEarn Admin</span>
+        <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('overview'); }} className="brand-link border-bottom-0 text-center py-3">
+          <img src="https://ui-avatars.com/api/?name=S&background=007bff&color=fff" className="brand-image img-circle elevation-3" style={{ opacity: .8 }} />
+          <span className="brand-text font-weight-bold ml-2">StuEarn Admin</span>
         </a>
         <div className="sidebar">
           <nav className="mt-3">
             <ul className="nav nav-pills nav-sidebar flex-column nav-flat nav-child-indent" data-widget="treeview" role="menu">
               
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('overview')} className={`nav-link ${activeTab === 'overview' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('overview'); }} className={`nav-link ${activeTab === 'overview' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-th-large mr-2"></i>
                   <p>Dashboard</p>
                 </a>
@@ -1017,19 +950,19 @@ export default function AdminPortal() {
               
               <li className="nav-header font-weight-bold text-xs text-muted uppercase">Users & Growth</li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('users')} className={`nav-link ${activeTab === 'users' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('users'); }} className={`nav-link ${activeTab === 'users' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-users mr-2"></i>
                   <p>User Database</p>
                 </a>
               </li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('referrals')} className={`nav-link ${activeTab === 'referrals' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('referrals'); }} className={`nav-link ${activeTab === 'referrals' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-share-alt mr-2"></i>
                   <p>Referral Config</p>
                 </a>
               </li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('erasures')} className={`nav-link ${activeTab === 'erasures' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('erasures'); }} className={`nav-link ${activeTab === 'erasures' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-user-times mr-2"></i>
                   <p>Deletion Requests</p>
                 </a>
@@ -1037,33 +970,33 @@ export default function AdminPortal() {
 
               <li className="nav-header font-weight-bold text-xs text-muted uppercase">Promotion</li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('banners')} className={`nav-link ${activeTab === 'banners' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('banners'); }} className={`nav-link ${activeTab === 'banners' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-image mr-2"></i>
                   <p>App Banners</p>
                 </a>
               </li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('push')} className={`nav-link ${activeTab === 'push' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('push'); }} className={`nav-link ${activeTab === 'push' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-bell mr-2"></i>
                   <p>Push Notifications</p>
                 </a>
               </li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('lifafas')} className={`nav-link ${activeTab === 'lifafas' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('lifafas'); }} className={`nav-link ${activeTab === 'lifafas' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-envelope-open-text mr-2"></i>
-                  <p>Surprise Envelopes</p>
+                  <p>Lifafa (Redeem)</p>
                 </a>
               </li>
 
               <li className="nav-header font-weight-bold text-xs text-muted uppercase">Inventory</li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('offers')} className={`nav-link ${activeTab === 'offers' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('offers'); }} className={`nav-link ${activeTab === 'offers' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-tasks mr-2"></i>
                   <p>Manage Offers</p>
                 </a>
               </li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('visit-earn')} className={`nav-link ${activeTab === 'visit-earn' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('visit-earn'); }} className={`nav-link ${activeTab === 'visit-earn' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-coins mr-2"></i>
                   <p>Visit & Earn</p>
                 </a>
@@ -1071,7 +1004,7 @@ export default function AdminPortal() {
 
               <li className="nav-header font-weight-bold text-xs text-muted uppercase">Financials</li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('withdrawals')} className={`nav-link ${activeTab === 'withdrawals' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('withdrawals'); }} className={`nav-link ${activeTab === 'withdrawals' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-money-bill-wave mr-2"></i>
                   <p>Withdrawal Queue</p>
                   {stats.pending_withdrawals > 0 && (
@@ -1080,7 +1013,7 @@ export default function AdminPortal() {
                 </a>
               </li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('payouts')} className={`nav-link ${activeTab === 'payouts' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('payouts'); }} className={`nav-link ${activeTab === 'payouts' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-university mr-2"></i>
                   <p>Payout Methods</p>
                 </a>
@@ -1088,13 +1021,13 @@ export default function AdminPortal() {
 
               <li className="nav-header font-weight-bold text-xs text-muted uppercase">Audit & Compliance</li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('reports')} className={`nav-link ${activeTab === 'reports' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('reports'); }} className={`nav-link ${activeTab === 'reports' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-chart-line mr-2"></i>
                   <p>Business Stats</p>
                 </a>
               </li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('proofs')} className={`nav-link ${activeTab === 'proofs' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('proofs'); }} className={`nav-link ${activeTab === 'proofs' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-images mr-2"></i>
                   <p>Proof Gallery</p>
                   {stats.pending_proofs > 0 && (
@@ -1103,7 +1036,7 @@ export default function AdminPortal() {
                 </a>
               </li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('tickets')} className={`nav-link ${activeTab === 'tickets' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('tickets'); }} className={`nav-link ${activeTab === 'tickets' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-comments mr-2"></i>
                   <p>Support Tickets</p>
                   {stats.open_tickets > 0 && (
@@ -1114,7 +1047,7 @@ export default function AdminPortal() {
 
               <li className="nav-header font-weight-bold text-xs text-muted uppercase">Infrastructure</li>
               <li className="nav-item">
-                <a href="#" onClick={() => setActiveTab('configs')} className={`nav-link ${activeTab === 'configs' ? 'active' : ''}`}>
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('configs'); }} className={`nav-link ${activeTab === 'configs' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-tools mr-2"></i>
                   <p>System Config</p>
                 </a>
@@ -1133,7 +1066,7 @@ export default function AdminPortal() {
         </div>
       </aside>
 
-      {/* Main Content Wrapper */}
+      {/* Content Body */}
       <div className="content-wrapper bg-light">
         
         {/* Dynamic Action Alerts */}
@@ -1145,38 +1078,49 @@ export default function AdminPortal() {
           </div>
         )}
 
-        {/* Content Header Title */}
+        {/* Dynamic Header matching PHP pages */}
         <div className="content-header pt-4">
           <div className="container-fluid">
             <div className="row mb-2 align-items-center">
               <div className="col-sm-6">
-                <h1 className="m-0 font-weight-bold text-dark text-capitalize">{activeTab.replace('-', ' ')} Management</h1>
-              </div>
-              <div className="col-sm-6 text-right">
-                <span className="badge badge-info px-3 py-2 font-weight-bold"><i className="fas fa-clock mr-1"></i> Live Administrator Console</span>
+                <h1 className="m-0 font-weight-bold text-dark text-capitalize">
+                  {activeTab === 'overview' ? 'Dashboard' : 
+                   activeTab === 'users' ? 'User Database' : 
+                   activeTab === 'offers' ? 'Offer Inventory' : 
+                   activeTab === 'referrals' ? 'Referral Engine Configuration' : 
+                   activeTab === 'erasures' ? 'Deletion Requests' : 
+                   activeTab === 'banners' ? 'App Banners' : 
+                   activeTab === 'push' ? 'Push Notifications' : 
+                   activeTab === 'lifafas' ? 'Lifafa (Redeem)' : 
+                   activeTab === 'withdrawals' ? 'Payout Management' : 
+                   activeTab === 'payouts' ? 'Payout Methods' : 
+                   activeTab === 'reports' ? 'Business Stats' : 
+                   activeTab === 'proofs' ? 'Proofs Auditing Gallery' : 
+                   activeTab === 'tickets' ? 'Support Tickets' : 
+                   activeTab === 'configs' ? 'System Config' : activeTab}
+                </h1>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Dynamic Main Body Content */}
+        {/* Dynamic Panels */}
         <section className="content">
           <div className="container-fluid">
             
-            {/* TAB 1: OVERVIEW */}
+            {/* TAB 1: DASHBOARD (index.php) */}
             {activeTab === 'overview' && (
               <div>
-                {/* Stats Widgets Box */}
                 <div className="row">
                   
                   <div className="col-lg-3 col-6">
                     <div className="small-box bg-primary elevation-1 rounded-lg">
                       <div className="inner">
                         <h3>{stats.total_users}</h3>
-                        <p>Total Registered Users</p>
+                        <p>Register Users</p>
                       </div>
-                      <div className="icon"><i className="fas fa-users"></i></div>
-                      <a href="#" onClick={() => setActiveTab('users')} className="small-box-footer">Inspect Database <i className="fas fa-arrow-circle-right"></i></a>
+                      <div className="icon"><i className="fas fa-user-plus"></i></div>
+                      <a href="#" onClick={() => setActiveTab('users')} className="small-box-footer">More Info <i className="fas fa-arrow-circle-right"></i></a>
                     </div>
                   </div>
 
@@ -1184,10 +1128,10 @@ export default function AdminPortal() {
                     <div className="small-box bg-success elevation-1 rounded-lg">
                       <div className="inner">
                         <h3>{stats.active_offers}</h3>
-                        <p>Active Earning Offers</p>
+                        <p>Active Offers</p>
                       </div>
                       <div className="icon"><i className="fas fa-gift"></i></div>
-                      <a href="#" onClick={() => setActiveTab('offers')} className="small-box-footer">Build Offers <i className="fas fa-arrow-circle-right"></i></a>
+                      <a href="#" onClick={() => setActiveTab('offers')} className="small-box-footer">More Info <i className="fas fa-arrow-circle-right"></i></a>
                     </div>
                   </div>
 
@@ -1195,10 +1139,10 @@ export default function AdminPortal() {
                     <div className="small-box bg-warning elevation-1 rounded-lg">
                       <div className="inner">
                         <h3 className="text-white">{stats.pending_withdrawals}</h3>
-                        <p className="text-white">Pending Withdrawals</p>
+                        <p className="text-white">Pending Payouts</p>
                       </div>
                       <div className="icon"><i className="fas fa-hourglass-half text-white-50"></i></div>
-                      <a href="#" onClick={() => setActiveTab('withdrawals')} className="small-box-footer text-white-50">Approve Payouts <i className="fas fa-arrow-circle-right text-white-50"></i></a>
+                      <a href="#" onClick={() => setActiveTab('withdrawals')} className="small-box-footer text-white-50">More Info <i className="fas fa-arrow-circle-right text-white-50"></i></a>
                     </div>
                   </div>
 
@@ -1206,16 +1150,15 @@ export default function AdminPortal() {
                     <div className="small-box bg-danger elevation-1 rounded-lg">
                       <div className="inner">
                         <h3>₹{stats.settled_payouts_value.toFixed(2)}</h3>
-                        <p>Total Settled Payouts</p>
+                        <p>Total Disbursed</p>
                       </div>
                       <div className="icon"><i className="fas fa-money-check-alt"></i></div>
-                      <a href="#" onClick={() => setActiveTab('reports')} className="small-box-footer">View Audit Logs <i className="fas fa-arrow-circle-right"></i></a>
+                      <a href="#" onClick={() => setActiveTab('withdrawals')} className="small-box-footer">More Info <i className="fas fa-arrow-circle-right"></i></a>
                     </div>
                   </div>
 
                 </div>
 
-                {/* DB Credentials Banner */}
                 <div className="card card-white shadow-none border rounded-lg mt-4">
                   <div className="card-body p-4">
                     <h5 className="font-weight-bold text-dark"><i className="fas fa-server mr-2 text-primary"></i> Active Database Host Credentials</h5>
@@ -1227,213 +1170,105 @@ export default function AdminPortal() {
               </div>
             )}
 
-            {/* TAB 2: USERS DIRECTORY */}
+            {/* TAB 2: USER DATABASE (users.php) */}
             {activeTab === 'users' && (
-              <div className="row">
-                
-                {/* Users List Grid */}
-                <div className={selectedUser ? "col-lg-8" : "col-lg-12"}>
-                  <div className="card card-white shadow-none border rounded-lg">
-                    <div className="card-header border-0 bg-transparent">
-                      <h3 className="card-title font-weight-bold">Member Directory</h3>
-                      <div className="card-tools">
-                        <div className="input-group input-group-sm" style={{ width: '260px' }}>
-                          <input 
-                            type="text" 
-                            className="form-control rounded-left" 
-                            placeholder="Search users..." 
-                            value={userSearch}
-                            onChange={(e) => setUserSearch(e.target.value)}
-                          />
-                          <div className="input-group-append">
-                            <span className="input-group-text rounded-right bg-transparent border-left-0"><i className="fas fa-search"></i></span>
-                          </div>
+              <div>
+                <div className="card card-white shadow-none border rounded-lg">
+                  <div className="card-header border-0 bg-transparent">
+                    <h3 className="card-title font-weight-bold">Member Directory</h3>
+                    <div className="card-tools">
+                      <div className="input-group input-group-sm" style={{ width: '250px' }}>
+                        <input 
+                          type="text" 
+                          className="form-control rounded-left" 
+                          placeholder="Search users..." 
+                          value={userSearch}
+                          onChange={(e) => setUserSearch(e.target.value)}
+                        />
+                        <div className="input-group-append">
+                          <span className="input-group-text rounded-right bg-transparent border-left-0"><i className="fas fa-search"></i></span>
                         </div>
                       </div>
                     </div>
-                    
-                    <div className="card-body table-responsive p-0">
-                      <table className="table table-hover text-nowrap align-middle">
-                        <thead>
-                          <tr className="text-xs text-muted uppercase">
-                            <th>User ID</th>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Referral Code</th>
-                            <th>Balance</th>
-                            <th className="text-right pr-4">Actions</th>
+                  </div>
+                  
+                  <div className="card-body table-responsive p-0">
+                    <table className="table table-hover align-middle mb-0">
+                      <thead>
+                        <tr className="text-xs text-muted uppercase">
+                          <th style={{ width: '10px' }}>ID</th>
+                          <th>User Profile</th>
+                          <th>Contact Info</th>
+                          <th className="text-center">Balance</th>
+                          <th>Registered</th>
+                          <th className="text-right pr-4">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usersList.map(u => (
+                          <tr key={u.id} className="text-sm">
+                            <td>{u.id}</td>
+                            <td>
+                              <div className="d-flex align-items-center">
+                                <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || 'Admin')}&background=007bff&color=fff&size=30`} className="img-circle mr-2" style={{ width: '30px', height: '30px', objectFit: 'cover' }} />
+                                <span className="font-weight-bold">{u.name || 'Anonymous'}</span>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="text-xs text-muted">{u.email}</div>
+                              <div className="text-xs font-weight-bold">{u.phone_number || 'N/A'}</div>
+                            </td>
+                            <td className="text-center">
+                              <span className="badge badge-success px-2 py-1">₹{parseFloat(u.balance || 0).toFixed(2)}</span>
+                            </td>
+                            <td className="text-muted text-xs">{new Date(u.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                            <td className="text-right pr-4">
+                              <button className="btn btn-outline-primary btn-xs font-weight-bold px-3 rounded-pill" onClick={() => viewUserLedger(u)}>
+                                View Profile
+                              </button>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {usersList.map(u => (
-                            <tr key={u.id} style={{ cursor: 'pointer' }} onClick={() => viewUserLedger(u)} className={selectedUser?.id === u.id ? "table-active" : ""}>
-                              <td><code className="text-xs text-indigo font-weight-bold">{u.user_id || 'N/A'}</code></td>
-                              <td><strong className="text-dark">{u.name || 'Anonymous'}</strong></td>
-                              <td className="text-secondary text-sm">{u.email}</td>
-                              <td><code>{u.referral_code || 'None'}</code></td>
-                              <td><span className="badge badge-success px-2 py-1">₹{parseFloat(u.balance || 0).toFixed(2)}</span></td>
-                              <td className="text-right pr-4">
-                                <button className="btn btn-outline-primary btn-xs font-weight-bold px-3 rounded-pill" onClick={(e) => { e.stopPropagation(); viewUserLedger(u); }}>
-                                  <i className="fas fa-eye mr-1"></i> Inspect
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                          {usersList.length === 0 && (
-                            <tr>
-                              <td colSpan={6} className="text-center text-muted p-4">No users matching search criteria.</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Pagination */}
-                    {usersPages > 1 && (
-                      <div className="card-footer bg-transparent border-0 d-flex justify-content-between align-items-center">
-                        <span className="text-muted text-xs">Page <strong>{usersPage}</strong> of <strong>{usersPages}</strong> ({usersTotal} users)</span>
-                        <div className="btn-group">
-                          <button className="btn btn-outline-secondary btn-sm" disabled={usersPage === 1} onClick={() => setUsersPage(prev => Math.max(prev - 1, 1))}>Previous</button>
-                          <button className="btn btn-outline-secondary btn-sm" disabled={usersPage === usersPages} onClick={() => setUsersPage(prev => Math.min(prev + 1, usersPages))}>Next</button>
-                        </div>
-                      </div>
-                    )}
+                        ))}
+                        {usersList.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="text-center text-muted p-4">No users matching search criteria.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
+
+                  {usersPages > 1 && (
+                    <div className="card-footer bg-transparent border-0 d-flex justify-content-between align-items-center">
+                      <span className="text-muted text-xs">Page <strong>{usersPage}</strong> of <strong>{usersPages}</strong> ({usersTotal} users)</span>
+                      <div className="btn-group">
+                        <button className="btn btn-outline-secondary btn-sm" disabled={usersPage === 1} onClick={() => setUsersPage(prev => Math.max(prev - 1, 1))}>Previous</button>
+                        <button className="btn btn-outline-secondary btn-sm" disabled={usersPage === usersPages} onClick={() => setUsersPage(prev => Math.min(prev + 1, usersPages))}>Next</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {/* Inspect Sidebar */}
-                {selectedUser && (
-                  <div className="col-lg-4">
-                    <div className="card card-white shadow-none border rounded-lg">
-                      <div className="card-header border-bottom-0 bg-transparent d-flex justify-content-between align-items-center pb-0">
-                        <h3 className="card-title font-weight-bold">User Inspector</h3>
-                        <button type="button" className="close" onClick={() => setSelectedUser(null)}>&times;</button>
-                      </div>
-                      
-                      <div className="card-body">
-                        <div className="text-center mb-4">
-                          <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(selectedUser.name || 'Admin')}&background=007bff&color=fff&size=96`} className="img-circle border elevation-1 mb-3" style={{ width: '80px', height: '80px', objectFit: 'cover' }} />
-                          <h5 className="font-weight-black mb-1">{selectedUser.name || 'Anonymous'}</h5>
-                          <span className="badge badge-light border text-muted">{selectedUser.email}</span>
-                        </div>
-
-                        {/* Balance adjustment */}
-                        <div className="d-flex justify-content-between align-items-center bg-light p-3 rounded-lg border mb-4">
-                          <div>
-                            <span className="text-xs text-muted uppercase font-weight-bold d-block">Available Coins</span>
-                            <h4 className="text-success font-weight-black mb-0">₹{parseFloat(selectedUser.balance || 0).toFixed(2)}</h4>
-                          </div>
-                          <button className="btn btn-primary btn-sm px-3 rounded-pill" onClick={() => setAdjustBalanceModal(true)}>
-                            <i className="fas fa-sliders-h mr-1"></i> Adjust
-                          </button>
-                        </div>
-
-                        {/* Profile Info details */}
-                        <div className="card shadow-none border bg-light mb-4">
-                          <div className="card-body p-3">
-                            <div className="d-flex justify-content-between align-items-center mb-3">
-                              <span className="font-weight-bold text-secondary text-xs uppercase">User Profile Details</span>
-                              <div className="btn-group">
-                                <button className="btn btn-xs btn-outline-primary px-3 rounded-pill mr-2" onClick={() => triggerEditUser(selectedUser)}>
-                                  <i className="fas fa-edit mr-1"></i> Edit Details
-                                </button>
-                                <button className="btn btn-xs btn-outline-danger px-3 rounded-pill" onClick={() => handleDeleteUser(selectedUser.id)}>
-                                  <i className="fas fa-trash-alt mr-1"></i> Delete User
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="row text-sm">
-                              <div className="col-6 mb-2">
-                                <span className="text-xs text-muted d-block">User ID (Public)</span>
-                                <strong>{selectedUser.user_id || 'N/A'}</strong>
-                              </div>
-                              <div className="col-6 mb-2">
-                                <span className="text-xs text-muted d-block">Referral Code</span>
-                                <code className="text-xs text-indigo font-weight-bold">{selectedUser.referral_code || 'None'}</code>
-                              </div>
-                              <div className="col-6 mb-2">
-                                <span className="text-xs text-muted d-block">Phone Number</span>
-                                <strong>{selectedUser.phone_number || 'N/A'}</strong>
-                              </div>
-                              <div className="col-6 mb-2">
-                                <span className="text-xs text-muted d-block">Location</span>
-                                <strong>{selectedUser.location || 'N/A'}</strong>
-                              </div>
-                              <div className="col-6 mb-2">
-                                <span className="text-xs text-muted d-block">Current Streak</span>
-                                <strong>{selectedUser.current_streak || 0} days</strong>
-                              </div>
-                              <div className="col-6 mb-2">
-                                <span className="text-xs text-muted d-block">Daily Spins Left</span>
-                                <strong>{selectedUser.daily_spins_count || 0}</strong>
-                              </div>
-                              <div className="col-12 mb-2">
-                                <span className="text-xs text-muted d-block">Android Identifier</span>
-                                <code className="text-xs text-danger">{selectedUser.android_id || 'N/A'}</code>
-                              </div>
-                              <div className="col-12 mb-2 border-top pt-2">
-                                <span className="text-xs text-muted d-block">FCM Push Token</span>
-                                <span className="text-xs text-muted text-break">{selectedUser.fcm_token || 'None'}</span>
-                              </div>
-                              <div className="col-12 border-top pt-2 d-flex justify-content-between align-items-center">
-                                <div>
-                                  <span className="text-xs text-muted d-block">Status</span>
-                                  <strong className={selectedUser.is_banned ? "text-danger" : "text-success"}>
-                                    {selectedUser.is_banned ? "🚫 Banned" : "✅ Active"}
-                                  </strong>
-                                </div>
-                                {selectedUser.is_banned ? (
-                                  <button className="btn btn-xs btn-success rounded-pill px-3" onClick={() => handleUnbanUser(selectedUser.id)}>Unban</button>
-                                ) : (
-                                  <button className="btn btn-xs btn-danger rounded-pill px-3" onClick={() => handleBanUser(selectedUser.id)}>Ban User</button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Recent Transactions Ledger */}
-                        <h6 className="font-weight-bold mb-3"><i className="fas fa-history mr-1"></i> Transaction History</h6>
-                        <div style={{ maxHeight: '240px', overflowY: 'auto' }} className="pr-1">
-                          {userTransactions.map(t => (
-                            <div key={t.id} className="p-2 border rounded-lg mb-2 bg-light d-flex justify-content-between align-items-center text-sm">
-                              <div>
-                                <p className="font-weight-bold mb-0 text-dark">{t.description || t.source}</p>
-                                <span className="text-xs text-muted">{new Date(t.created_at).toLocaleDateString()}</span>
-                              </div>
-                              <strong className={t.type === 'CREDIT' ? "text-success" : "text-danger"}>
-                                {t.type === 'CREDIT' ? '+' : '-'}{parseFloat(t.amount).toFixed(2)}
-                              </strong>
-                            </div>
-                          ))}
-                          {userTransactions.length === 0 && (
-                            <p className="text-muted text-xs text-center p-3">No transactions found.</p>
-                          )}
-                        </div>
-
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
-            {/* TAB 3: OFFER BUILDER */}
+            {/* TAB 3: MANAGE OFFERS (offers.php, add_offer.php, edit_offer.php) */}
             {activeTab === 'offers' && (
-              <div className="row">
-                {/* Offers List */}
-                <div className="col-lg-8">
+              <div>
+                {(!isCreatingOffer && !editingOffer) ? (
+                  /* Main inventory view */
                   <div className="card card-white shadow-none border rounded-lg">
-                    <div className="card-header border-0 bg-transparent">
-                      <h3 className="card-title font-weight-bold">Earning Campaigns</h3>
+                    <div className="card-header border-0 bg-transparent d-flex justify-content-between align-items-center">
+                      <h3 className="card-title font-weight-bold text-dark">Offer Inventory</h3>
+                      <button className="btn btn-primary rounded-pill font-weight-bold px-4 shadow-sm" onClick={() => { resetOfferForm(); setIsCreatingOffer(true); }}>
+                        <i className="fas fa-plus mr-1"></i> Create Offer
+                      </button>
                     </div>
-                    <div className="card-body table-responsive p-0">
-                      <table className="table table-hover text-nowrap align-middle">
+                    <div className="card-body p-0 table-responsive">
+                      <table className="table table-hover align-middle mb-0">
                         <thead>
                           <tr className="text-xs text-muted uppercase">
-                            <th>Icon</th>
-                            <th>Campaign Details</th>
+                            <th style={{ width: '50px' }} className="pl-4">Icon</th>
+                            <th>Offer Title & Details</th>
                             <th className="text-center">Category</th>
                             <th className="text-center">Reward</th>
                             <th className="text-center">Status</th>
@@ -1442,10 +1277,10 @@ export default function AdminPortal() {
                         </thead>
                         <tbody>
                           {offersList.map(o => (
-                            <tr key={o.id}>
-                              <td>
+                            <tr key={o.id} className="text-sm">
+                              <td className="pl-4">
                                 {o.icon_url ? (
-                                  <img src={o.icon_url} alt="" className="img-thumbnail" style={{ width: '40px', height: '40px', objectFit: 'cover' }} />
+                                  <img src={o.icon_url} alt="" className="rounded shadow-sm" style={{ width: '40px', height: '40px', objectFit: 'cover' }} />
                                 ) : (
                                   <div style={{ width: '40px', height: '40px' }} className="bg-light border rounded d-flex align-items-center justify-content-center">
                                     <i className="fas fa-gift text-muted"></i>
@@ -1453,23 +1288,29 @@ export default function AdminPortal() {
                                 )}
                               </td>
                               <td>
-                                <strong className="text-dark">{o.title}</strong>
-                                {o.is_hot === 1 && <span className="badge badge-danger px-2 ml-2">Hot</span>}
+                                <div className="font-weight-bold">{o.title}</div>
+                                <div className="text-xs text-muted text-truncate" style={{ maxWidth: '250px' }}>{o.description ? o.description.substring(0, 80) : ''}...</div>
                               </td>
-                              <td className="text-center">{o.category || 'General'}</td>
-                              <td className="text-center"><span className="badge badge-success px-2">₹{parseFloat(o.total_reward || 0).toFixed(2)}</span></td>
                               <td className="text-center">
-                                <span className={`badge badge-${o.is_active ? 'success' : 'secondary'} px-2`}>
-                                  {o.is_active ? 'Live' : 'Paused'}
+                                <span className="badge badge-info px-2 py-1">{o.category || 'General'}</span>
+                              </td>
+                              <td className="text-center">
+                                <span className="font-weight-bold text-success">₹{parseFloat(o.total_reward || 0).toFixed(2)}</span>
+                              </td>
+                              <td className="text-center">
+                                <span className={`badge badge-${o.is_active ? 'success' : 'secondary'} px-2 py-1 rounded-pill`}>
+                                  {o.is_active ? 'Active' : 'Disabled'}
                                 </span>
                               </td>
                               <td className="text-right pr-4">
-                                <button className="btn btn-outline-primary btn-xs font-weight-bold mr-2 px-3 rounded-pill" onClick={() => handleEditOfferClick(o)}>
-                                  <i className="fas fa-edit"></i> Edit
-                                </button>
-                                <button className="btn btn-outline-danger btn-xs font-weight-bold px-3 rounded-pill" onClick={() => handleDeleteOffer(o.id)}>
-                                  <i className="fas fa-trash-alt"></i> Delete
-                                </button>
+                                <div className="btn-group shadow-sm">
+                                  <button className="btn btn-default btn-sm" onClick={() => handleEditOfferClick(o)}>
+                                    <i className="fas fa-edit text-primary"></i>
+                                  </button>
+                                  <button className="btn btn-default btn-sm" onClick={() => handleDeleteOffer(o.id)}>
+                                    <i className="fas fa-trash text-danger"></i>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -1477,83 +1318,236 @@ export default function AdminPortal() {
                       </table>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  /* Two-column create/edit form matching add_offer.php and edit_offer.php */
+                  <form onSubmit={handleOfferSubmit}>
+                    <div className="row">
+                      <div className="col-md-8">
+                        {/* Primary Info */}
+                        <div className="card card-white shadow-none border rounded-lg">
+                          <div className="card-body">
+                            <div className="form-group mb-3">
+                              <label className="text-sm font-weight-bold">Offer Primary Title</label>
+                              <input 
+                                type="text" 
+                                className="form-control" 
+                                placeholder="e.g. Install & Open Application" 
+                                value={offerForm.title} 
+                                onChange={e => setOfferForm({ ...offerForm, title: e.target.value })} 
+                                required 
+                              />
+                            </div>
+                            <div className="form-group mb-3">
+                              <label className="text-sm font-weight-bold">Detailed Instruction</label>
+                              <textarea 
+                                className="form-control" 
+                                rows={4} 
+                                placeholder="Briefly describe what the user needs to do..." 
+                                value={offerForm.description} 
+                                onChange={e => setOfferForm({ ...offerForm, description: e.target.value })} 
+                              />
+                            </div>
+                            <div className="row">
+                              <div className="col-md-6 form-group mb-3">
+                                <label className="text-sm font-weight-bold">Icon URL / Asset Link</label>
+                                <input 
+                                  type="text" 
+                                  className="form-control" 
+                                  placeholder="HTTPS direct link" 
+                                  value={offerForm.icon_url} 
+                                  onChange={e => setOfferForm({ ...offerForm, icon_url: e.target.value })} 
+                                  required 
+                              />
+                              </div>
+                              <div className="col-md-6 form-group mb-3">
+                                <label className="text-sm font-weight-bold">Deep Link / Tracking URL</label>
+                                <input 
+                                  type="text" 
+                                  className="form-control" 
+                                  placeholder="Attribution or Affiliate link" 
+                                  value={offerForm.tracking_url} 
+                                  onChange={e => setOfferForm({ ...offerForm, tracking_url: e.target.value })} 
+                                  required 
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
 
-                {/* Offer form card */}
-                <div className="col-lg-4">
-                  <div className="card card-white shadow-none border rounded-lg">
-                    <div className="card-header border-bottom-0 bg-transparent">
-                      <h3 className="card-title font-weight-bold">{editingOffer ? "✏️ Edit Offer" : "＋ Create Offer"}</h3>
-                      {editingOffer && (
-                        <button className="close" onClick={resetOfferForm}>&times;</button>
-                      )}
-                    </div>
-                    <div className="card-body">
-                      <form onSubmit={handleOfferSubmit}>
-                        <div className="form-group mb-3">
-                          <label className="text-muted text-xs font-weight-bold mb-1">Offer Title</label>
-                          <input type="text" className="form-control" placeholder="e.g. Install GPay" value={offerForm.title} onChange={e => setOfferForm({ ...offerForm, title: e.target.value })} required />
-                        </div>
-                        <div className="form-group mb-3">
-                          <label className="text-muted text-xs font-weight-bold mb-1">External ID / Network Key</label>
-                          <input type="text" className="form-control" placeholder="e.g. gpay_install" value={offerForm.external_id} onChange={e => setOfferForm({ ...offerForm, external_id: e.target.value })} />
-                        </div>
-                        <div className="form-group mb-3">
-                          <label className="text-muted text-xs font-weight-bold mb-1">Description</label>
-                          <textarea className="form-control" rows={3} placeholder="Steps to complete offer..." value={offerForm.description} onChange={e => setOfferForm({ ...offerForm, description: e.target.value })} />
-                        </div>
-                        <div className="row">
-                          <div className="col-6 form-group mb-3">
-                            <label className="text-muted text-xs font-weight-bold mb-1">Category</label>
-                            <select className="form-control" value={offerForm.category} onChange={e => setOfferForm({ ...offerForm, category: e.target.value })}>
-                              <option value="General">General</option>
-                              <option value="Crypto">Crypto</option>
-                              <option value="Gaming">Gaming</option>
-                              <option value="Surveys">Surveys</option>
-                            </select>
+                        {/* Milestone Tiers */}
+                        <div className="card card-white shadow-none border rounded-lg">
+                          <div className="card-header border-bottom-0 d-flex justify-content-between align-items-center bg-transparent">
+                            <h3 className="card-title font-weight-bold text-primary">Reward Milestone Tiers</h3>
+                            <button type="button" className="btn btn-primary btn-sm rounded-pill font-weight-bold" onClick={addTierToForm}>+ Add Step</button>
                           </div>
-                          <div className="col-6 form-group mb-3">
-                            <label className="text-muted text-xs font-weight-bold mb-1">Estimated Time</label>
-                            <input type="text" className="form-control" value={offerForm.estimated_time} onChange={e => setOfferForm({ ...offerForm, estimated_time: e.target.value })} />
+                          <div className="card-body">
+                            {offerForm.tiers.map((tier, idx) => (
+                              <div key={idx} className="p-3 border rounded-lg mb-3 bg-light" style={{ position: 'relative' }}>
+                                <button type="button" className="close text-danger" style={{ position: 'absolute', top: '10px', right: '15px' }} onClick={() => removeTierFromForm(idx)}>&times;</button>
+                                <div className="row">
+                                  <div className="col-md-5 form-group mb-2">
+                                    <label className="text-xs text-muted font-weight-bold">Backend Event</label>
+                                    <input 
+                                      type="text" 
+                                      className="form-control form-control-sm" 
+                                      placeholder="e.g. registration_complete" 
+                                      value={tier.backend_title} 
+                                      onChange={e => updateTierField(idx, 'backend_title', e.target.value)} 
+                                    />
+                                  </div>
+                                  <div className="col-md-4 form-group mb-2">
+                                    <label className="text-xs text-muted font-weight-bold">App Title</label>
+                                    <input 
+                                      type="text" 
+                                      className="form-control form-control-sm" 
+                                      value={tier.title} 
+                                      onChange={e => updateTierField(idx, 'title', e.target.value)} 
+                                    />
+                                  </div>
+                                  <div className="col-md-3 form-group mb-2">
+                                    <label className="text-xs text-muted font-weight-bold">Reward (₹)</label>
+                                    <input 
+                                      type="number" 
+                                      step="0.01" 
+                                      className="form-control form-control-sm font-weight-bold text-success" 
+                                      value={tier.reward} 
+                                      onChange={e => updateTierField(idx, 'reward', parseFloat(e.target.value || 0))} 
+                                    />
+                                  </div>
+                                </div>
+                                <div className="form-group mt-2 mb-0">
+                                  <label className="text-xs text-muted font-weight-bold">Step Info (One per line)</label>
+                                  <textarea 
+                                    className="form-control form-control-sm" 
+                                    rows={2} 
+                                    placeholder="Tell users exactly what to do for this tier..." 
+                                    value={Array.isArray(tier.steps) ? tier.steps.join('\n') : tier.steps} 
+                                    onChange={e => updateTierField(idx, 'steps', e.target.value.split('\n'))} 
+                                  />
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                        <div className="row">
-                          <div className="col-6 form-group mb-3">
-                            <label className="text-muted text-xs font-weight-bold mb-1">Reward (Coins)</label>
-                            <input type="number" className="form-control" value={offerForm.total_reward} onChange={e => setOfferForm({ ...offerForm, total_reward: parseFloat(e.target.value || 0) })} required />
-                          </div>
-                          <div className="col-6 form-group mb-3">
-                            <label className="text-muted text-xs font-weight-bold mb-1">Cost (AdNetwork)</label>
-                            <input type="number" className="form-control" value={offerForm.actual_price} onChange={e => setOfferForm({ ...offerForm, actual_price: parseFloat(e.target.value || 0) })} />
-                          </div>
-                        </div>
-                        <div className="form-group mb-3">
-                          <label className="text-muted text-xs font-weight-bold mb-1">Tracking URL / App Link</label>
-                          <input type="text" className="form-control" value={offerForm.tracking_url} onChange={e => setOfferForm({ ...offerForm, tracking_url: e.target.value })} />
-                        </div>
-                        <div className="form-group mb-3">
-                          <label className="text-muted text-xs font-weight-bold mb-1">Icon Image URL</label>
-                          <input type="text" className="form-control" value={offerForm.icon_url} onChange={e => setOfferForm({ ...offerForm, icon_url: e.target.value })} />
-                        </div>
-                        <div className="row mb-3 align-items-center">
-                          <div className="col-6">
-                            <div className="custom-control custom-switch">
-                              <input type="checkbox" className="custom-control-input" id="isHot" checked={offerForm.is_hot} onChange={e => setOfferForm({ ...offerForm, is_hot: e.target.checked })} />
-                              <label className="custom-control-label text-xs uppercase" htmlFor="isHot">Hot Offer</label>
+                      </div>
+
+                      <div className="col-md-4">
+                        {/* Economic Config */}
+                        <div className="card card-white shadow-none border rounded-lg">
+                          <div className="card-header border-bottom-0"><h3 className="card-title font-weight-bold text-dark">Economic Config</h3></div>
+                          <div className="card-body">
+                            <div className="form-group mb-3">
+                              <label className="text-sm font-weight-bold">Total User Reward (₹)</label>
+                              <input 
+                                type="number" 
+                                step="0.01" 
+                                className="form-control font-weight-bold text-success" 
+                                value={offerForm.total_reward} 
+                                onChange={e => setOfferForm({ ...offerForm, total_reward: parseFloat(e.target.value || 0) })} 
+                              />
+                            </div>
+                            <div className="form-group mb-3">
+                              <label className="text-sm font-weight-bold">Internal Budget Price (₹)</label>
+                              <input 
+                                type="number" 
+                                step="0.01" 
+                                className="form-control" 
+                                value={offerForm.actual_price} 
+                                onChange={e => setOfferForm({ ...offerForm, actual_price: parseFloat(e.target.value || 0) })} 
+                              />
+                            </div>
+                            <div className="form-group mb-3">
+                              <label className="text-sm font-weight-bold">App Category</label>
+                              <select 
+                                className="form-control" 
+                                value={offerForm.category} 
+                                onChange={e => setOfferForm({ ...offerForm, category: e.target.value })}
+                              >
+                                <option value="Top Offers">Top Offers</option>
+                                <option value="New Apps">New Apps</option>
+                                <option value="Install & Earn">Install & Earn</option>
+                                <option value="Surveys">Surveys</option>
+                                <option value="General">General</option>
+                              </select>
+                            </div>
+                            <div className="form-group mt-3">
+                              <div className="custom-control custom-switch">
+                                <input 
+                                  type="checkbox" 
+                                  className="custom-control-input" 
+                                  id="is_active_form" 
+                                  checked={offerForm.is_active} 
+                                  onChange={e => setOfferForm({ ...offerForm, is_active: e.target.checked })} 
+                                />
+                                <label className="custom-control-label text-sm" htmlFor="is_active_form">Live Status (Active)</label>
+                              </div>
+                            </div>
+                            <div className="form-group mt-2">
+                              <div className="custom-control custom-switch">
+                                <input 
+                                  type="checkbox" 
+                                  className="custom-control-input" 
+                                  id="is_hot_form" 
+                                  checked={offerForm.is_hot} 
+                                  onChange={e => setOfferForm({ ...offerForm, is_hot: e.target.checked })} 
+                                />
+                                <label className="custom-control-label text-sm text-warning font-weight-bold" htmlFor="is_hot_form">Premium Hot Banner</label>
+                              </div>
                             </div>
                           </div>
-                          <div className="col-6">
-                            <div className="custom-control custom-switch">
-                              <input type="checkbox" className="custom-control-input" id="isActive" checked={offerForm.is_active} onChange={e => setOfferForm({ ...offerForm, is_active: e.target.checked })} />
-                              <label className="custom-control-label text-xs uppercase" htmlFor="isActive">Active</label>
+                        </div>
+
+                        {/* Validation Type */}
+                        <div className="card card-white shadow-none border rounded-lg">
+                          <div className="card-header border-bottom-0"><h3 className="card-title font-weight-bold text-dark">Validation Type</h3></div>
+                          <div className="card-body">
+                            <div className="form-group mb-3">
+                              <label className="text-sm font-weight-bold">Integration Mode</label>
+                              <select 
+                                className="form-control" 
+                                value={offerForm.type} 
+                                onChange={e => setOfferForm({ ...offerForm, type: e.target.value })}
+                              >
+                                <option value="online">Server Postback</option>
+                                <option value="offline">Manual Proof Review</option>
+                              </select>
+                            </div>
+                            <div className="form-group mb-3">
+                              <label className="text-sm font-weight-bold">Difficulty</label>
+                              <select 
+                                className="form-control" 
+                                value={offerForm.difficulty} 
+                                onChange={e => setOfferForm({ ...offerForm, difficulty: e.target.value })}
+                              >
+                                <option value="Easy">Easy</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Hard">Hard</option>
+                              </select>
+                            </div>
+                            <div className="form-group mb-3">
+                              <label className="text-sm font-weight-bold">Estimated Completion</label>
+                              <input 
+                                type="text" 
+                                className="form-control" 
+                                placeholder="e.g. 5 Mins" 
+                                value={offerForm.estimated_time} 
+                                onChange={e => setOfferForm({ ...offerForm, estimated_time: e.target.value })} 
+                              />
                             </div>
                           </div>
                         </div>
-                        <button type="submit" className="btn btn-primary btn-block rounded-pill">Publish Offer</button>
-                      </form>
+
+                        {/* Actions */}
+                        <button type="submit" className="btn btn-primary btn-block elevation-2 font-weight-bold py-3 text-lg rounded-lg mb-3">
+                          {editingOffer ? "SAVE UPDATES" : "PUBLISH OFFER"}
+                        </button>
+                        <button type="button" className="btn btn-outline-secondary btn-block rounded-lg py-2" onClick={() => { resetOfferForm(); setIsCreatingOffer(false); }}>
+                          Cancel & Return
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </form>
+                )}
               </div>
             )}
 
@@ -1648,62 +1642,115 @@ export default function AdminPortal() {
               </div>
             )}
 
-            {/* TAB 5: WITHDRAWALS QUEUE */}
+            {/* TAB 5: WITHDRAWAL QUEUE (withdrawals.php) */}
             {activeTab === 'withdrawals' && (
-              <div className="card card-white shadow-none border rounded-lg">
-                <div className="card-header border-0 bg-transparent d-flex justify-content-between align-items-center">
-                  <h3 className="card-title font-weight-bold">Withdrawal Approvals Queue</h3>
-                  <div className="btn-group">
-                    <button className={`btn btn-xs ${withdrawalStatus === 'PENDING' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('PENDING')}>Pending</button>
-                    <button className={`btn btn-xs ${withdrawalStatus === 'APPROVED' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('APPROVED')}>Approved</button>
-                    <button className={`btn btn-xs ${withdrawalStatus === 'REJECTED' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('REJECTED')}>Rejected</button>
-                    <button className={`btn btn-xs ${withdrawalStatus === 'ALL' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('ALL')}>All</button>
+              <div>
+                {/* Info Boxes */}
+                <div className="row">
+                  <div className="col-md-3 col-6">
+                    <div className="info-box shadow-none border">
+                      <span className="info-box-icon bg-light"><i className="fas fa-hourglass-half text-warning"></i></span>
+                      <div className="info-box-content">
+                        <span className="text-xs font-weight-bold text-secondary uppercase">Filtered Pending</span>
+                        <span className="info-box-number text-lg font-weight-black">₹{stats.pending_withdrawals_value.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3 col-6">
+                    <div className="info-box shadow-none border">
+                      <span className="info-box-icon bg-light"><i className="fas fa-check-circle text-success"></i></span>
+                      <div className="info-box-content">
+                        <span className="text-xs font-weight-bold text-secondary uppercase">Filtered Settled</span>
+                        <span className="info-box-number text-lg font-weight-black">₹{stats.settled_payouts_value.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3 col-6">
+                    <div className="info-box shadow-none border">
+                      <span className="info-box-icon bg-light"><i className="fas fa-times-circle text-danger"></i></span>
+                      <div className="info-box-content">
+                        <span className="text-xs font-weight-bold text-secondary uppercase">Filtered Rejected</span>
+                        <span className="info-box-number text-lg font-weight-black">₹0.00</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3 col-6">
+                    <div className="info-box shadow-none border bg-light">
+                      <span className="info-box-icon border bg-white"><i className="fas fa-calculator text-primary"></i></span>
+                      <div className="info-box-content">
+                        <span className="text-xs font-weight-bold text-secondary uppercase">Total Net</span>
+                        <span className="info-box-number text-lg font-weight-black">₹{(stats.pending_withdrawals_value + stats.settled_payouts_value).toFixed(2)}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div className="card-body table-responsive p-0">
-                  <table className="table table-hover text-nowrap align-middle">
-                    <thead>
-                      <tr className="text-xs text-muted uppercase">
-                        <th>User</th>
-                        <th>Method</th>
-                        <th>Payout Destination</th>
-                        <th>Amount</th>
-                        <th>Requested On</th>
-                        <th>Status</th>
-                        <th className="text-right pr-4">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {withdrawalsList.map(w => (
-                        <tr key={w.id}>
-                          <td><strong>{w.user_name}</strong><br /><span className="text-xs text-muted">{w.user_email}</span></td>
-                          <td><span className="badge badge-light border">{w.method}</span></td>
-                          <td><code className="text-xs text-dark">{w.details}</code></td>
-                          <td><strong className="text-dark">₹{parseFloat(w.amount).toFixed(2)}</strong></td>
-                          <td className="text-sm">{new Date(w.created_at).toLocaleString()}</td>
-                          <td><span className={`badge badge-${w.status === 'PENDING' ? 'warning' : (w.status === 'APPROVED' ? 'success' : 'danger')} px-2`}>{w.status}</span></td>
-                          <td className="text-right pr-4">
-                            {w.status === 'PENDING' ? (
-                              <div className="btn-group">
-                                <button className="btn btn-xs btn-success rounded-pill px-3 mr-2" onClick={() => handleApproveWithdrawal(w.id)}>Settle</button>
-                                <button className="btn btn-xs btn-danger rounded-pill px-3" onClick={() => triggerRejectWithdrawal(w)}>Reject</button>
-                              </div>
-                            ) : <span className="text-xs text-muted">Processed</span>}
-                          </td>
+
+                {/* Main Queue Card */}
+                <div className="card card-warning card-outline shadow-none border rounded-lg mb-4 mt-3">
+                  <div className="card-header border-0 bg-transparent d-flex justify-content-between align-items-center">
+                    <h3 className="card-title font-weight-bold text-warning"><i className="fas fa-clock mr-2"></i>Awaiting Disbursements</h3>
+                    <div className="btn-group">
+                      <button className={`btn btn-xs ${withdrawalStatus === 'PENDING' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('PENDING')}>Pending</button>
+                      <button className={`btn btn-xs ${withdrawalStatus === 'APPROVED' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('APPROVED')}>Approved</button>
+                      <button className={`btn btn-xs ${withdrawalStatus === 'REJECTED' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('REJECTED')}>Rejected</button>
+                      <button className={`btn btn-xs ${withdrawalStatus === 'ALL' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('ALL')}>All</button>
+                    </div>
+                  </div>
+                  <div className="card-body p-0 table-responsive">
+                    <table className="table table-hover align-middle mb-0">
+                      <thead className="bg-light">
+                        <tr className="text-xs text-muted uppercase">
+                          <th className="pl-4">Beneficiary</th>
+                          <th className="text-center">Coins</th>
+                          <th className="text-center">Net Amount</th>
+                          <th>Payment Method</th>
+                          <th className="text-center">Queued Date</th>
+                          <th className="text-right pr-4">Action</th>
                         </tr>
-                      ))}
-                      {withdrawalsList.length === 0 && (
-                        <tr>
-                          <td colSpan={7} className="text-center text-muted p-4">No withdrawals matching criteria.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {withdrawalsList.map(w => (
+                          <tr key={w.id} className="text-sm">
+                            <td className="pl-4">
+                              <div className="font-weight-bold text-dark">{w.user_name}</div>
+                              <div className="text-xs text-muted">{w.user_email}</div>
+                            </td>
+                            <td className="text-center">
+                              <div className="badge badge-light border font-weight-bold p-2">{parseFloat(w.amount).toFixed(0)} <span className="text-xs font-normal">Coins</span></div>
+                            </td>
+                            <td className="text-center">
+                              <h5 className="mb-0 font-weight-bold text-primary">₹{parseFloat(w.amount).toFixed(2)}</h5>
+                            </td>
+                            <td>
+                              <div className="font-weight-bold">{w.method}</div>
+                              <code className="text-xs text-danger">{w.details}</code>
+                            </td>
+                            <td className="text-center text-xs text-info">
+                              <i className="far fa-calendar-alt mr-1"></i> {new Date(w.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="text-right pr-4">
+                              {w.status === 'PENDING' ? (
+                                <div className="btn-group shadow-sm">
+                                  <button className="btn btn-success btn-xs px-3 font-weight-bold py-1" onClick={() => handleApproveWithdrawal(w.id)}>Approve</button>
+                                  <button className="btn btn-danger btn-xs px-3 font-weight-bold py-1" onClick={() => triggerRejectWithdrawal(w)}>Reject</button>
+                                </div>
+                              ) : <span className="text-xs text-muted">{w.status}</span>}
+                            </td>
+                          </tr>
+                        ))}
+                        {withdrawalsList.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="text-center text-muted p-4">No payout requests found in queue.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* TAB 14: OFFLINE SUBMISSIONS */}
+            {/* TAB 14: PROOF GALLERY (reports.php) */}
             {activeTab === 'proofs' && (
               <div className="card card-white shadow-none border rounded-lg">
                 <div className="card-header border-0 bg-transparent d-flex justify-content-between align-items-center">
@@ -1713,7 +1760,7 @@ export default function AdminPortal() {
                   <button className="btn btn-sm btn-outline-secondary rounded-pill" onClick={fetchProofs}><i className="fas fa-sync-alt mr-1"></i> Refresh Queue</button>
                 </div>
                 <div className="card-body table-responsive p-0">
-                  <table className="table table-hover text-nowrap align-middle">
+                  <table className="table table-hover align-middle mb-0">
                     <thead>
                       <tr className="text-xs text-muted uppercase">
                         <th>Candidate</th>
@@ -1732,7 +1779,7 @@ export default function AdminPortal() {
                           catch(e) {}
                         }
                         return (
-                          <tr key={p.id}>
+                          <tr key={p.id} className="text-sm">
                             <td><strong>{p.user_name || 'Anonymous'}</strong><br /><span className="text-xs text-muted">ID: {p.user_public_id}</span></td>
                             <td><strong>{p.offer_title}</strong></td>
                             <td>
@@ -1776,14 +1823,14 @@ export default function AdminPortal() {
               </div>
             )}
 
-            {/* TAB 5: DATA ERASURES */}
+            {/* TAB 5: DELETION REQUESTS (deletion_requests.php) */}
             {activeTab === 'erasures' && (
               <div className="card card-white shadow-none border rounded-lg">
                 <div className="card-header border-0 bg-transparent">
-                  <h3 className="card-title font-weight-bold"><i className="fas fa-exclamation-triangle text-danger mr-2"></i> gdpr deletion requests</h3>
+                  <h3 className="card-title font-weight-bold">gdpr deletion requests</h3>
                 </div>
                 <div className="card-body table-responsive p-0">
-                  <table className="table table-hover text-nowrap align-middle">
+                  <table className="table table-hover align-middle mb-0">
                     <thead>
                       <tr className="text-xs text-muted uppercase">
                         <th>Email</th>
@@ -1795,7 +1842,7 @@ export default function AdminPortal() {
                     </thead>
                     <tbody>
                       {erasuresList.map(e => (
-                        <tr key={e.id}>
+                        <tr key={e.id} className="text-sm">
                           <td><strong>{e.email}</strong></td>
                           <td style={{ whiteSpace: 'normal', maxWidth: '300px' }}>{e.reason || 'None provided.'}</td>
                           <td className="text-sm">{new Date(e.created_at).toLocaleString()}</td>
@@ -1812,7 +1859,7 @@ export default function AdminPortal() {
                       ))}
                       {erasuresList.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="text-center text-muted p-4">No deletion logs.</td>
+                          <td colSpan={5} className="text-center text-muted p-4">No deletion logs found.</td>
                         </tr>
                       )}
                     </tbody>
@@ -1821,7 +1868,7 @@ export default function AdminPortal() {
               </div>
             )}
 
-            {/* TAB 6: BROADCAST CENTER */}
+            {/* TAB 6: PUSH NOTIFICATIONS */}
             {activeTab === 'push' && (
               <div className="card card-white shadow-none border rounded-lg">
                 <div className="card-body">
@@ -1830,7 +1877,7 @@ export default function AdminPortal() {
               </div>
             )}
 
-            {/* TAB 7: APP CONFIGS */}
+            {/* TAB 7: SYSTEM CONFIG */}
             {activeTab === 'configs' && (
               <div className="card card-white shadow-none border rounded-lg">
                 <div className="card-body">
@@ -1839,7 +1886,7 @@ export default function AdminPortal() {
               </div>
             )}
 
-            {/* TAB 8: BANNERS MANAGER */}
+            {/* TAB 8: APP BANNERS */}
             {activeTab === 'banners' && (
               <div className="card card-white shadow-none border rounded-lg">
                 <div className="card-body">
@@ -1857,7 +1904,7 @@ export default function AdminPortal() {
               </div>
             )}
 
-            {/* TAB 10: REFERRAL SETTINGS */}
+            {/* TAB 10: REFERRAL CONFIG */}
             {activeTab === 'referrals' && (
               <div className="card card-white shadow-none border rounded-lg">
                 <div className="card-body">
@@ -1866,7 +1913,7 @@ export default function AdminPortal() {
               </div>
             )}
 
-            {/* TAB 11: SURPRISE ENVELOPES */}
+            {/* TAB 11: LIFAFA (REDEEM) */}
             {activeTab === 'lifafas' && (
               <div className="card card-white shadow-none border rounded-lg">
                 <div className="card-body">
@@ -1884,7 +1931,7 @@ export default function AdminPortal() {
               </div>
             )}
 
-            {/* TAB 13: FINANCIAL REPORTS */}
+            {/* TAB 13: BUSINESS STATS */}
             {activeTab === 'reports' && (
               <div className="card card-white shadow-none border rounded-lg">
                 <div className="card-body">
@@ -1902,9 +1949,105 @@ export default function AdminPortal() {
         <strong>Copyright &copy; 2026 StuEarn Admin.</strong> All rights reserved.
       </footer>
 
+      {/* User Detail Statistics Modal (Matching users.php Modal style exactly) */}
+      {selectedUser && (
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10000 }} role="dialog">
+          <div className="modal-dialog modal-dialog-centered modal-lg" role="document">
+            <div className="modal-content rounded-lg border-0 shadow" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+              <div className="modal-header border-bottom-0 pb-0">
+                <h5 className="modal-title font-weight-bold">Detailed User Statistics</h5>
+                <button type="button" className="close" onClick={() => setSelectedUser(null)}>&times;</button>
+              </div>
+              <div className="modal-body pt-4">
+                <div className="row">
+                  {/* Left info box */}
+                  <div className="col-md-4 text-center mb-4">
+                    <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(selectedUser.name || 'Admin')}&background=007bff&color=fff&size=128`} className="img-circle elevation-2 shadow mb-3" style={{ width: '120px', height: '120px', objectFit: 'cover' }} />
+                    <h4 className="font-weight-black">{selectedUser.name || 'Anonymous'}</h4>
+                    <p className="text-muted text-sm badge badge-light border">{selectedUser.email}</p>
+                    
+                    <div className="mt-4 d-flex flex-column gap-2">
+                      <button className="btn btn-outline-primary btn-sm rounded-pill font-weight-bold py-2" onClick={() => triggerEditUser(selectedUser)}>
+                        <i className="fas fa-edit mr-1"></i> Edit Profile Details
+                      </button>
+                      <button className="btn btn-outline-danger btn-sm rounded-pill font-weight-bold py-2" onClick={() => handleDeleteUser(selectedUser.id)}>
+                        <i className="fas fa-trash mr-1"></i> Delete User Row
+                      </button>
+                      {selectedUser.is_banned ? (
+                        <button className="btn btn-success btn-sm rounded-pill font-weight-bold py-2" onClick={() => handleUnbanUser(selectedUser.id)}>
+                          <i className="fas fa-check-circle mr-1"></i> Unban Member
+                        </button>
+                      ) : (
+                        <button className="btn btn-danger btn-sm rounded-pill font-weight-bold py-2" onClick={() => handleBanUser(selectedUser.id)}>
+                          <i className="fas fa-ban mr-1"></i> Ban Member Row
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Right stats */}
+                  <div className="col-md-8">
+                    <div className="row bg-light rounded p-3 border mb-3">
+                      <div className="col-6 mb-2">
+                        <label className="text-muted text-xs uppercase mb-1">Available Balance</label>
+                        <h4 className="text-success font-weight-black">₹{parseFloat(selectedUser.balance || 0).toLocaleString()}</h4>
+                      </div>
+                      <div className="col-6 mb-2">
+                        <label className="text-muted text-xs uppercase mb-1">Phone Number</label>
+                        <h5 className="text-dark font-weight-bold">{selectedUser.phone_number || 'N/A'}</h5>
+                      </div>
+                      <div className="col-6 mb-2">
+                        <label className="text-muted text-xs uppercase mb-1">Location</label>
+                        <h6 className="text-dark font-weight-bold">{selectedUser.location || 'N/A'}</h6>
+                      </div>
+                      <div className="col-6 mb-2">
+                        <label className="text-muted text-xs uppercase mb-1">Referral Code</label>
+                        <code className="text-indigo font-weight-bold">{selectedUser.referral_code || 'None'}</code>
+                      </div>
+                    </div>
+
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <h6 className="font-weight-bold mb-0"><i className="fas fa-sliders-h text-primary mr-1"></i> Adjust User Balance</h6>
+                      <button className="btn btn-xs btn-primary px-3 rounded-pill" onClick={() => setAdjustBalanceModal(true)}>Trigger adjustment</button>
+                    </div>
+
+                    <h6 className="font-weight-bold mb-3"><i className="fas fa-microchip mr-2 text-warning"></i> Device Metadata</h6>
+                    <div className="p-3 bg-light rounded-lg border mb-4">
+                      <span className="text-xs text-muted font-weight-bold">Android Device Identifier:</span><br />
+                      <code className="text-xs text-danger text-break">{selectedUser.android_id || 'REDACTED'}</code>
+                    </div>
+
+                    <h6 className="font-weight-bold mb-3"><i className="fas fa-history mr-2 text-primary"></i> Ledger History</h6>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto' }} className="pr-1">
+                      {userTransactions.map(t => (
+                        <div key={t.id} className="p-2 border rounded mb-2 bg-light d-flex justify-content-between align-items-center text-sm">
+                          <div>
+                            <p className="font-weight-bold mb-0 text-dark">{t.description || t.source}</p>
+                            <span className="text-xs text-muted">{new Date(t.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <strong className={t.type === 'CREDIT' ? "text-success" : "text-danger"}>
+                            {t.type === 'CREDIT' ? '+' : '-'}{parseFloat(t.amount).toFixed(2)}
+                          </strong>
+                        </div>
+                      ))}
+                      {userTransactions.length === 0 && (
+                        <p className="text-muted text-xs text-center p-3">No ledger records.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer border-0">
+                <button type="button" className="btn btn-secondary btn-sm px-4 rounded-pill" onClick={() => setSelectedUser(null)}>Close Window</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Adjust User Balance Modal */}
       {adjustBalanceModal && selectedUser && (
-        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10000 }} role="dialog">
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10001 }} role="dialog">
           <div className="modal-dialog modal-dialog-centered" role="document">
             <div className="modal-content rounded-lg border-0 shadow">
               <div className="modal-header border-bottom-0">
@@ -1943,7 +2086,7 @@ export default function AdminPortal() {
 
       {/* Edit User Info Modal */}
       {editUserModal && selectedUser && (
-        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10000 }} role="dialog">
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10001 }} role="dialog">
           <div className="modal-dialog modal-dialog-centered modal-lg" role="document">
             <div className="modal-content rounded-lg border-0 shadow" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
               <div className="modal-header border-bottom-0">
@@ -1977,18 +2120,6 @@ export default function AdminPortal() {
                       <label className="text-muted text-xs font-weight-bold mb-1">Balance</label>
                       <input type="number" className="form-control" step="0.01" value={editUserForm.balance} onChange={e => setEditUserForm({ ...editUserForm, balance: e.target.value })} required />
                     </div>
-                    <div className="col-md-6 form-group mb-3">
-                      <label className="text-muted text-xs font-weight-bold mb-1">User ID</label>
-                      <input type="text" className="form-control" value={editUserForm.user_id} onChange={e => setEditUserForm({ ...editUserForm, user_id: e.target.value })} required />
-                    </div>
-                    <div className="col-md-6 form-group mb-3">
-                      <label className="text-muted text-xs font-weight-bold mb-1">Firebase UID</label>
-                      <input type="text" className="form-control" value={editUserForm.uid} onChange={e => setEditUserForm({ ...editUserForm, uid: e.target.value })} required />
-                    </div>
-                    <div className="col-md-12 form-group mb-3">
-                      <label className="text-muted text-xs font-weight-bold mb-1">Android Device Identifier</label>
-                      <input type="text" className="form-control" value={editUserForm.android_id} onChange={e => setEditUserForm({ ...editUserForm, android_id: e.target.value })} />
-                    </div>
                   </div>
                   <div className="d-flex mt-4 gap-2 pb-3">
                     <button type="submit" className="btn btn-primary flex-fill rounded-pill py-2">Save Changes</button>
@@ -2003,7 +2134,7 @@ export default function AdminPortal() {
 
       {/* Reject Withdrawal Modal */}
       {rejectModal && selectedWithdrawal && (
-        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10000 }} role="dialog">
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10001 }} role="dialog">
           <div className="modal-dialog modal-dialog-centered" role="document">
             <div className="modal-content rounded-lg border-0 shadow">
               <div className="modal-header border-bottom-0">
@@ -2029,7 +2160,7 @@ export default function AdminPortal() {
 
       {/* Reject Proof Modal */}
       {rejectProofModal && rejectProofClickId && (
-        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10000 }} role="dialog">
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10001 }} role="dialog">
           <div className="modal-dialog modal-dialog-centered" role="document">
             <div className="modal-content rounded-lg border-0 shadow">
               <div className="modal-header border-bottom-0">

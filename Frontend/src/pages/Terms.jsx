@@ -45,11 +45,11 @@ export default function Terms() {
 
       {/* Content */}
       <main style={{ flex: 1, padding: '60px 0 100px' }}>
-        <div className="container" style={{ maxWidth: '800px' }}>
+        <div className="container" style={{ maxWidth: '850px' }}>
           <div className="glass-panel" style={{ padding: '40px 30px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '24px' }}>
               <div style={{ 
-                background: 'rgba(168, 85, 247, 0.1)', 
+                background: 'rgba(99, 102, 241, 0.1)', 
                 color: 'var(--primary)', 
                 width: '50px', 
                 height: '50px', 
@@ -62,51 +62,115 @@ export default function Terms() {
               </div>
               <div>
                 <h1 style={{ fontSize: '1.8rem', margin: 0 }}>Terms & Conditions</h1>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>Last Updated: May 2026</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>Effective date: November 1, 2025</p>
               </div>
             </div>
 
-            <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.7, display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.75, display: 'flex', flexDirection: 'column', gap: '24px' }}>
               
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>1. Agreement to Terms</h3>
                 <p style={{ color: 'var(--text-secondary)' }}>
-                  By accessing or using the StuEarn India mobile application and web frontend, you agree to be bound by these Terms and Conditions. If you do not agree, you must immediately terminate usage of our software.
+                  By downloading or using the StuEarn India app, these terms will automatically apply to you. Please read them carefully before using the app. You are not permitted to copy or modify the app, any part of the app, or our trademarks in any way. You may not attempt to extract the source code of the app, translate it, or create derivative versions. The app and all associated intellectual property rights belong to <strong>StuEarn India</strong>.
+                </p>
+                <p style={{ color: 'var(--text-secondary)', marginTop: '12px' }}>
+                  StuEarn India is committed to making the app as useful and efficient as possible. We reserve the right to modify the app or charge for certain features or services at any time. We will never charge for the app or its core services without clearly explaining the cost to you beforehand.
+                </p>
+                <p style={{ color: 'var(--text-secondary)', marginTop: '12px' }}>
+                  The StuEarn app stores and processes personal data that you provide to us for the purpose of delivering the Service. You are responsible for keeping your device secure. We strongly advise against rooting or jailbreaking your device, as this removes essential security protections and may cause the StuEarn app to malfunction or stop working entirely.
                 </p>
               </section>
 
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>2. Account Registration</h3>
-                <p style={{ color: 'var(--text-secondary)' }}>
-                  You must register an account using verified authentication methods (Google Sign-In). You are responsible for ensuring the confidentiality of your credentials. Creating multiple accounts or utilizing scripts to bypass security, create synthetic referrals, or spoof location will result in an immediate account ban and forfeiture of all accumulated coins.
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Account Suspension & Fraud Policy</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  To ensure fair usage, we strictly prohibit fraudulent activities. Your account may be suspended or permanently banned without notice for:
+                </p>
+                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <li>Using multiple accounts on a single device.</li>
+                  <li>Using VPNs, proxies, or emulators to complete offers.</li>
+                  <li>Creating fake referrals or using automated scripts.</li>
+                  <li>Submitting fake proofs for tasks (e.g., uploading unrelated screenshots).</li>
+                </ul>
+                <p style={{ color: 'var(--text-secondary)', marginTop: '12px' }}>
+                  We reserve the right to forfeit any earnings obtained through such fraudulent methods.
                 </p>
               </section>
 
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>3. Reward System & Verification</h3>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Third-Party Services</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  The app uses third-party services that have their own Terms & Conditions. These include, but are not limited to:
+                </p>
+                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <li><a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Google Play Services</a></li>
+                  <li><a href="https://firebase.google.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Google Analytics for Firebase</a></li>
+                  <li><a href="https://firebase.google.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Firebase Crashlytics</a></li>
+                  <li><a href="https://firebase.google.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Firebase Authentication</a></li>
+                  <li>Advertising partners such as:
+                    <ul style={{ paddingLeft: '18px', marginTop: '6px' }}>
+                      <li><a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Google AdMob</a></li>
+                    </ul>
+                  </li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Internet Usage & Data Charges</h3>
                 <p style={{ color: 'var(--text-secondary)' }}>
-                  Coins earned within StuEarn India have no raw cash value outside the application ecosystem. Coins are only credited after manual administrative verification of your submitted proofs. Rejections are final and determined solely by administrators based on instruction compliance.
+                  Certain features require an active internet connection. StuEarn India is not responsible if the app does not function fully due to lack of internet access or insufficient mobile data. If you use the app outside a Wi-Fi zone, you may incur charges from your mobile network provider. By using the app, you accept responsibility for such charges, including roaming data charges.
+                </p>
+                <p style={{ color: 'var(--text-secondary)', marginTop: '12px' }}>
+                  If you are not the bill payer for your device, you confirm that you have obtained permission from the bill payer before using the app.
                 </p>
               </section>
 
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>4. Payout Rules & Eligibility</h3>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Device Responsibilities</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  StuEarn India is not responsible for issues arising from your device, such as:
+                </p>
+                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <li>Battery depletion preventing the app from running</li>
+                  <li>Outdated software or unsupported Android versions</li>
+                  <li>Device hardware malfunctions</li>
+                  <li>Rooted or modified devices</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Accuracy & Liability</h3>
                 <p style={{ color: 'var(--text-secondary)' }}>
-                  Withdrawals are subject to verification controls, system liquidity, and minimum payout limits. We reserve the absolute right to delay, reject, or freeze payouts if we suspect fraudulent task submissions, location spoofing, or device emulation.
+                  We aim to keep the app accurate and updated, but we rely on third-party services and data providers. StuEarn India is not liable for any direct or indirect loss caused by relying solely on the app’s features, earnings information, or external offerwalls.
                 </p>
               </section>
 
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>5. Limitation of Liability</h3>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>App Updates & Termination</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  We may update the app periodically. System requirements may change, and you may need to install updates to continue using the app. StuEarn India does not guarantee compatibility with all Android versions.
+                </p>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  We may discontinue the app at any time without notice. Upon termination:
+                </p>
+                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <li>Your rights to use the app end</li>
+                  <li>You must stop using the app</li>
+                  <li>You may be required to uninstall the app</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Changes to These Terms & Conditions</h3>
                 <p style={{ color: 'var(--text-secondary)' }}>
-                  StuEarn India is provided on an "as-is" and "as-available" basis. We do not guarantee fixed income, uninterrupted system availability, or absolute confirmation of rewards. We shall not be liable for any direct or indirect damages arising out of your software usage.
+                  We may update these Terms & Conditions from time to time. You are encouraged to review this page periodically. We will notify users by posting updated terms on this page.
                 </p>
               </section>
 
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>6. Termination</h3>
-                <p style={{ color: 'var(--text-secondary)' }}>
-                  We reserve the right to suspend or terminate accounts that breach these terms, engage in system exploits, or attempt to manipulate ledger transactions.
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Contact Us</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 0 }}>
+                  If you have any questions or suggestions regarding these Terms & Conditions, please contact us at:<br />
+                  Email: <a href="mailto:support@app.stuearnmedia.in" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>support@app.stuearnmedia.in</a>
                 </p>
               </section>
 

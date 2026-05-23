@@ -45,7 +45,7 @@ export default function Privacy() {
 
       {/* Content */}
       <main style={{ flex: 1, padding: '60px 0 100px' }}>
-        <div className="container" style={{ maxWidth: '800px' }}>
+        <div className="container" style={{ maxWidth: '850px' }}>
           <div className="glass-panel" style={{ padding: '40px 30px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '24px' }}>
               <div style={{ 
@@ -62,55 +62,158 @@ export default function Privacy() {
               </div>
               <div>
                 <h1 style={{ fontSize: '1.8rem', margin: 0 }}>Privacy Policy</h1>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>Last Updated: May 2026</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>Effective date: November 1, 2025</p>
               </div>
             </div>
 
-            <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.7, display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.75, display: 'flex', flexDirection: 'column', gap: '24px' }}>
               
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>1. Information We Collect</h3>
-                <p style={{ color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                  We collect information to verify completed tasks, secure accounts, and authorize payouts:
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  <strong>StuEarn India</strong> built the StuEarn app as an ad-supported platform. This SERVICE is provided by StuEarn India at no cost and is intended for use "as is." This page informs visitors about our policies regarding the collection, use, and disclosure of Personal Information for anyone choosing to use our Service.
                 </p>
-                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <li><strong>Account Profile Data:</strong> Name, verified Google email address, and profile picture.</li>
-                  <li><strong>Verification Records:</strong> Uploaded proof files (screenshots, IDs) submitted explicitly by you to claim task completions.</li>
-                  <li><strong>Transaction Details:</strong> Ledger inputs tracking earnings, withdrawals, and referral bonuses.</li>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Acceptance</h3>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  By using our Service, you agree to the collection and use of information in accordance with this Privacy Policy. The Personal Information we collect is used to provide and improve the Service. We will not use or share your information except as described in this policy.
+                </p>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Information Collection and Use</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  For a better experience while using our Service, we may request certain personally identifiable information, including but not limited to:
+                </p>
+                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                  <li>Name</li>
+                  <li>Email address</li>
+                  <li>Phone number</li>
+                  <li>Google Account ID</li>
+                  <li>Device ID (including Advertising ID)</li>
+                  <li>Referral data and usage activity</li>
+                  <li><strong>Precise and/or Approximate location</strong> (for verification of region-specific offers and fraud prevention)</li>
+                  <li>User-uploaded screenshots or files for task verification</li>
+                </ul>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  The information we request may be stored on our secure servers for account creation, rewards processing, fraud prevention, and improving user experience.
+                </p>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  <strong>Referral Information:</strong> If you registered via a referral link, we may share your Username (but not your name, email, or phone number) with the person who referred you. This is strictly to allow the referrer to track their referral rewards and statistics.
+                </p>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Third-party Services</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  The app uses third-party services and SDKs that may collect information used to identify you. These services include (but are not limited to):
+                </p>
+                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Google Play Services</a></li>
+                  <li><a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Google Analytics for Firebase</a></li>
+                  <li><a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Firebase Crashlytics</a></li>
+                  <li><a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Firebase Authentication</a></li>
+                  <li><a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Google AdMob</a></li>
+                  <li>Third-party Offerwalls and Survey Providers (e.g., PubScale, CPX Research, BitLabs, Opinion Universe) – these services may independently collect your Device ID and other metrics to maximize survey/offer matching.</li>
                 </ul>
               </section>
 
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>2. How We Use Information</h3>
-                <p style={{ color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                  We process data for the following specific purposes:
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Log Data</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  When you use our Service, in the event of an error or crash we collect data (through third-party systems) called Log Data. Log Data may include:
                 </p>
-                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <li>Manually verifying task proof and processing coin credits accurately.</li>
-                  <li>Preventing sybil attacks, location emulation, and script automation.</li>
-                  <li>Sending Firebase Cloud Messages (FCM) to update you on task approval status or community announcements.</li>
-                  <li>Processing withdrawals to UPI or Giftcard accounts.</li>
+                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <li>IP address</li>
+                  <li>Device name</li>
+                  <li>Operating system version</li>
+                  <li>App configuration at time of use</li>
+                  <li>Time and date of usage</li>
+                  <li>Other diagnostic statistics</li>
                 </ul>
               </section>
 
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>3. Data Sharing and Protection</h3>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Cookies</h3>
                 <p style={{ color: 'var(--text-secondary)' }}>
-                  We do not sell, trade, or distribute your email or personal information to third-party brokers. All data is securely stored inside AppDatabase using advanced connection standards. Access is limited to authenticated administrators of StuEarn India.
+                  Cookies are small files used as anonymous unique identifiers. Our app does not explicitly use cookies, but third-party libraries or SDKs included in the app may use cookies to collect information and improve services. You can choose to accept or refuse cookies, but refusing may affect certain features of the Service.
                 </p>
               </section>
 
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>4. Data Deletion Rights</h3>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Service Providers</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  We may employ third-party companies and individuals to:
+                </p>
+                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                  <li>Facilitate our Service</li>
+                  <li>Provide the Service on our behalf</li>
+                  <li>Perform Service-related tasks</li>
+                  <li>Assist in analyzing how the Service is used</li>
+                </ul>
                 <p style={{ color: 'var(--text-secondary)' }}>
-                  In accordance with privacy rights, you have the absolute right to request the permanent erasure of your account data. You can submit an account erasure request at any time through our <Link to="/delete-account" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>Delete Account Page</Link>. Once approved by an administrator, all user records, transaction logs, and profile associations will be fully and permanently expunged from our databases.
+                  These third parties have access to Personal Information only to perform tasks on our behalf and are obligated not to disclose or use it for other purposes.
                 </p>
               </section>
 
               <section>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>5. Updates to This Policy</h3>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Use of Location & Targeting</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  We may store user location (Precise or Approximate) in our database and use it to:
+                </p>
+                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                  <li>Verify eligibility for region-specific tasks/offers</li>
+                  <li>Limit or show geo-targeted offers</li>
+                  <li>Prevent fraud based on suspicious location patterns</li>
+                </ul>
                 <p style={{ color: 'var(--text-secondary)' }}>
-                  We may periodically update this policy. We recommend users review this page regularly to keep abreast of our data handling practices.
+                  If you choose to enable location-based features, we will disclose the collection of that location data in the Data Safety section of the Google Play Store and list it under the appropriate categories.
+                </p>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Advertising, Analytics and Device IDs</h3>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  We share device identifiers (like the Advertising ID) with advertising partners and offer providers to serve relevant offers, track conversions, and measure ad performance. If you interact with offerwalls, those interactions are also subject to the privacy policies of the respective offerwall providers.
+                </p>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Data Deletion</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  We respect your right to control your data. You may request the deletion of your account and all associated personal information at any time.
+                </p>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  To request data deletion:
+                </p>
+                <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                  <li>Contact us via email at <a href="mailto:support@app.stuearnmedia.in" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>support@app.stuearnmedia.in</a> with the subject line "Account Deletion Request".</li>
+                </ul>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  We will verify your identity and permanently delete your account and data within 30 days of receiving a verified request, except where we are required to retain data for legal or fraud prevention purposes.
+                </p>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Children's Privacy</h3>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  Our Services are not directed to children under the age of 13. We do not knowingly collect personally identifiable information from children under 13. If we discover that a child under 13 has provided us with personal information, we will delete it immediately. If you are a parent or guardian and believe your child has shared personal information with us, please contact us so we can take appropriate action.
+                </p>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Changes to This Privacy Policy</h3>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  We may update this Privacy Policy occasionally. You are advised to review this page periodically for changes. We will notify you of material changes by posting the revised Privacy Policy on this page.
+                </p>
+              </section>
+
+              <section>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Contact Us</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 0 }}>
+                  If you have any questions or suggestions about our Privacy Policy, please contact us at:<br />
+                  Email: <a href="mailto:support@app.stuearnmedia.in" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>support@app.stuearnmedia.in</a>
                 </p>
               </section>
 

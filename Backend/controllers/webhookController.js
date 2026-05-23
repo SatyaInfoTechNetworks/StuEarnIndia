@@ -17,16 +17,20 @@ function safeCompare(a, b) {
   }
 }
 
-// Helper: Resolve User by uid, falling back to ID if not found
+// Helper: Resolve User by uid, falling back to ID or custom user_id if not found
 async function resolveUser(connection, userIdParam) {
   if (!userIdParam) return null;
   // Try by UID first
   const [rowsByUid] = await connection.query('SELECT * FROM users WHERE uid = ? LIMIT 1', [userIdParam]);
   if (rowsByUid.length > 0) return rowsByUid[0];
 
-  // Try by ID
+  // Try by ID (UUID)
   const [rowsById] = await connection.query('SELECT * FROM users WHERE id = ? LIMIT 1', [userIdParam]);
   if (rowsById.length > 0) return rowsById[0];
+
+  // Try by custom 10-char hex public user_id
+  const [rowsByHexId] = await connection.query('SELECT * FROM users WHERE user_id = ? LIMIT 1', [userIdParam]);
+  if (rowsByHexId.length > 0) return rowsByHexId[0];
 
   return null;
 }

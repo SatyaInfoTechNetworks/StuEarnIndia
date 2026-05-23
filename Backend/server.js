@@ -67,6 +67,7 @@ import {
   listUsers,
   getUserTransactionsAdmin,
   updateUserBalance,
+  updateUser,
   banUser,
   unbanUser,
   createOffer,
@@ -115,13 +116,21 @@ const port = process.env.PORT || 5000;
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
+  'https://stuearnindia.satyainfotechnetworks.com',
+  'https://stuearn-api.satyainfotechnetworks.com',
   process.env.FRONTEND_URL,
   process.env.ADMIN_URL
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (
+      !origin || 
+      allowedOrigins.includes(origin) || 
+      origin.endsWith('satyainfotechnetworks.com') ||
+      origin.startsWith('http://localhost') ||
+      origin.startsWith('http://127.0.0.1')
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -261,6 +270,7 @@ app.get('/api/admin/reports', authenticateAdmin, getAdminReports);
 app.get('/api/admin/users', authenticateAdmin, listUsers);
 app.get('/api/admin/users/:id/transactions', authenticateAdmin, getUserTransactionsAdmin);
 app.post('/api/admin/users/:id/balance', authenticateAdmin, updateUserBalance);
+app.put('/api/admin/users/:id', authenticateAdmin, updateUser);
 app.post('/api/admin/users/:id/ban', authenticateAdmin, banUser);
 app.post('/api/admin/users/:id/unban', authenticateAdmin, unbanUser);
 

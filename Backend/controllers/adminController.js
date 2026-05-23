@@ -187,6 +187,99 @@ export const updateUserBalance = async (req, res) => {
   } finally { connection.release(); }
 };
 
+export const updateUser = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const userId = req.params.id;
+    const { name, email, phone_number, location, referral_code, balance } = req.body;
+
+    await connection.beginTransaction();
+
+    // Fetch existing user info
+    const [userRows] = await connection.query('SELECT * FROM users WHERE id = ? FOR UPDATE', [userId]);
+    if (userRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const user = userRows[0];
+
+    // Check if new email is already taken by another user
+    if (email && email !== user.email) {
+      const [emailRows] = await connection.query('SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1', [email, userId]);
+      if (emailRows.length > 0) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: 'Email already taken by another user' });
+      }
+    }
+
+    // Check if new referral_code is already taken
+    if (referral_code && referral_code !== user.referral_code) {
+      const [refRows] = await connection.query('SELECT id FROM users WHERE referral_code = ? AND id != ? LIMIT 1', [referral_code, userId]);
+      if (refRows.length > 0) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: 'Referral code already taken' });
+      }
+    }
+
+    // Calculate balance difference if balance is edited
+    if (balance !== undefined && parseFloat(balance) !== parseFloat(user.balance)) {
+      const oldBalance = parseFloat(user.balance);
+      const newBalance = parseFloat(balance);
+      const diff = newBalance - oldBalance;
+      const transType = diff > 0 ? 'CREDIT' : 'DEBIT';
+      const absDiff = Math.abs(diff);
+
+      await recordLedgerTransaction(connection, {
+        userId,
+        amount: absDiff,
+        type: transType,
+        source: 'MANUAL_ADJUSTMENT',
+        description: `Admin updated balance from ${oldBalance} to ${newBalance}`
+      });
+    }
+
+    // Update user row
+    await connection.query(
+      `UPDATE users SET 
+        name = ?, 
+        email = ?, 
+        phone_number = ?, 
+        location = ?, 
+        referral_code = ?, 
+        balance = ? 
+       WHERE id = ?`,
+      [
+        name !== undefined ? name : user.name,
+        email !== undefined ? email : user.email,
+        phone_number !== undefined ? phone_number : user.phone_number,
+        location !== undefined ? location : user.location,
+        referral_code !== undefined ? referral_code : user.referral_code,
+        balance !== undefined ? parseFloat(balance) : user.balance,
+        userId
+      ]
+    );
+
+    // Audit Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'UPDATE_USER_INFO',
+      targetId: userId,
+      payload: { name, email, phone_number, location, referral_code, balance },
+      req
+    });
+
+    await connection.commit();
+    res.json({ success: true, message: 'User updated successfully' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Admin Update User Error:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  } finally {
+    connection.release();
+  }
+};
+
 export const banUser = async (req, res) => {
   const connection = await pool.getConnection();
   try {

@@ -81,6 +81,16 @@ export default function AdminPortal() {
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustType, setAdjustType] = useState('CREDIT');
   const [adjustDesc, setAdjustDesc] = useState('');
+  
+  const [editUserModal, setEditUserModal] = useState(false);
+  const [editUserForm, setEditUserForm] = useState({
+    name: '',
+    email: '',
+    phone_number: '',
+    location: '',
+    referral_code: '',
+    balance: ''
+  });
 
   // Offer manager states
   const [offersList, setOffersList] = useState([]);
@@ -389,6 +399,43 @@ export default function AdminPortal() {
       }
     } catch (err) {
       showNotice('error', 'Failed to adjust balance');
+    }
+  };
+
+  const triggerEditUser = (user) => {
+    setEditUserForm({
+      name: user.name || '',
+      email: user.email || '',
+      phone_number: user.phone_number || '',
+      location: user.location || '',
+      referral_code: user.referral_code || '',
+      balance: user.balance || 0
+    });
+    setEditUserModal(true);
+  };
+
+  const handleEditUserSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(editUserForm)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotice('success', 'User information updated successfully');
+        setEditUserModal(false);
+        const updatedUser = { ...selectedUser, ...editUserForm, balance: parseFloat(editUserForm.balance) };
+        setSelectedUser(updatedUser);
+        fetchUsers();
+        fetchDashboardData();
+      } else {
+        showNotice('error', data.message);
+      }
+    } catch (err) {
+      showNotice('error', 'Failed to update user info');
     }
   };
 
@@ -1222,6 +1269,33 @@ export default function AdminPortal() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {usersPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Page <strong>{usersPage}</strong> of <strong>{usersPages}</strong> ({usersTotal} users)
+                    </span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        className="btn btn-secondary" 
+                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                        disabled={usersPage === 1}
+                        onClick={() => setUsersPage(prev => Math.max(prev - 1, 1))}
+                      >
+                        Previous
+                      </button>
+                      <button 
+                        className="btn btn-secondary" 
+                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                        disabled={usersPage === usersPages}
+                        onClick={() => setUsersPage(prev => Math.min(prev + 1, usersPages))}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Selected User Ledger Inspect Panel */}
@@ -1229,7 +1303,7 @@ export default function AdminPortal() {
                 <div className="glass-panel" style={{ padding: '30px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '16px' }}>
                     <div>
-                      <h3 style={{ fontSize: '1.2rem' }}>{selectedUser.name}</h3>
+                      <h3 style={{ fontSize: '1.2rem' }}>{selectedUser.name || 'Anonymous'}</h3>
                       <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{selectedUser.email}</p>
                     </div>
                     <button className="btn btn-secondary" style={{ padding: '6px' }} onClick={() => setSelectedUser(null)}>
@@ -1242,9 +1316,73 @@ export default function AdminPortal() {
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Balance</span>
                       <h4 style={{ fontSize: '1.6rem', color: 'var(--accent)' }}>{parseFloat(selectedUser.balance || 0).toFixed(2)} coins</h4>
                     </div>
-                    <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setAdjustBalanceModal(true)}>
-                      Adjust
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setAdjustBalanceModal(true)}>
+                        Adjust
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Full User Profile Information Section */}
+                  <div style={{ 
+                    background: 'rgba(255,255,255,0.02)', 
+                    border: '1px solid rgba(255,255,255,0.04)', 
+                    borderRadius: '12px', 
+                    padding: '16px', 
+                    marginBottom: '24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>User Profile Details</span>
+                      <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={() => triggerEditUser(selectedUser)}>
+                        <Edit3 size={12} /> Edit Details
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.8rem', marginTop: '4px' }}>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>User ID</span>
+                        <strong style={{ color: '#fff' }}>{selectedUser.user_id || 'N/A'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Referral Code</span>
+                        <code style={{ color: 'var(--accent)' }}>{selectedUser.referral_code || 'None'}</code>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Phone Number</span>
+                        <strong style={{ color: '#fff' }}>{selectedUser.phone_number || 'Not Provided'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Location</span>
+                        <strong style={{ color: '#fff' }}>{selectedUser.location || 'Not Provided'}</strong>
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Firebase UID</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', wordBreak: 'break-all' }}>{selectedUser.uid}</span>
+                      </div>
+                      <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                        <div>
+                          <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Account Status</span>
+                          <strong style={{ color: selectedUser.is_banned ? 'var(--danger)' : 'var(--success)' }}>
+                            {selectedUser.is_banned ? '🚫 BANNED' : '✅ Active'}
+                          </strong>
+                          {selectedUser.is_banned && selectedUser.ban_reason && (
+                            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>Reason: {selectedUser.ban_reason}</span>
+                          )}
+                        </div>
+                        {selectedUser.is_banned ? (
+                          <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', border: '1px solid rgba(16, 185, 129, 0.2)' }} onClick={() => handleUnbanUser(selectedUser.id)}>
+                            Unban
+                          </button>
+                        ) : (
+                          <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={() => handleBanUser(selectedUser.id)}>
+                            <Ban size={12} /> Ban User
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <h5 style={{ fontSize: '0.9rem', marginBottom: '12px' }}>Transaction History</h5>
@@ -2009,6 +2147,89 @@ export default function AdminPortal() {
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '10px' }}>Execute</button>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '10px' }} onClick={() => setAdjustBalanceModal(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Info Modal */}
+      {editUserModal && selectedUser && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="glass-panel" style={{ maxWidth: '480px', width: '100%', padding: '30px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Edit Profile Details</span>
+              <button className="btn btn-secondary" style={{ padding: '4px' }} onClick={() => setEditUserModal(false)}><X size={16} /></button>
+            </h3>
+            
+            <form onSubmit={handleEditUserSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Full Name</label>
+                <input 
+                  type="text" 
+                  className="glass-input" 
+                  value={editUserForm.name}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Email Address</label>
+                <input 
+                  type="email" 
+                  className="glass-input" 
+                  value={editUserForm.email}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, email: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Phone Number</label>
+                <input 
+                  type="text" 
+                  className="glass-input" 
+                  value={editUserForm.phone_number}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, phone_number: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Location / Country</label>
+                <input 
+                  type="text" 
+                  className="glass-input" 
+                  value={editUserForm.location}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, location: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Referral Code</label>
+                <input 
+                  type="text" 
+                  className="glass-input" 
+                  value={editUserForm.referral_code}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, referral_code: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Wallet Balance (Coins)</label>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  className="glass-input" 
+                  value={editUserForm.balance}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, balance: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '10px' }}>Save Changes</button>
+                <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '10px' }} onClick={() => setEditUserModal(false)}>Cancel</button>
               </div>
             </form>
           </div>

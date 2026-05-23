@@ -348,9 +348,9 @@ export const requestWithdrawal = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    const withdrawCoins = parseInt(amount);
-    if (isNaN(withdrawCoins) || withdrawCoins <= 0) {
-      return res.status(400).json({ success: false, message: 'Invalid withdrawal amount' });
+    const withdrawCoins = Number(amount);
+    if (isNaN(withdrawCoins) || withdrawCoins <= 0 || !Number.isInteger(withdrawCoins)) {
+      return res.status(400).json({ success: false, message: 'Invalid withdrawal amount. Only whole integers are accepted. Fractional (float or double) coin values are not allowed.' });
     }
 
     // Begin database transaction for atomic ledger operations

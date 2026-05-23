@@ -124,6 +124,22 @@ export const signupUser = async (req, res) => {
       }
     }
 
+    // Resolve referral code to referrer user UUID
+    let referrerUuid = null;
+    if (referred_by) {
+      if (referred_by.length === 36) {
+        referrerUuid = referred_by;
+      } else {
+        const [refRows] = await pool.query(
+          'SELECT id FROM users WHERE LOWER(referral_code) = LOWER(?) LIMIT 1',
+          [referred_by.trim()]
+        );
+        if (refRows.length > 0) {
+          referrerUuid = refRows[0].id;
+        }
+      }
+    }
+
     // 2. Check if UID already exists (Update logic)
     const [userRows] = await pool.query('SELECT * FROM users WHERE uid = ? LIMIT 1', [uid]);
 
@@ -141,7 +157,7 @@ export const signupUser = async (req, res) => {
           email,
           phone_number || user.phone_number,
           android_id || user.android_id,
-          referred_by || user.referred_by,
+          referrerUuid || user.referred_by,
           location || user.location,
           fcm_token || user.fcm_token,
           uid
@@ -195,7 +211,7 @@ export const signupUser = async (req, res) => {
         phone_number || null,
         profile_pic || '',
         location || '',
-        referred_by || null,
+        referrerUuid,
         fcm_token || '',
         android_id || '',
         referralCode

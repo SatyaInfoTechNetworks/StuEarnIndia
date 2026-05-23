@@ -699,6 +699,26 @@ export const handleOpinionUniverse = async (req, res) => {
 
     // Reversal case
     if (status === '2') {
+      const [origRows] = await connection.query('SELECT * FROM offer_completions WHERE completion_id = ? LIMIT 1', [transaction_id]);
+      if (origRows.length > 0) {
+        const orig = origRows[0];
+        if (orig.status !== 'REVERSED') {
+          await connection.beginTransaction();
+          await connection.query('UPDATE offer_completions SET status = "REVERSED" WHERE completion_id = ?', [transaction_id]);
+          const deduction = parseFloat(orig.payout_coins || payoutParam || 0);
+          await connection.query('UPDATE users SET balance = balance - ? WHERE id = ?', [deduction, orig.user_id]);
+          
+          const transId = uuidv4();
+          await connection.query(
+            `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at)
+             VALUES (?, ?, ?, 'DEBIT', 'OPINION_UNIVERSE_REVERSAL', ?, ?, NOW())`,
+            [transId, orig.user_id, deduction, `Chargeback: Opinion Universe (${offer_name})`, transaction_id]
+          );
+          await connection.commit();
+          
+          sendNotification(orig.user_id, "Action Required: Points Reversed ❗", `Points for Opinion Universe '${offer_name}' were reversed.`).catch(console.error);
+        }
+      }
       sendAdminTelegramAlert(`🚨 <b>Opinion Universe Reversal</b>\nUser: ${user_id}\nAmount: ${payoutParam}\nOffer: ${offer_name}`).catch(console.error);
       return res.send('1');
     }

@@ -1216,7 +1216,11 @@ export default function AdminPortal() {
                       <tbody>
                         {usersList.map(u => (
                           <tr key={u.id} className="text-sm">
-                            <td>{u.id}</td>
+                            <td>
+                              <span className="font-mono text-xs text-muted" title={u.id} style={{ cursor: 'pointer' }}>
+                                {u.id ? (u.id.length > 8 ? `${u.id.substring(0, 8)}...` : u.id) : 'N/A'}
+                              </span>
+                            </td>
                             <td>
                               <div className="d-flex align-items-center">
                                 <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || 'Admin')}&background=007bff&color=fff&size=30`} className="img-circle mr-2" style={{ width: '30px', height: '30px', objectFit: 'cover' }} />

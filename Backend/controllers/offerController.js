@@ -261,6 +261,7 @@ export const getOfferById = async (req, res) => {
     console.error('Get Offer Details Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
+};
 // Start Offer (Click logging)
 export const startOffer = async (req, res) => {
   try {

@@ -134,7 +134,7 @@ export default function Disclaimer() {
                 <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Contact Us</h3>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: 0 }}>
                   If you have questions about this Disclaimer, please contact us at:<br />
-                  Email: <a href="mailto:support@app.stuearnmedia.in" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>support@app.stuearnmedia.in</a>
+                  Email: <a href="mailto:support@satyainfotechnetworks.com" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>support@satyainfotechnetworks.com</a>
                 </p>
               </section>
 

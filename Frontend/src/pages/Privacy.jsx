@@ -188,7 +188,7 @@ export default function Privacy() {
                   To request data deletion:
                 </p>
                 <ul style={{ color: 'var(--text-secondary)', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                  <li>Contact us via email at <a href="mailto:support@app.stuearnmedia.in" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>support@app.stuearnmedia.in</a> with the subject line "Account Deletion Request".</li>
+                  <li>Contact us via email at <a href="mailto:support@satyainfotechnetworks.com" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>support@satyainfotechnetworks.com</a> with the subject line "Account Deletion Request".</li>
                 </ul>
                 <p style={{ color: 'var(--text-secondary)' }}>
                   We will verify your identity and permanently delete your account and data within 30 days of receiving a verified request, except where we are required to retain data for legal or fraud prevention purposes.
@@ -213,7 +213,7 @@ export default function Privacy() {
                 <h3 style={{ fontSize: '1.2rem', marginBottom: '10px', color: '#fff' }}>Contact Us</h3>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: 0 }}>
                   If you have any questions or suggestions about our Privacy Policy, please contact us at:<br />
-                  Email: <a href="mailto:support@app.stuearnmedia.in" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>support@app.stuearnmedia.in</a>
+                  Email: <a href="mailto:support@satyainfotechnetworks.com" style={{ color: 'var(--primary-hover)', textDecoration: 'underline' }}>support@satyainfotechnetworks.com</a>
                 </p>
               </section>
 

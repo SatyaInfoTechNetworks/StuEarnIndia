@@ -550,6 +550,7 @@ export async function initializeDatabase() {
          ON DUPLICATE KEY UPDATE method_id=VALUES(method_id), coin_cost=VALUES(coin_cost), monetary_value=VALUES(monetary_value), currency_symbol=VALUES(currency_symbol)`,
         [t.id, t.method_id, t.coin_cost, t.monetary_value, t.currency_symbol]
       );
+    }
     // 23. device_fingerprints Table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS device_fingerprints (

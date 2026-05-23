@@ -112,7 +112,8 @@ import {
   getPendingProofs,
   approveProof,
   rejectProof,
-  resetAllDailySpins
+  resetAllDailySpins,
+  deleteUser
 } from './controllers/adminController.js';
 
 // Middleware Imports
@@ -283,6 +284,7 @@ app.post('/api/admin/users/:id/balance', authenticateAdmin, updateUserBalance);
 app.put('/api/admin/users/:id', authenticateAdmin, updateUser);
 app.post('/api/admin/users/:id/ban', authenticateAdmin, banUser);
 app.post('/api/admin/users/:id/unban', authenticateAdmin, unbanUser);
+app.delete('/api/admin/users/:id', authenticateAdmin, deleteUser);
 
 // Offers Management
 app.get('/api/admin/offers', authenticateAdmin, listAdminOffers);

@@ -357,6 +357,45 @@ export const unbanUser = async (req, res) => {
   } finally { connection.release(); }
 };
 
+export const deleteUser = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const userId = req.params.id;
+    await connection.beginTransaction();
+
+    const [rows] = await connection.query('SELECT id, name FROM users WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+    if (rows.length === 0) { 
+      await connection.rollback(); 
+      return res.status(404).json({ success: false, message: 'User not found' }); 
+    }
+
+    await connection.query('DELETE FROM transactions WHERE user_id = ?', [userId]);
+    await connection.query('DELETE FROM withdrawals WHERE user_id = ?', [userId]);
+    await connection.query('DELETE FROM user_offer_progress WHERE user_id = ?', [userId]);
+    await connection.query('DELETE FROM referral_uses WHERE referrer_id = ? OR referred_user_id = ?', [userId, userId]);
+    await connection.query('DELETE FROM offer_likes WHERE user_id = ?', [userId]);
+    await connection.query('DELETE FROM tickets WHERE user_id = ?', [userId]);
+    await connection.query('DELETE FROM users WHERE id = ?', [userId]);
+
+    // Audit Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'DELETE_USER',
+      targetId: userId,
+      payload: { name: rows[0].name },
+      req
+    });
+
+    await connection.commit();
+    res.json({ success: true, message: `User ${rows[0].name} deleted successfully` });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Delete User Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  } finally { connection.release(); }
+};
+
 // ==========================================
 // OFFER MANAGEMENT
 // ==========================================

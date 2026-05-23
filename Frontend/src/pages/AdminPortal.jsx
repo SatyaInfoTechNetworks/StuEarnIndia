@@ -1,35 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Lock, 
-  BarChart3, 
-  Users as UsersIcon, 
-  Layers, 
-  TrendingUp,
-  Inbox, 
-  Bell, 
-  LogOut, 
-  Plus, 
-  Trash2, 
-  Check, 
-  X, 
-  Edit3, 
-  Search, 
-  Eye, 
-  PlusCircle, 
-  MinusCircle,
-  Coins, 
-  AlertTriangle,
-  RefreshCw,
-  Ban,
-  ShieldCheck,
-  Calendar,
-  Grid,
-  Settings,
-  CreditCard,
-  Gift,
-  Percent,
-  MessageSquare
-} from 'lucide-react';
 import { API_BASE } from '../config';
 
 // Import Admin Subcomponents
@@ -154,6 +123,49 @@ export default function AdminPortal() {
 
   // Global Loader/Notice
   const [actionNotice, setActionNotice] = useState(null);
+
+  // Dynamic Theme Load and Cleanup
+  useEffect(() => {
+    // Add AdminLTE CSS
+    const linkLte = document.createElement('link');
+    linkLte.rel = 'stylesheet';
+    linkLte.href = 'https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css';
+    linkLte.id = 'adminlte-css';
+    document.head.appendChild(linkLte);
+
+    // Add FontAwesome Icons
+    const linkFa = document.createElement('link');
+    linkFa.rel = 'stylesheet';
+    linkFa.href = 'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.2/css/all.min.css';
+    linkFa.id = 'font-awesome-css';
+    document.head.appendChild(linkFa);
+
+    // Add Source Sans Pro Font
+    const linkFont = document.createElement('link');
+    linkFont.rel = 'stylesheet';
+    linkFont.href = 'https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback';
+    linkFont.id = 'source-sans-font';
+    document.head.appendChild(linkFont);
+
+    // Set body classes for AdminLTE
+    document.body.className = 'hold-transition sidebar-mini layout-fixed';
+    document.body.style.backgroundColor = '#f4f6f9';
+    document.body.style.color = '#212529';
+    document.body.style.fontFamily = '"Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
+    return () => {
+      // Cleanup links on unmount
+      document.getElementById('adminlte-css')?.remove();
+      document.getElementById('font-awesome-css')?.remove();
+      document.getElementById('source-sans-font')?.remove();
+      
+      // Restore body classes
+      document.body.className = '';
+      document.body.style.backgroundColor = '';
+      document.body.style.color = '';
+      document.body.style.fontFamily = '';
+    };
+  }, []);
 
   // Debounce user search input
   useEffect(() => {
@@ -461,6 +473,28 @@ export default function AdminPortal() {
       }
     } catch (err) {
       showNotice('error', 'Failed to unban user');
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm("CRITICAL WARNING: This will permanently delete the user's account, balance, transactions, withdrawals, tickets, referrals, and progress. This action is irreversible. Are you sure you want to proceed?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+      if (!checkResponseStatus(res)) return;
+      const data = await res.json();
+      if (data.success) {
+        showNotice('success', 'User permanently deleted');
+        setSelectedUser(null);
+        fetchUsers();
+        fetchDashboardData();
+      } else {
+        showNotice('error', data.message);
+      }
+    } catch (err) {
+      showNotice('error', 'Failed to delete user');
     }
   };
 
@@ -900,1876 +934,1121 @@ export default function AdminPortal() {
 
   if (!isAuthenticated) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-        <div className="glass-panel" style={{ maxWidth: '420px', width: '100%', padding: '40px 30px', textAlign: 'center' }}>
-          <div style={{ 
-            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-            width: '60px', 
-            height: '60px', 
-            borderRadius: '16px', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            margin: '0 auto 24px',
-            color: '#fff'
-          }}>
-            <Lock size={28} />
+      <div className="login-page bg-light" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="login-box" style={{ width: '400px' }}>
+          <div className="card card-outline card-primary shadow-lg rounded-lg border-0">
+            <div className="card-header text-center bg-transparent border-0 pt-4">
+              <h1 className="h1 font-weight-bold mb-0">StuEarn <b>Admin</b></h1>
+              <span className="text-muted text-xs">Master Administration Console</span>
+            </div>
+            <div className="card-body">
+              <p className="login-box-msg text-secondary">Authenticate admin session credentials</p>
+
+              {loginError && (
+                <div className="alert alert-danger p-2 text-sm text-left">
+                  <i className="fas fa-ban mr-2"></i> {loginError}
+                </div>
+              )}
+
+              <form onSubmit={handleLogin}>
+                <div className="form-group">
+                  <label className="text-muted text-xs uppercase font-weight-bold mb-1">Master Password</label>
+                  <div className="input-group">
+                    <input 
+                      type="password" 
+                      className="form-control rounded-left" 
+                      placeholder="••••••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required 
+                    />
+                    <div className="input-group-append">
+                      <div className="input-group-text"><span className="fas fa-lock text-muted"></span></div>
+                    </div>
+                  </div>
+                </div>
+                <button type="submit" className="btn btn-primary btn-block rounded-pill py-2 font-weight-bold mt-4 shadow-sm">
+                  Authenticate Master Session
+                </button>
+              </form>
+            </div>
           </div>
-          
-          <h2 style={{ fontSize: '1.6rem', marginBottom: '8px' }}>Admin Control Hub</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '30px' }}>Enter password to access administrative panels</p>
-
-          {loginError && (
-            <div style={{ 
-              background: 'rgba(239, 68, 68, 0.1)', 
-              border: '1px solid rgba(239, 68, 68, 0.25)', 
-              borderRadius: '10px', 
-              padding: '12px', 
-              color: 'var(--danger)', 
-              fontSize: '0.85rem',
-              marginBottom: '20px',
-              textAlign: 'left'
-            }}>
-              {loginError}
-            </div>
-          )}
-
-          <form onSubmit={handleLogin}>
-            <div className="form-group">
-              <label className="form-label">Master Admin Password</label>
-              <input 
-                type="password" 
-                className="glass-input" 
-                placeholder="••••••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required 
-              />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: '10px' }}>
-              Authenticate
-            </button>
-          </form>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-main)' }}>
-      {/* Sidebar navigation */}
-      <aside style={{ 
-        width: '260px', 
-        borderRight: '1px solid var(--border-glass)', 
-        background: 'rgba(10, 11, 16, 0.8)', 
-        display: 'flex', 
-        flexDirection: 'column', 
-        flexShrink: 0 
-      }}>
-        <div style={{ padding: '24px', borderBottom: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ 
-            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-            width: '32px',
-            height: '32px',
-            borderRadius: '6px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 800,
-            fontSize: '1rem',
-            color: '#fff'
-          }}>S</div>
-          <span style={{ fontSize: '1.15rem', fontWeight: 800 }}>
-            StuEarn<span style={{ color: 'var(--primary)' }}>Admin</span>
-          </span>
-        </div>
+    <div className="wrapper">
+      {/* Navbar Header */}
+      <nav className="main-header navbar navbar-expand navbar-white navbar-light border-bottom-0 shadow-xs">
+        <ul className="navbar-nav">
+          <li className="nav-item">
+            <a className="nav-link" data-widget="pushmenu" href="#" role="button"><i className="fas fa-bars"></i></a>
+          </li>
+          <li className="nav-item d-none d-sm-inline-block">
+            <a href="#" onClick={() => setActiveTab('overview')} className="nav-link font-weight-bold text-dark">Dashboard Home</a>
+          </li>
+        </ul>
+        <ul className="navbar-nav ml-auto">
+          <li className="nav-item">
+            <span className="nav-link text-secondary font-weight-bold text-sm">
+              Active Database: <strong className="text-teal text-success"><i className="fas fa-database mr-1"></i>AppDatabase</strong>
+            </span>
+          </li>
+        </ul>
+      </nav>
 
-        <nav style={{ flex: 1, padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
-          <button 
-            onClick={() => setActiveTab('overview')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'overview' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'overview' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'overview' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <BarChart3 size={18} style={{ color: activeTab === 'overview' ? 'var(--primary)' : 'var(--text-muted)' }} /> Overview Stats
-          </button>
+      {/* Sidebar Navigation */}
+      <aside className="main-sidebar sidebar-dark-primary elevation-4">
+        <a href="#" onClick={() => setActiveTab('overview')} className="brand-link border-bottom-0 text-center py-3">
+          <span className="brand-text font-weight-bold text-lg text-white">StuEarn Admin</span>
+        </a>
+        <div className="sidebar">
+          <nav className="mt-3">
+            <ul className="nav nav-pills nav-sidebar flex-column nav-flat nav-child-indent" data-widget="treeview" role="menu">
+              
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('overview')} className={`nav-link ${activeTab === 'overview' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-th-large mr-2"></i>
+                  <p>Dashboard</p>
+                </a>
+              </li>
+              
+              <li className="nav-header font-weight-bold text-xs text-muted uppercase">Users & Growth</li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('users')} className={`nav-link ${activeTab === 'users' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-users mr-2"></i>
+                  <p>User Database</p>
+                </a>
+              </li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('referrals')} className={`nav-link ${activeTab === 'referrals' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-share-alt mr-2"></i>
+                  <p>Referral Config</p>
+                </a>
+              </li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('erasures')} className={`nav-link ${activeTab === 'erasures' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-user-times mr-2"></i>
+                  <p>Deletion Requests</p>
+                </a>
+              </li>
 
-          <button 
-            onClick={() => setActiveTab('users')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'users' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'users' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'users' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <UsersIcon size={18} style={{ color: activeTab === 'users' ? 'var(--primary)' : 'var(--text-muted)' }} /> User Ledgers
-          </button>
+              <li className="nav-header font-weight-bold text-xs text-muted uppercase">Promotion</li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('banners')} className={`nav-link ${activeTab === 'banners' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-image mr-2"></i>
+                  <p>App Banners</p>
+                </a>
+              </li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('push')} className={`nav-link ${activeTab === 'push' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-bell mr-2"></i>
+                  <p>Push Notifications</p>
+                </a>
+              </li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('lifafas')} className={`nav-link ${activeTab === 'lifafas' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-envelope-open-text mr-2"></i>
+                  <p>Surprise Envelopes</p>
+                </a>
+              </li>
 
-          <button 
-            onClick={() => setActiveTab('offers')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'offers' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'offers' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'offers' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <Layers size={18} style={{ color: activeTab === 'offers' ? 'var(--primary)' : 'var(--text-muted)' }} /> Offer Builder
-          </button>
+              <li className="nav-header font-weight-bold text-xs text-muted uppercase">Inventory</li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('offers')} className={`nav-link ${activeTab === 'offers' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-tasks mr-2"></i>
+                  <p>Manage Offers</p>
+                </a>
+              </li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('visit-earn')} className={`nav-link ${activeTab === 'visit-earn' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-coins mr-2"></i>
+                  <p>Visit & Earn</p>
+                </a>
+              </li>
 
-          <button 
-            onClick={() => setActiveTab('visit-earn')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'visit-earn' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'visit-earn' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'visit-earn' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <Coins size={18} style={{ color: activeTab === 'visit-earn' ? 'var(--primary)' : 'var(--text-muted)' }} /> Visit & Earn
-          </button>
+              <li className="nav-header font-weight-bold text-xs text-muted uppercase">Financials</li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('withdrawals')} className={`nav-link ${activeTab === 'withdrawals' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-money-bill-wave mr-2"></i>
+                  <p>Withdrawal Queue</p>
+                  {stats.pending_withdrawals > 0 && (
+                    <span className="badge badge-warning float-right px-2">{stats.pending_withdrawals}</span>
+                  )}
+                </a>
+              </li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('payouts')} className={`nav-link ${activeTab === 'payouts' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-university mr-2"></i>
+                  <p>Payout Methods</p>
+                </a>
+              </li>
 
-          <button 
-            onClick={() => setActiveTab('withdrawals')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'withdrawals' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'withdrawals' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'withdrawals' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <Inbox size={18} style={{ color: activeTab === 'withdrawals' ? 'var(--primary)' : 'var(--text-muted)' }} /> Payout Approvals
-            {stats.pending_withdrawals > 0 && (
-              <span style={{ marginLeft: 'auto', background: 'var(--warning)', color: '#000', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '99px', fontWeight: 700 }}>
-                {stats.pending_withdrawals}
-              </span>
-            )}
-          </button>
+              <li className="nav-header font-weight-bold text-xs text-muted uppercase">Audit & Compliance</li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('reports')} className={`nav-link ${activeTab === 'reports' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-chart-line mr-2"></i>
+                  <p>Business Stats</p>
+                </a>
+              </li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('proofs')} className={`nav-link ${activeTab === 'proofs' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-images mr-2"></i>
+                  <p>Proof Gallery</p>
+                  {stats.pending_proofs > 0 && (
+                    <span className="badge badge-primary float-right px-2">{stats.pending_proofs}</span>
+                  )}
+                </a>
+              </li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('tickets')} className={`nav-link ${activeTab === 'tickets' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-comments mr-2"></i>
+                  <p>Support Tickets</p>
+                  {stats.open_tickets > 0 && (
+                    <span className="badge badge-info float-right px-2">{stats.open_tickets}</span>
+                  )}
+                </a>
+              </li>
 
-          <button 
-            onClick={() => setActiveTab('proofs')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'proofs' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'proofs' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'proofs' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <ShieldCheck size={18} style={{ color: activeTab === 'proofs' ? 'var(--primary)' : 'var(--text-muted)' }} /> Offline Submissions
-            {stats.pending_proofs > 0 && (
-              <span style={{ marginLeft: 'auto', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '99px', fontWeight: 700 }}>
-                {stats.pending_proofs}
-              </span>
-            )}
-          </button>
+              <li className="nav-header font-weight-bold text-xs text-muted uppercase">Infrastructure</li>
+              <li className="nav-item">
+                <a href="#" onClick={() => setActiveTab('configs')} className={`nav-link ${activeTab === 'configs' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-tools mr-2"></i>
+                  <p>System Config</p>
+                </a>
+              </li>
 
-          <button 
-            onClick={() => setActiveTab('payouts')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'payouts' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'payouts' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'payouts' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <CreditCard size={18} style={{ color: activeTab === 'payouts' ? 'var(--primary)' : 'var(--text-muted)' }} /> Payout Methods
-          </button>
+              <li className="nav-header font-weight-bold text-xs text-muted uppercase">Session</li>
+              <li className="nav-item">
+                <a href="#" onClick={handleLogout} className="nav-link">
+                  <i className="nav-icon fas fa-power-off text-danger mr-2"></i>
+                  <p>Sign Out</p>
+                </a>
+              </li>
 
-          <button 
-            onClick={() => setActiveTab('configs')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'configs' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'configs' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'configs' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <Settings size={18} style={{ color: activeTab === 'configs' ? 'var(--primary)' : 'var(--text-muted)' }} /> App Configs
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('banners')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'banners' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'banners' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'banners' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <Grid size={18} style={{ color: activeTab === 'banners' ? 'var(--primary)' : 'var(--text-muted)' }} /> Banners Manager
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('referrals')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'referrals' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'referrals' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'referrals' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <Percent size={18} style={{ color: activeTab === 'referrals' ? 'var(--primary)' : 'var(--text-muted)' }} /> Referral Settings
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('lifafas')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'lifafas' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'lifafas' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'lifafas' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <Gift size={18} style={{ color: activeTab === 'lifafas' ? 'var(--primary)' : 'var(--text-muted)' }} /> Surprise Envelopes
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('tickets')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'tickets' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'tickets' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'tickets' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <MessageSquare size={18} style={{ color: activeTab === 'tickets' ? 'var(--primary)' : 'var(--text-muted)' }} /> Support Tickets
-            {stats.open_tickets > 0 && (
-              <span style={{ marginLeft: 'auto', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '99px', fontWeight: 700 }}>
-                {stats.open_tickets}
-              </span>
-            )}
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('push')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'push' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'push' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'push' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <Bell size={18} style={{ color: activeTab === 'push' ? 'var(--primary)' : 'var(--text-muted)' }} /> Broadcast Center
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('reports')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'reports' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'reports' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'reports' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <TrendingUp size={18} style={{ color: activeTab === 'reports' ? 'var(--primary)' : 'var(--text-muted)' }} /> Financial Reports
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('erasures')}
-            className="btn" 
-            style={{ 
-              justifyContent: 'flex-start',
-              background: activeTab === 'erasures' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === 'erasures' ? '#fff' : 'var(--text-secondary)',
-              border: activeTab === 'erasures' ? '1px solid var(--border-glass)' : 'none',
-              padding: '12px 16px',
-              textAlign: 'left'
-            }}
-          >
-            <Trash2 size={18} style={{ color: activeTab === 'erasures' ? 'var(--danger)' : 'var(--text-muted)' }} /> Data Erasures
-            {stats.pending_erasures > 0 && (
-              <span style={{ marginLeft: 'auto', background: 'var(--danger)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '99px', fontWeight: 700 }}>
-                {stats.pending_erasures}
-              </span>
-            )}
-          </button>
-        </nav>
-
-        <div style={{ padding: '20px 12px', borderTop: '1px solid var(--border-glass)' }}>
-          <button onClick={handleLogout} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center' }}>
-            <LogOut size={16} /> Logout
-          </button>
+            </ul>
+          </nav>
         </div>
       </aside>
 
-      {/* Main panel container */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto' }}>
-        {/* Hub Header */}
-        <header style={{ 
-          height: '70px', 
-          borderBottom: '1px solid var(--border-glass)', 
-          background: 'rgba(10, 11, 16, 0.4)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between', 
-          padding: '0 40px',
-          flexShrink: 0
-        }}>
-          <div>
-            <h2 style={{ fontSize: '1.25rem', margin: 0, textTransform: 'capitalize' }}>
-              {activeTab} Management
-            </h2>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Active Database: <strong style={{ color: 'var(--accent)' }}>AppDatabase</strong>
-            </span>
-          </div>
-        </header>
-
+      {/* Main Content Wrapper */}
+      <div className="content-wrapper bg-light">
+        
         {/* Dynamic Action Alerts */}
         {actionNotice && (
-          <div style={{
-            position: 'absolute',
-            top: '80px',
-            right: '40px',
-            zIndex: 1000,
-            background: actionNotice.type === 'success' ? 'rgba(16, 185, 129, 0.95)' : 'rgba(239, 68, 68, 0.95)',
-            color: '#fff',
-            padding: '12px 24px',
-            borderRadius: '12px',
-            fontSize: '0.9rem',
-            fontWeight: 600,
-            boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-            animation: 'fadeIn 0.3s'
-          }}>
+          <div className={`alert alert-${actionNotice.type === 'success' ? 'success' : 'danger'} alert-dismissible shadow`} style={{ position: 'fixed', top: '80px', right: '40px', zIndex: 10000, minWidth: '320px', borderRadius: '12px' }}>
+            <button type="button" className="close" onClick={() => setActionNotice(null)}>&times;</button>
+            <h5><i className={`icon fas ${actionNotice.type === 'success' ? 'fa-check' : 'fa-ban'}`}></i> Alert</h5>
             {actionNotice.message}
           </div>
         )}
 
-        {/* Content body */}
-        <main style={{ flex: 1, padding: '40px' }}>
-          
-          {/* TAB 1: OVERVIEW */}
-          {activeTab === 'overview' && (
-            <div>
-              {/* Stats Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '24px', marginBottom: '40px' }}>
-                <div className="glass-panel" style={{ padding: '24px', position: 'relative' }}>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Total Registered Users</p>
-                  <h3 style={{ fontSize: '2.2rem', marginTop: '8px', color: 'var(--primary-hover)' }}>{stats.total_users}</h3>
-                  <div style={{ position: 'absolute', bottom: '20px', right: '20px', color: 'rgba(255,255,255,0.05)' }}>
-                    <UsersIcon size={48} />
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '24px', position: 'relative' }}>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Active Earning Offers</p>
-                  <h3 style={{ fontSize: '2.2rem', marginTop: '8px', color: 'var(--accent)' }}>{stats.active_offers}</h3>
-                  <div style={{ position: 'absolute', bottom: '20px', right: '20px', color: 'rgba(255,255,255,0.05)' }}>
-                    <Layers size={48} />
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '24px', position: 'relative' }}>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Pending Withdrawals</p>
-                  <h3 style={{ fontSize: '2.2rem', marginTop: '8px', color: 'var(--warning)' }}>{stats.pending_withdrawals}</h3>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Value: {stats.pending_withdrawals_value.toFixed(2)} coins</p>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '24px', position: 'relative' }}>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Total Settled Payouts</p>
-                  <h3 style={{ fontSize: '2.2rem', marginTop: '8px', color: 'var(--success)' }}>₹{stats.settled_payouts_value.toFixed(2)}</h3>
-                  <div style={{ position: 'absolute', bottom: '20px', right: '20px', color: 'rgba(255,255,255,0.05)' }}>
-                    <TrendingUp size={48} />
-                  </div>
-                </div>
+        {/* Content Header Title */}
+        <div className="content-header pt-4">
+          <div className="container-fluid">
+            <div className="row mb-2 align-items-center">
+              <div className="col-sm-6">
+                <h1 className="m-0 font-weight-bold text-dark text-capitalize">{activeTab.replace('-', ' ')} Management</h1>
               </div>
-
-              {/* Informative Banner */}
-              <div className="glass-panel" style={{ 
-                padding: '30px', 
-                background: 'linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(168,85,247,0.05) 100%)',
-                border: '1px solid rgba(255,255,255,0.06)'
-              }}>
-                <h3 style={{ fontSize: '1.25rem', marginBottom: '10px' }}>Active Database Host Credentials</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.925rem', lineHeight: 1.6 }}>
-                  You are actively connected to the fresh <strong>AppDatabase</strong> on external node <code>72.61.254.236:3320</code>. This is fully isolated from the legacy PHP schema, preserving all production data. All updates you execute here will be made directly to the fresh client environment.
-                </p>
+              <div className="col-sm-6 text-right">
+                <span className="badge badge-info px-3 py-2 font-weight-bold"><i className="fas fa-clock mr-1"></i> Live Administrator Console</span>
               </div>
             </div>
-          )}
+          </div>
+        </div>
 
-          {/* TAB 2: USERS DIRECTORY */}
-          {activeTab === 'users' && (
-            <div style={{ display: 'grid', gridTemplateColumns: selectedUser ? '1fr 380px' : '1fr', gap: '30px', alignItems: 'start' }}>
-              {/* Users List Panel */}
-              <div className="glass-panel" style={{ padding: '30px' }}>
-                <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
-                  <div style={{ position: 'relative', flex: 1 }}>
-                    <Search size={18} style={{ position: 'absolute', left: '16px', top: '15px', color: 'var(--text-muted)' }} />
-                    <input 
-                      type="text" 
-                      className="glass-input" 
-                      placeholder="Search users by name, email, or referral code..." 
-                      style={{ paddingLeft: '48px' }}
-                      value={userSearch}
-                      onChange={(e) => setUserSearch(e.target.value)}
-                    />
+        {/* Dynamic Main Body Content */}
+        <section className="content">
+          <div className="container-fluid">
+            
+            {/* TAB 1: OVERVIEW */}
+            {activeTab === 'overview' && (
+              <div>
+                {/* Stats Widgets Box */}
+                <div className="row">
+                  
+                  <div className="col-lg-3 col-6">
+                    <div className="small-box bg-primary elevation-1 rounded-lg">
+                      <div className="inner">
+                        <h3>{stats.total_users}</h3>
+                        <p>Total Registered Users</p>
+                      </div>
+                      <div className="icon"><i className="fas fa-users"></i></div>
+                      <a href="#" onClick={() => setActiveTab('users')} className="small-box-footer">Inspect Database <i className="fas fa-arrow-circle-right"></i></a>
+                    </div>
+                  </div>
+
+                  <div className="col-lg-3 col-6">
+                    <div className="small-box bg-success elevation-1 rounded-lg">
+                      <div className="inner">
+                        <h3>{stats.active_offers}</h3>
+                        <p>Active Earning Offers</p>
+                      </div>
+                      <div className="icon"><i className="fas fa-gift"></i></div>
+                      <a href="#" onClick={() => setActiveTab('offers')} className="small-box-footer">Build Offers <i className="fas fa-arrow-circle-right"></i></a>
+                    </div>
+                  </div>
+
+                  <div className="col-lg-3 col-6">
+                    <div className="small-box bg-warning elevation-1 rounded-lg">
+                      <div className="inner">
+                        <h3 className="text-white">{stats.pending_withdrawals}</h3>
+                        <p className="text-white">Pending Withdrawals</p>
+                      </div>
+                      <div className="icon"><i className="fas fa-hourglass-half text-white-50"></i></div>
+                      <a href="#" onClick={() => setActiveTab('withdrawals')} className="small-box-footer text-white-50">Approve Payouts <i className="fas fa-arrow-circle-right text-white-50"></i></a>
+                    </div>
+                  </div>
+
+                  <div className="col-lg-3 col-6">
+                    <div className="small-box bg-danger elevation-1 rounded-lg">
+                      <div className="inner">
+                        <h3>₹{stats.settled_payouts_value.toFixed(2)}</h3>
+                        <p>Total Settled Payouts</p>
+                      </div>
+                      <div className="icon"><i className="fas fa-money-check-alt"></i></div>
+                      <a href="#" onClick={() => setActiveTab('reports')} className="small-box-footer">View Audit Logs <i className="fas fa-arrow-circle-right"></i></a>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* DB Credentials Banner */}
+                <div className="card card-white shadow-none border rounded-lg mt-4">
+                  <div className="card-body p-4">
+                    <h5 className="font-weight-bold text-dark"><i className="fas fa-server mr-2 text-primary"></i> Active Database Host Credentials</h5>
+                    <p className="text-secondary text-sm mb-0 mt-2 leading-relaxed">
+                      You are actively connected to the fresh <strong>AppDatabase</strong> on external node <code>72.61.254.236:3320</code>. This is fully isolated from the legacy PHP schema, preserving all production data. All updates you execute here will be made directly to the fresh client environment.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: USERS DIRECTORY */}
+            {activeTab === 'users' && (
+              <div className="row">
+                
+                {/* Users List Grid */}
+                <div className={selectedUser ? "col-lg-8" : "col-lg-12"}>
+                  <div className="card card-white shadow-none border rounded-lg">
+                    <div className="card-header border-0 bg-transparent">
+                      <h3 className="card-title font-weight-bold">Member Directory</h3>
+                      <div className="card-tools">
+                        <div className="input-group input-group-sm" style={{ width: '260px' }}>
+                          <input 
+                            type="text" 
+                            className="form-control rounded-left" 
+                            placeholder="Search users..." 
+                            value={userSearch}
+                            onChange={(e) => setUserSearch(e.target.value)}
+                          />
+                          <div className="input-group-append">
+                            <span className="input-group-text rounded-right bg-transparent border-left-0"><i className="fas fa-search"></i></span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="card-body table-responsive p-0">
+                      <table className="table table-hover text-nowrap align-middle">
+                        <thead>
+                          <tr className="text-xs text-muted uppercase">
+                            <th>User ID</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Referral Code</th>
+                            <th>Balance</th>
+                            <th className="text-right pr-4">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {usersList.map(u => (
+                            <tr key={u.id} style={{ cursor: 'pointer' }} onClick={() => viewUserLedger(u)} className={selectedUser?.id === u.id ? "table-active" : ""}>
+                              <td><code className="text-xs text-indigo font-weight-bold">{u.user_id || 'N/A'}</code></td>
+                              <td><strong className="text-dark">{u.name || 'Anonymous'}</strong></td>
+                              <td className="text-secondary text-sm">{u.email}</td>
+                              <td><code>{u.referral_code || 'None'}</code></td>
+                              <td><span className="badge badge-success px-2 py-1">₹{parseFloat(u.balance || 0).toFixed(2)}</span></td>
+                              <td className="text-right pr-4">
+                                <button className="btn btn-outline-primary btn-xs font-weight-bold px-3 rounded-pill" onClick={(e) => { e.stopPropagation(); viewUserLedger(u); }}>
+                                  <i className="fas fa-eye mr-1"></i> Inspect
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                          {usersList.length === 0 && (
+                            <tr>
+                              <td colSpan={6} className="text-center text-muted p-4">No users matching search criteria.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination */}
+                    {usersPages > 1 && (
+                      <div className="card-footer bg-transparent border-0 d-flex justify-content-between align-items-center">
+                        <span className="text-muted text-xs">Page <strong>{usersPage}</strong> of <strong>{usersPages}</strong> ({usersTotal} users)</span>
+                        <div className="btn-group">
+                          <button className="btn btn-outline-secondary btn-sm" disabled={usersPage === 1} onClick={() => setUsersPage(prev => Math.max(prev - 1, 1))}>Previous</button>
+                          <button className="btn btn-outline-secondary btn-sm" disabled={usersPage === usersPages} onClick={() => setUsersPage(prev => Math.min(prev + 1, usersPages))}>Next</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="table-container">
-                  <table className="glass-table">
-                    <thead>
-                      <tr>
-                        <th>User ID</th>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Referral Code</th>
-                        <th>Balance</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {usersList.map(u => (
-                        <tr key={u.id} style={{ cursor: 'pointer' }} onClick={() => viewUserLedger(u)}>
-                          <td>
-                            <code style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>{u.user_id || 'N/A'}</code>
-                          </td>
-                          <td>
-                            <strong style={{ color: selectedUser?.id === u.id ? 'var(--primary-hover)' : '#fff' }}>{u.name || 'Anonymous'}</strong>
-                          </td>
-                          <td style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
-                          <td><code>{u.referral_code || 'None'}</code></td>
-                          <td><strong style={{ color: 'var(--accent)' }}>{parseFloat(u.balance || 0).toFixed(2)}</strong></td>
-                          <td>
-                            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={(e) => { e.stopPropagation(); viewUserLedger(u); }}>
-                              <Eye size={12} /> Inspect
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {usersList.length === 0 && (
-                        <tr>
-                          <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>No users matching criteria.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                {/* Inspect Sidebar */}
+                {selectedUser && (
+                  <div className="col-lg-4">
+                    <div className="card card-white shadow-none border rounded-lg">
+                      <div className="card-header border-bottom-0 bg-transparent d-flex justify-content-between align-items-center pb-0">
+                        <h3 className="card-title font-weight-bold">User Inspector</h3>
+                        <button type="button" className="close" onClick={() => setSelectedUser(null)}>&times;</button>
+                      </div>
+                      
+                      <div className="card-body">
+                        <div className="text-center mb-4">
+                          <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(selectedUser.name || 'Admin')}&background=007bff&color=fff&size=96`} className="img-circle border elevation-1 mb-3" style={{ width: '80px', height: '80px', objectFit: 'cover' }} />
+                          <h5 className="font-weight-black mb-1">{selectedUser.name || 'Anonymous'}</h5>
+                          <span className="badge badge-light border text-muted">{selectedUser.email}</span>
+                        </div>
 
-                {/* Pagination Controls */}
-                {usersPages > 1 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      Page <strong>{usersPage}</strong> of <strong>{usersPages}</strong> ({usersTotal} users)
-                    </span>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button 
-                        className="btn btn-secondary" 
-                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                        disabled={usersPage === 1}
-                        onClick={() => setUsersPage(prev => Math.max(prev - 1, 1))}
-                      >
-                        Previous
-                      </button>
-                      <button 
-                        className="btn btn-secondary" 
-                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                        disabled={usersPage === usersPages}
-                        onClick={() => setUsersPage(prev => Math.min(prev + 1, usersPages))}
-                      >
-                        Next
-                      </button>
+                        {/* Balance adjustment */}
+                        <div className="d-flex justify-content-between align-items-center bg-light p-3 rounded-lg border mb-4">
+                          <div>
+                            <span className="text-xs text-muted uppercase font-weight-bold d-block">Available Coins</span>
+                            <h4 className="text-success font-weight-black mb-0">₹{parseFloat(selectedUser.balance || 0).toFixed(2)}</h4>
+                          </div>
+                          <button className="btn btn-primary btn-sm px-3 rounded-pill" onClick={() => setAdjustBalanceModal(true)}>
+                            <i className="fas fa-sliders-h mr-1"></i> Adjust
+                          </button>
+                        </div>
+
+                        {/* Profile Info details */}
+                        <div className="card shadow-none border bg-light mb-4">
+                          <div className="card-body p-3">
+                            <div className="d-flex justify-content-between align-items-center mb-3">
+                              <span className="font-weight-bold text-secondary text-xs uppercase">User Profile Details</span>
+                              <div className="btn-group">
+                                <button className="btn btn-xs btn-outline-primary px-3 rounded-pill mr-2" onClick={() => triggerEditUser(selectedUser)}>
+                                  <i className="fas fa-edit mr-1"></i> Edit Details
+                                </button>
+                                <button className="btn btn-xs btn-outline-danger px-3 rounded-pill" onClick={() => handleDeleteUser(selectedUser.id)}>
+                                  <i className="fas fa-trash-alt mr-1"></i> Delete User
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="row text-sm">
+                              <div className="col-6 mb-2">
+                                <span className="text-xs text-muted d-block">User ID (Public)</span>
+                                <strong>{selectedUser.user_id || 'N/A'}</strong>
+                              </div>
+                              <div className="col-6 mb-2">
+                                <span className="text-xs text-muted d-block">Referral Code</span>
+                                <code className="text-xs text-indigo font-weight-bold">{selectedUser.referral_code || 'None'}</code>
+                              </div>
+                              <div className="col-6 mb-2">
+                                <span className="text-xs text-muted d-block">Phone Number</span>
+                                <strong>{selectedUser.phone_number || 'N/A'}</strong>
+                              </div>
+                              <div className="col-6 mb-2">
+                                <span className="text-xs text-muted d-block">Location</span>
+                                <strong>{selectedUser.location || 'N/A'}</strong>
+                              </div>
+                              <div className="col-6 mb-2">
+                                <span className="text-xs text-muted d-block">Current Streak</span>
+                                <strong>{selectedUser.current_streak || 0} days</strong>
+                              </div>
+                              <div className="col-6 mb-2">
+                                <span className="text-xs text-muted d-block">Daily Spins Left</span>
+                                <strong>{selectedUser.daily_spins_count || 0}</strong>
+                              </div>
+                              <div className="col-12 mb-2">
+                                <span className="text-xs text-muted d-block">Android Identifier</span>
+                                <code className="text-xs text-danger">{selectedUser.android_id || 'N/A'}</code>
+                              </div>
+                              <div className="col-12 mb-2 border-top pt-2">
+                                <span className="text-xs text-muted d-block">FCM Push Token</span>
+                                <span className="text-xs text-muted text-break">{selectedUser.fcm_token || 'None'}</span>
+                              </div>
+                              <div className="col-12 border-top pt-2 d-flex justify-content-between align-items-center">
+                                <div>
+                                  <span className="text-xs text-muted d-block">Status</span>
+                                  <strong className={selectedUser.is_banned ? "text-danger" : "text-success"}>
+                                    {selectedUser.is_banned ? "🚫 Banned" : "✅ Active"}
+                                  </strong>
+                                </div>
+                                {selectedUser.is_banned ? (
+                                  <button className="btn btn-xs btn-success rounded-pill px-3" onClick={() => handleUnbanUser(selectedUser.id)}>Unban</button>
+                                ) : (
+                                  <button className="btn btn-xs btn-danger rounded-pill px-3" onClick={() => handleBanUser(selectedUser.id)}>Ban User</button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Recent Transactions Ledger */}
+                        <h6 className="font-weight-bold mb-3"><i className="fas fa-history mr-1"></i> Transaction History</h6>
+                        <div style={{ maxHeight: '240px', overflowY: 'auto' }} className="pr-1">
+                          {userTransactions.map(t => (
+                            <div key={t.id} className="p-2 border rounded-lg mb-2 bg-light d-flex justify-content-between align-items-center text-sm">
+                              <div>
+                                <p className="font-weight-bold mb-0 text-dark">{t.description || t.source}</p>
+                                <span className="text-xs text-muted">{new Date(t.created_at).toLocaleDateString()}</span>
+                              </div>
+                              <strong className={t.type === 'CREDIT' ? "text-success" : "text-danger"}>
+                                {t.type === 'CREDIT' ? '+' : '-'}{parseFloat(t.amount).toFixed(2)}
+                              </strong>
+                            </div>
+                          ))}
+                          {userTransactions.length === 0 && (
+                            <p className="text-muted text-xs text-center p-3">No transactions found.</p>
+                          )}
+                        </div>
+
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
+            )}
 
-              {/* Selected User Ledger Inspect Panel */}
-              {selectedUser && (
-                <div className="glass-panel" style={{ padding: '30px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '16px' }}>
-                    <div>
-                      <h3 style={{ fontSize: '1.2rem' }}>{selectedUser.name || 'Anonymous'}</h3>
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{selectedUser.email}</p>
+            {/* TAB 3: OFFER BUILDER */}
+            {activeTab === 'offers' && (
+              <div className="row">
+                {/* Offers List */}
+                <div className="col-lg-8">
+                  <div className="card card-white shadow-none border rounded-lg">
+                    <div className="card-header border-0 bg-transparent">
+                      <h3 className="card-title font-weight-bold">Earning Campaigns</h3>
                     </div>
-                    <button className="btn btn-secondary" style={{ padding: '6px' }} onClick={() => setSelectedUser(null)}>
-                      <X size={16} />
-                    </button>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                    <div>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Balance</span>
-                      <h4 style={{ fontSize: '1.6rem', color: 'var(--accent)' }}>{parseFloat(selectedUser.balance || 0).toFixed(2)} coins</h4>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setAdjustBalanceModal(true)}>
-                        Adjust
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Full User Profile Information Section */}
-                  <div style={{ 
-                    background: 'rgba(255,255,255,0.02)', 
-                    border: '1px solid rgba(255,255,255,0.04)', 
-                    borderRadius: '12px', 
-                    padding: '16px', 
-                    marginBottom: '24px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>User Profile Details</span>
-                      <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={() => triggerEditUser(selectedUser)}>
-                        <Edit3 size={12} /> Edit Details
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.8rem', marginTop: '4px' }}>
-                      <div>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>User ID (Public)</span>
-                        <strong style={{ color: '#fff' }}>{selectedUser.user_id || 'N/A'}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Referral Code</span>
-                        <code style={{ color: 'var(--accent)' }}>{selectedUser.referral_code || 'None'}</code>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Phone Number</span>
-                        <strong style={{ color: '#fff' }}>{selectedUser.phone_number || 'Not Provided'}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Location</span>
-                        <strong style={{ color: '#fff' }}>{selectedUser.location || 'Not Provided'}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Android ID</span>
-                        <strong style={{ color: '#fff', wordBreak: 'break-all' }}>{selectedUser.android_id || 'N/A'}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Current Streak</span>
-                        <strong style={{ color: '#fff' }}>{selectedUser.current_streak || 0} days</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Daily Spins Left</span>
-                        <strong style={{ color: '#fff' }}>{selectedUser.daily_spins_count || 0}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Referred By (User ID)</span>
-                        <span style={{ color: 'var(--text-muted)' }}>{selectedUser.referred_by || 'Organic / Direct'}</span>
-                      </div>
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>FCM Push Token</span>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', wordBreak: 'break-all' }}>{selectedUser.fcm_token || 'None'}</span>
-                      </div>
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Firebase UID</span>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', wordBreak: 'break-all' }}>{selectedUser.uid}</span>
-                      </div>
-                      <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                        <div>
-                          <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem' }}>Account Status</span>
-                          <strong style={{ color: selectedUser.is_banned ? 'var(--danger)' : 'var(--success)' }}>
-                            {selectedUser.is_banned ? '🚫 BANNED' : '✅ Active'}
-                          </strong>
-                          {selectedUser.is_banned && selectedUser.ban_reason && (
-                            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>Reason: {selectedUser.ban_reason}</span>
-                          )}
-                        </div>
-                        {selectedUser.is_banned ? (
-                          <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', border: '1px solid rgba(16, 185, 129, 0.2)' }} onClick={() => handleUnbanUser(selectedUser.id)}>
-                            Unban
-                          </button>
-                        ) : (
-                          <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={() => handleBanUser(selectedUser.id)}>
-                            <Ban size={12} /> Ban User
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <h5 style={{ fontSize: '0.9rem', marginBottom: '12px' }}>Transaction History</h5>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
-                    {userTransactions.map(t => (
-                      <div key={t.id} style={{ 
-                        background: 'rgba(255,255,255,0.01)', 
-                        border: '1px solid rgba(255,255,255,0.04)', 
-                        borderRadius: '10px', 
-                        padding: '10px 14px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}>
-                        <div>
-                          <p style={{ fontSize: '0.85rem', fontWeight: 600 }}>{t.description || t.source}</p>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(t.created_at).toLocaleDateString()}</span>
-                        </div>
-                        <strong style={{ fontSize: '0.85rem', color: t.type === 'CREDIT' ? 'var(--success)' : 'var(--danger)' }}>
-                          {t.type === 'CREDIT' ? '+' : '-'}{parseFloat(t.amount).toFixed(2)}
-                        </strong>
-                      </div>
-                    ))}
-                    {userTransactions.length === 0 && (
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>No transaction history.</p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: OFFER BUILDER */}
-          {activeTab === 'offers' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '30px', alignItems: 'start' }}>
-              {/* Existing Offers */}
-              <div className="glass-panel" style={{ padding: '30px' }}>
-                <h3 style={{ fontSize: '1.25rem', marginBottom: '20px' }}>Active Earning Tasks</h3>
-                <div className="table-container">
-                  <table className="glass-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '60px' }}>Icon</th>
-                        <th>Offer Title & Details</th>
-                        <th style={{ textAlign: 'center' }}>Category</th>
-                        <th style={{ textAlign: 'center' }}>Reward</th>
-                        <th style={{ textAlign: 'center' }}>Status</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {offersList.map(o => (
-                        <tr key={o.id} style={{ background: editingOffer?.id === o.id ? 'rgba(255, 255, 255, 0.03)' : 'transparent' }}>
-                          <td>
-                            {o.icon_url ? (
-                              <img src={o.icon_url} alt="" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
-                            ) : (
-                              <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <Layers size={18} style={{ color: 'var(--text-muted)' }} />
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{o.title}</strong>
-                              {o.is_hot === 1 && (
-                                <span className="badge badge-completed" style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'rgba(168,85,247,0.1)', color: 'var(--primary-hover)', border: '1px solid rgba(168,85,247,0.2)' }}>
-                                  Hot
+                    <div className="card-body table-responsive p-0">
+                      <table className="table table-hover text-nowrap align-middle">
+                        <thead>
+                          <tr className="text-xs text-muted uppercase">
+                            <th>Icon</th>
+                            <th>Campaign Details</th>
+                            <th className="text-center">Category</th>
+                            <th className="text-center">Reward</th>
+                            <th className="text-center">Status</th>
+                            <th className="text-right pr-4">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {offersList.map(o => (
+                            <tr key={o.id}>
+                              <td>
+                                {o.icon_url ? (
+                                  <img src={o.icon_url} alt="" className="img-thumbnail" style={{ width: '40px', height: '40px', objectFit: 'cover' }} />
+                                ) : (
+                                  <div style={{ width: '40px', height: '40px' }} className="bg-light border rounded d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-gift text-muted"></i>
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                <strong className="text-dark">{o.title}</strong>
+                                {o.is_hot === 1 && <span className="badge badge-danger px-2 ml-2">Hot</span>}
+                              </td>
+                              <td className="text-center">{o.category || 'General'}</td>
+                              <td className="text-center"><span className="badge badge-success px-2">₹{parseFloat(o.total_reward || 0).toFixed(2)}</span></td>
+                              <td className="text-center">
+                                <span className={`badge badge-${o.is_active ? 'success' : 'secondary'} px-2`}>
+                                  {o.is_active ? 'Live' : 'Paused'}
                                 </span>
-                              )}
-                            </div>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', maxWidth: '320px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={o.description}>
-                              {o.description || 'No instructions provided.'}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span className="badge badge-pending" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                              {o.category || 'General'}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <strong style={{ color: 'var(--success)', fontSize: '0.95rem' }}>
-                              ₹{parseFloat(o.total_reward || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </strong>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span className={`badge ${o.is_active ? 'badge-completed' : 'badge-failed'}`} style={{
-                              background: o.is_active ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                              color: o.is_active ? 'var(--success)' : 'var(--danger)',
-                              border: o.is_active ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)'
-                            }}>
-                              {o.is_active ? 'Active' : 'Disabled'}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                              <button className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem', gap: '4px' }} onClick={() => handleEditOfferClick(o)}>
-                                <Edit3 size={12} /> Edit
-                              </button>
-                              <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '0.75rem', gap: '4px' }} onClick={() => handleDeleteOffer(o.id)}>
-                                <Trash2 size={12} /> Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {offersList.length === 0 && (
-                        <tr>
-                          <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>No active earning tasks.</td>
-                        </tr>
+                              </td>
+                              <td className="text-right pr-4">
+                                <button className="btn btn-outline-primary btn-xs font-weight-bold mr-2 px-3 rounded-pill" onClick={() => handleEditOfferClick(o)}>
+                                  <i className="fas fa-edit"></i> Edit
+                                </button>
+                                <button className="btn btn-outline-danger btn-xs font-weight-bold px-3 rounded-pill" onClick={() => handleDeleteOffer(o.id)}>
+                                  <i className="fas fa-trash-alt"></i> Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Offer form card */}
+                <div className="col-lg-4">
+                  <div className="card card-white shadow-none border rounded-lg">
+                    <div className="card-header border-bottom-0 bg-transparent">
+                      <h3 className="card-title font-weight-bold">{editingOffer ? "✏️ Edit Offer" : "＋ Create Offer"}</h3>
+                      {editingOffer && (
+                        <button className="close" onClick={resetOfferForm}>&times;</button>
                       )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Offer Editor form panel */}
-              <div className="glass-panel" style={{ padding: '30px' }}>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{editingOffer ? 'Modify Offer' : 'Create Offer'}</span>
-                  {editingOffer && <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.7rem' }} onClick={resetOfferForm}>Cancel</button>}
-                </h3>
-
-                <form onSubmit={handleOfferSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Offer Title</label>
-                    <input 
-                      type="text" 
-                      className="glass-input" 
-                      placeholder="e.g. Sign up on Jupiter Bank" 
-                      value={offerForm.title}
-                      onChange={(e) => setOfferForm({ ...offerForm, title: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">External Identifier (Campaign ID)</label>
-                    <input 
-                      type="text" 
-                      className="glass-input" 
-                      placeholder="e.g. jupiter_01" 
-                      value={offerForm.external_id}
-                      onChange={(e) => setOfferForm({ ...offerForm, external_id: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Description / Instructions</label>
-                    <textarea 
-                      className="glass-input" 
-                      rows={3}
-                      placeholder="Provide step details..." 
-                      value={offerForm.description}
-                      onChange={(e) => setOfferForm({ ...offerForm, description: e.target.value })}
-                    />
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Category</label>
-                      <select 
-                        className="glass-input" 
-                        value={offerForm.category}
-                        onChange={(e) => setOfferForm({ ...offerForm, category: e.target.value })}
-                        style={{ background: '#0a0b10', color: '#fff' }}
-                      >
-                        <option value="Top Offers">Top Offers</option>
-                        <option value="New Apps">New Apps</option>
-                        <option value="Install & Earn">Install & Earn</option>
-                        <option value="Surveys">Surveys</option>
-                        <option value="General">General</option>
-                      </select>
                     </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">User Reward (Coins)</label>
-                      <input 
-                        type="number" 
-                        className="glass-input" 
-                        value={offerForm.total_reward}
-                        onChange={(e) => setOfferForm({ ...offerForm, total_reward: parseFloat(e.target.value || 0) })}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Company Price ( Advertiser Payout ₹ )</label>
-                      <input 
-                        type="number" 
-                        className="glass-input" 
-                        step="0.01"
-                        placeholder="e.g. 15.50"
-                        value={offerForm.actual_price}
-                        onChange={(e) => setOfferForm({ ...offerForm, actual_price: parseFloat(e.target.value || 0) })}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Integration Mode</label>
-                      <select 
-                        className="glass-input" 
-                        value={offerForm.type}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setOfferForm({ 
-                            ...offerForm, 
-                            type: val, 
-                            input_type: val === 'offline' ? 'multi' : offerForm.input_type 
-                          });
-                        }}
-                        style={{ background: '#0a0b10', color: '#fff' }}
-                      >
-                        <option value="online">Online Campaign (Auto Webhook)</option>
-                        <option value="offline">Offline Campaign (Manual Proof Review)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Extra Badge Label (e.g. "HOT", "EASY SIGNUP")</label>
-                    <input 
-                      type="text" 
-                      className="glass-input" 
-                      placeholder="Leave blank for none" 
-                      value={offerForm.extra_label}
-                      onChange={(e) => setOfferForm({ ...offerForm, extra_label: e.target.value })}
-                    />
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Daily Completion Cap</label>
-                      <input 
-                        type="number" 
-                        className="glass-input" 
-                        placeholder="0 for unlimited" 
-                        value={offerForm.daily_completion_cap}
-                        onChange={(e) => setOfferForm({ ...offerForm, daily_completion_cap: parseInt(e.target.value || 0) })}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Country Targeting (ISO Codes)</label>
-                      <input 
-                        type="text" 
-                        className="glass-input" 
-                        placeholder="e.g. IN,US or ALL" 
-                        value={offerForm.country_targeting}
-                        onChange={(e) => setOfferForm({ ...offerForm, country_targeting: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Offline Submissions Fields Schema Builder */}
-                  {offerForm.type === 'offline' && (
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
-                      <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                        <h4 style={{ fontSize: '0.95rem', margin: 0 }}>Proof Request Fields ({offerForm.input_instruction?.length || 0})</h4>
-                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={addInstructionField}>
-                          <Plus size={14} /> Add Field
-                        </button>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {offerForm.input_instruction?.map((field, idx) => (
-                          <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-glass)', borderRadius: '8px', padding: '10px' }}>
-                            <div style={{ flex: 1 }}>
-                              <input 
-                                type="text" 
-                                className="glass-input" 
-                                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                                placeholder="Field Label (e.g., Enter registered email)"
-                                value={field.label}
-                                onChange={(e) => updateInstructionField(idx, 'label', e.target.value)}
-                                required
-                              />
-                            </div>
-                            <div style={{ width: '120px' }}>
-                              <select
-                                className="glass-input"
-                                style={{ padding: '8px 12px', fontSize: '0.85rem', background: '#0a0b10', color: '#fff' }}
-                                value={field.type}
-                                onChange={(e) => updateInstructionField(idx, 'type', e.target.value)}
-                              >
-                                <option value="text">Text Input</option>
-                                <option value="file">Image Upload</option>
-                              </select>
-                            </div>
-                            <button type="button" className="btn btn-danger" style={{ padding: '8px' }} onClick={() => removeInstructionField(idx)}>
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        ))}
-                        {(!offerForm.input_instruction || offerForm.input_instruction.length === 0) && (
-                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', margin: 0 }}>
-                            No custom proof fields added. By default, users will see a text input.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Icon Image URL</label>
-                    <input 
-                      type="text" 
-                      className="glass-input" 
-                      placeholder="https://..." 
-                      value={offerForm.icon_url}
-                      onChange={(e) => setOfferForm({ ...offerForm, icon_url: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Campaign Click / Tracking URL</label>
-                    <input 
-                      type="text" 
-                      className="glass-input" 
-                      placeholder="https://..." 
-                      value={offerForm.tracking_url}
-                      onChange={(e) => setOfferForm({ ...offerForm, tracking_url: e.target.value })}
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={offerForm.is_active}
-                        onChange={(e) => setOfferForm({ ...offerForm, is_active: e.target.checked })}
-                      />
-                      Active (Display in mobile App)
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={offerForm.is_hot}
-                        onChange={(e) => setOfferForm({ ...offerForm, is_hot: e.target.checked })}
-                      />
-                      Hot Campaign
-                    </label>
-                  </div>
-
-                  {/* Tier Editor Section */}
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                      <h4 style={{ fontSize: '0.95rem' }}>Task Milestone Tiers ({offerForm.tiers.length})</h4>
-                      <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={addTierToForm}>
-                        <Plus size={14} /> Add
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
-                      {offerForm.tiers.map((t, tierIdx) => (
-                        <div key={tierIdx} style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary-hover)' }}>Milestone {t.sequence}</span>
-                            <button type="button" className="btn btn-danger" style={{ padding: '2px 4px' }} onClick={() => removeTierFromForm(tierIdx)}>
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-
-                          <div className="form-group" style={{ marginBottom: '10px' }}>
-                            <label className="form-label" style={{ fontSize: '0.75rem' }}>App Display Title</label>
-                            <input 
-                              type="text" 
-                              className="glass-input" 
-                              style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                              value={t.title}
-                              onChange={(e) => updateTierField(tierIdx, 'title', e.target.value)}
-                              required
-                            />
-                          </div>
-
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: '10px', marginBottom: '10px' }}>
-                            <div className="form-group" style={{ marginBottom: 0 }}>
-                              <label className="form-label" style={{ fontSize: '0.75rem' }}>Backend Callback Title</label>
-                              <input 
-                                type="text" 
-                                className="glass-input" 
-                                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                                value={t.backend_title}
-                                onChange={(e) => updateTierField(tierIdx, 'backend_title', e.target.value)}
-                              />
-                            </div>
-                            <div className="form-group" style={{ marginBottom: 0 }}>
-                              <label className="form-label" style={{ fontSize: '0.75rem' }}>Coins</label>
-                              <input 
-                                type="number" 
-                                className="glass-input" 
-                                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                                value={t.reward}
-                                onChange={(e) => updateTierField(tierIdx, 'reward', parseFloat(e.target.value || 0))}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Tier Step instructions */}
-                          <div style={{ borderTop: '1px dotted rgba(255,255,255,0.06)', paddingTop: '10px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Step Instructions</span>
-                              <button type="button" className="btn btn-secondary" style={{ padding: '2px 4px', fontSize: '0.65rem' }} onClick={() => addStepToTier(tierIdx)}>
-                                + Step
-                              </button>
-                            </div>
-                            
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              {t.steps.map((step, stepIdx) => (
-                                <div key={stepIdx} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                  <input 
-                                    type="text" 
-                                    className="glass-input" 
-                                    style={{ padding: '6px 10px', fontSize: '0.8rem' }}
-                                    value={step}
-                                    onChange={(e) => updateTierStep(tierIdx, stepIdx, e.target.value)}
-                                  />
-                                  <button type="button" className="btn btn-danger" style={{ padding: '4px' }} onClick={() => removeStepFromTier(tierIdx, stepIdx)}>
-                                    <X size={10} />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
+                    <div className="card-body">
+                      <form onSubmit={handleOfferSubmit}>
+                        <div className="form-group mb-3">
+                          <label className="text-muted text-xs font-weight-bold mb-1">Offer Title</label>
+                          <input type="text" className="form-control" placeholder="e.g. Install GPay" value={offerForm.title} onChange={e => setOfferForm({ ...offerForm, title: e.target.value })} required />
                         </div>
-                      ))}
+                        <div className="form-group mb-3">
+                          <label className="text-muted text-xs font-weight-bold mb-1">External ID / Network Key</label>
+                          <input type="text" className="form-control" placeholder="e.g. gpay_install" value={offerForm.external_id} onChange={e => setOfferForm({ ...offerForm, external_id: e.target.value })} />
+                        </div>
+                        <div className="form-group mb-3">
+                          <label className="text-muted text-xs font-weight-bold mb-1">Description</label>
+                          <textarea className="form-control" rows={3} placeholder="Steps to complete offer..." value={offerForm.description} onChange={e => setOfferForm({ ...offerForm, description: e.target.value })} />
+                        </div>
+                        <div className="row">
+                          <div className="col-6 form-group mb-3">
+                            <label className="text-muted text-xs font-weight-bold mb-1">Category</label>
+                            <select className="form-control" value={offerForm.category} onChange={e => setOfferForm({ ...offerForm, category: e.target.value })}>
+                              <option value="General">General</option>
+                              <option value="Crypto">Crypto</option>
+                              <option value="Gaming">Gaming</option>
+                              <option value="Surveys">Surveys</option>
+                            </select>
+                          </div>
+                          <div className="col-6 form-group mb-3">
+                            <label className="text-muted text-xs font-weight-bold mb-1">Estimated Time</label>
+                            <input type="text" className="form-control" value={offerForm.estimated_time} onChange={e => setOfferForm({ ...offerForm, estimated_time: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="row">
+                          <div className="col-6 form-group mb-3">
+                            <label className="text-muted text-xs font-weight-bold mb-1">Reward (Coins)</label>
+                            <input type="number" className="form-control" value={offerForm.total_reward} onChange={e => setOfferForm({ ...offerForm, total_reward: parseFloat(e.target.value || 0) })} required />
+                          </div>
+                          <div className="col-6 form-group mb-3">
+                            <label className="text-muted text-xs font-weight-bold mb-1">Cost (AdNetwork)</label>
+                            <input type="number" className="form-control" value={offerForm.actual_price} onChange={e => setOfferForm({ ...offerForm, actual_price: parseFloat(e.target.value || 0) })} />
+                          </div>
+                        </div>
+                        <div className="form-group mb-3">
+                          <label className="text-muted text-xs font-weight-bold mb-1">Tracking URL / App Link</label>
+                          <input type="text" className="form-control" value={offerForm.tracking_url} onChange={e => setOfferForm({ ...offerForm, tracking_url: e.target.value })} />
+                        </div>
+                        <div className="form-group mb-3">
+                          <label className="text-muted text-xs font-weight-bold mb-1">Icon Image URL</label>
+                          <input type="text" className="form-control" value={offerForm.icon_url} onChange={e => setOfferForm({ ...offerForm, icon_url: e.target.value })} />
+                        </div>
+                        <div className="row mb-3 align-items-center">
+                          <div className="col-6">
+                            <div className="custom-control custom-switch">
+                              <input type="checkbox" className="custom-control-input" id="isHot" checked={offerForm.is_hot} onChange={e => setOfferForm({ ...offerForm, is_hot: e.target.checked })} />
+                              <label className="custom-control-label text-xs uppercase" htmlFor="isHot">Hot Offer</label>
+                            </div>
+                          </div>
+                          <div className="col-6">
+                            <div className="custom-control custom-switch">
+                              <input type="checkbox" className="custom-control-input" id="isActive" checked={offerForm.is_active} onChange={e => setOfferForm({ ...offerForm, is_active: e.target.checked })} />
+                              <label className="custom-control-label text-xs uppercase" htmlFor="isActive">Active</label>
+                            </div>
+                          </div>
+                        </div>
+                        <button type="submit" className="btn btn-primary btn-block rounded-pill">Publish Offer</button>
+                      </form>
                     </div>
                   </div>
-
-                  <button type="submit" className="btn btn-primary" style={{ padding: '12px', marginTop: '10px' }}>
-                    {editingOffer ? 'Save Changes' : 'Publish Offer'}
-                  </button>
-                </form>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* TAB 4: VISIT & EARN MANAGER */}
-          {activeTab === 'visit-earn' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '30px', alignItems: 'start' }}>
-              {/* Left: Task List */}
-              <div className="glass-panel" style={{ padding: '30px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <div>
-                    <h3 style={{ fontSize: '1.25rem', margin: 0 }}>Visit & Earn Tasks</h3>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      Manage URL visit tasks users can complete daily for coin rewards.
-                    </p>
+            {/* TAB 4: VISIT & EARN */}
+            {activeTab === 'visit-earn' && (
+              <div className="row">
+                <div className="col-lg-8">
+                  <div className="card card-white shadow-none border rounded-lg">
+                    <div className="card-header border-0 bg-transparent">
+                      <h3 className="card-title font-weight-bold">Configure Visit & Earn</h3>
+                    </div>
+                    <div className="card-body table-responsive p-0">
+                      <table className="table table-hover text-nowrap align-middle">
+                        <thead>
+                          <tr className="text-xs text-muted uppercase">
+                            <th>Task Title</th>
+                            <th className="text-center">Reward</th>
+                            <th>Target URL</th>
+                            <th className="text-center">Timer</th>
+                            <th className="text-center">Ad Status</th>
+                            <th className="text-center">State</th>
+                            <th className="text-right pr-4">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visitTasksList.map(task => (
+                            <tr key={task.id}>
+                              <td><strong>{task.title}</strong></td>
+                              <td className="text-center"><span className="badge badge-success px-2">₹{task.coins}</span></td>
+                              <td><a href={task.visit_url} target="_blank" rel="noreferrer" className="text-indigo text-xs text-break">{task.visit_url}</a></td>
+                              <td className="text-center">{task.timer_seconds}s</td>
+                              <td className="text-center">
+                                <span className={`badge badge-${task.is_ad ? 'warning' : 'secondary'} px-2`}>{task.is_ad ? 'Ad Required' : 'No Ad'}</span>
+                              </td>
+                              <td className="text-center">
+                                <span className={`badge badge-${task.is_active ? 'success' : 'secondary'} px-2`}>{task.is_active ? 'Live' : 'Paused'}</span>
+                              </td>
+                              <td className="text-right pr-4">
+                                <button className="btn btn-outline-primary btn-xs font-weight-bold mr-2 px-3 rounded-pill" onClick={() => handleEditVisitTaskClick(task)}>Edit</button>
+                                <button className="btn btn-outline-danger btn-xs font-weight-bold px-3 rounded-pill" onClick={() => handleDeleteVisitTask(task.id)}>Delete</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                  <button className="btn btn-secondary" style={{ padding: '8px 16px', gap: '6px' }} onClick={fetchVisitTasks}>
-                    <RefreshCw size={16} /> Refresh
-                  </button>
                 </div>
 
-                <div className="table-container">
-                  <table className="glass-table">
+                <div className="col-lg-4">
+                  <div className="card card-white shadow-none border rounded-lg">
+                    <div className="card-header border-bottom-0 bg-transparent">
+                      <h3 className="card-title font-weight-bold">{editingVisitTask ? "✏️ Edit Task" : "＋ Create Task"}</h3>
+                      {editingVisitTask && <button className="close" onClick={resetVisitTaskForm}>&times;</button>}
+                    </div>
+                    <div className="card-body">
+                      <form onSubmit={handleVisitTaskSubmit}>
+                        <div className="form-group mb-3">
+                          <label className="text-muted text-xs font-weight-bold mb-1">Task Title</label>
+                          <input type="text" className="form-control" placeholder="e.g. Visit Blog" value={visitTaskForm.title} onChange={e => setVisitTaskForm({ ...visitTaskForm, title: e.target.value })} required />
+                        </div>
+                        <div className="form-group mb-3">
+                          <label className="text-muted text-xs font-weight-bold mb-1">Visit URL</label>
+                          <input type="url" className="form-control" placeholder="https://example.com" value={visitTaskForm.visit_url} onChange={e => setVisitTaskForm({ ...visitTaskForm, visit_url: e.target.value })} required />
+                        </div>
+                        <div className="row">
+                          <div className="col-6 form-group mb-3">
+                            <label className="text-muted text-xs font-weight-bold mb-1">Coins Reward</label>
+                            <input type="number" className="form-control" value={visitTaskForm.coins} onChange={e => setVisitTaskForm({ ...visitTaskForm, coins: parseInt(e.target.value || 0) })} required />
+                          </div>
+                          <div className="col-6 form-group mb-3">
+                            <label className="text-muted text-xs font-weight-bold mb-1">Timer (seconds)</label>
+                            <input type="number" className="form-control" value={visitTaskForm.timer_seconds} onChange={e => setVisitTaskForm({ ...visitTaskForm, timer_seconds: parseInt(e.target.value || 30) })} required />
+                          </div>
+                        </div>
+                        <div className="form-group mb-3">
+                          <label className="text-muted text-xs font-weight-bold mb-1">Ad Intercept Trigger</label>
+                          <select className="form-control" value={visitTaskForm.is_ad ? 'yes' : 'no'} onChange={e => setVisitTaskForm({ ...visitTaskForm, is_ad: e.target.value === 'yes' })}>
+                            <option value="no">No - Direct Visit</option>
+                            <option value="yes">Yes - Interstitial Ad first</option>
+                          </select>
+                        </div>
+                        <div className="custom-control custom-switch mb-3">
+                          <input type="checkbox" className="custom-control-input" id="isTaskActive" checked={visitTaskForm.is_active} onChange={e => setVisitTaskForm({ ...visitTaskForm, is_active: e.target.checked })} />
+                          <label className="custom-control-label text-xs uppercase" htmlFor="isTaskActive">Task is Live</label>
+                        </div>
+                        <button type="submit" className="btn btn-primary btn-block rounded-pill">Publish task</button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: WITHDRAWALS QUEUE */}
+            {activeTab === 'withdrawals' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-header border-0 bg-transparent d-flex justify-content-between align-items-center">
+                  <h3 className="card-title font-weight-bold">Withdrawal Approvals Queue</h3>
+                  <div className="btn-group">
+                    <button className={`btn btn-xs ${withdrawalStatus === 'PENDING' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('PENDING')}>Pending</button>
+                    <button className={`btn btn-xs ${withdrawalStatus === 'APPROVED' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('APPROVED')}>Approved</button>
+                    <button className={`btn btn-xs ${withdrawalStatus === 'REJECTED' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('REJECTED')}>Rejected</button>
+                    <button className={`btn btn-xs ${withdrawalStatus === 'ALL' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('ALL')}>All</button>
+                  </div>
+                </div>
+                <div className="card-body table-responsive p-0">
+                  <table className="table table-hover text-nowrap align-middle">
                     <thead>
-                      <tr>
-                        <th>Title</th>
-                        <th style={{ textAlign: 'center' }}>Coins</th>
-                        <th>Visit Link</th>
-                        <th style={{ textAlign: 'center' }}>Timer</th>
-                        <th style={{ textAlign: 'center' }}>Ad?</th>
-                        <th style={{ textAlign: 'center' }}>Status</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
+                      <tr className="text-xs text-muted uppercase">
+                        <th>User</th>
+                        <th>Method</th>
+                        <th>Payout Destination</th>
+                        <th>Amount</th>
+                        <th>Requested On</th>
+                        <th>Status</th>
+                        <th className="text-right pr-4">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {visitTasksList.map(task => (
-                        <tr key={task.id} style={{ background: editingVisitTask?.id === task.id ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
-                          <td>
-                            <strong style={{ color: '#fff', fontSize: '0.9rem' }}>{task.title}</strong>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <strong style={{ color: 'var(--accent)' }}>{task.coins}</strong>
-                          </td>
-                          <td>
-                            <a
-                              href={task.visit_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ color: 'var(--primary-hover)', fontSize: '0.78rem', maxWidth: '200px', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                              title={task.visit_url}
-                            >
-                              {task.visit_url}
-                            </a>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{task.timer_seconds}s</span>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            {task.is_ad ? (
-                              <span className="badge" style={{ background: 'rgba(168,85,247,0.12)', color: 'var(--primary-hover)', border: '1px solid rgba(168,85,247,0.25)', fontSize: '0.72rem' }}>
-                                Ad Required
-                              </span>
-                            ) : (
-                              <span className="badge" style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.07)', fontSize: '0.72rem' }}>
-                                No Ad
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span className="badge" style={{
-                              background: task.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-                              color: task.is_active ? 'var(--success)' : 'var(--danger)',
-                              border: task.is_active ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(239,68,68,0.2)',
-                            }}>
-                              {task.is_active ? 'Live' : 'Paused'}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                              <button
-                                className="btn btn-secondary"
-                                style={{ padding: '6px 10px', fontSize: '0.75rem', gap: '4px' }}
-                                onClick={() => handleEditVisitTaskClick(task)}
-                              >
-                                <Edit3 size={12} /> Edit
-                              </button>
-                              <button
-                                className="btn btn-danger"
-                                style={{ padding: '6px 10px', fontSize: '0.75rem', gap: '4px' }}
-                                onClick={() => handleDeleteVisitTask(task.id)}
-                              >
-                                <Trash2 size={12} /> Delete
-                              </button>
-                            </div>
+                      {withdrawalsList.map(w => (
+                        <tr key={w.id}>
+                          <td><strong>{w.user_name}</strong><br /><span className="text-xs text-muted">{w.user_email}</span></td>
+                          <td><span className="badge badge-light border">{w.method}</span></td>
+                          <td><code className="text-xs text-dark">{w.details}</code></td>
+                          <td><strong className="text-dark">₹{parseFloat(w.amount).toFixed(2)}</strong></td>
+                          <td className="text-sm">{new Date(w.created_at).toLocaleString()}</td>
+                          <td><span className={`badge badge-${w.status === 'PENDING' ? 'warning' : (w.status === 'APPROVED' ? 'success' : 'danger')} px-2`}>{w.status}</span></td>
+                          <td className="text-right pr-4">
+                            {w.status === 'PENDING' ? (
+                              <div className="btn-group">
+                                <button className="btn btn-xs btn-success rounded-pill px-3 mr-2" onClick={() => handleApproveWithdrawal(w.id)}>Settle</button>
+                                <button className="btn btn-xs btn-danger rounded-pill px-3" onClick={() => triggerRejectWithdrawal(w)}>Reject</button>
+                              </div>
+                            ) : <span className="text-xs text-muted">Processed</span>}
                           </td>
                         </tr>
                       ))}
-                      {visitTasksList.length === 0 && (
+                      {withdrawalsList.length === 0 && (
                         <tr>
-                          <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px' }}>
-                            No Visit & Earn tasks configured yet. Create your first one →
-                          </td>
+                          <td colSpan={7} className="text-center text-muted p-4">No withdrawals matching criteria.</td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
               </div>
+            )}
 
-              {/* Right: Create / Edit Form */}
-              <div className="glass-panel" style={{ padding: '30px' }}>
-                <h3 style={{
-                  fontSize: '1.15rem',
-                  marginBottom: '20px',
-                  paddingBottom: '12px',
-                  borderBottom: '1px solid rgba(255,255,255,0.06)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <span>{editingVisitTask ? '✏️ Edit Task' : '＋ Create Task'}</span>
-                  {editingVisitTask && (
-                    <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.7rem' }} onClick={resetVisitTaskForm}>
-                      Cancel
-                    </button>
-                  )}
-                </h3>
-
-                <form onSubmit={handleVisitTaskSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Task Title</label>
-                    <input
-                      type="text"
-                      className="glass-input"
-                      placeholder="e.g. Visit TechCrunch & Earn"
-                      value={visitTaskForm.title}
-                      onChange={(e) => setVisitTaskForm({ ...visitTaskForm, title: e.target.value })}
-                      required
-                    />
+            {/* TAB 14: OFFLINE SUBMISSIONS */}
+            {activeTab === 'proofs' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-header border-0 bg-transparent d-flex justify-content-between align-items-center">
+                  <div>
+                    <h3 className="card-title font-weight-bold">Proofs Auditing Gallery</h3>
                   </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Visit URL</label>
-                    <input
-                      type="url"
-                      className="glass-input"
-                      placeholder="https://example.com"
-                      value={visitTaskForm.visit_url}
-                      onChange={(e) => setVisitTaskForm({ ...visitTaskForm, visit_url: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Coins Reward</label>
-                      <input
-                        type="number"
-                        className="glass-input"
-                        placeholder="e.g. 50"
-                        min="1"
-                        step="1"
-                        value={visitTaskForm.coins}
-                        onChange={(e) => setVisitTaskForm({ ...visitTaskForm, coins: parseInt(e.target.value || 0) })}
-                        required
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Timer (seconds)</label>
-                      <input
-                        type="number"
-                        className="glass-input"
-                        placeholder="e.g. 30"
-                        min="5"
-                        step="1"
-                        value={visitTaskForm.timer_seconds}
-                        onChange={(e) => setVisitTaskForm({ ...visitTaskForm, timer_seconds: parseInt(e.target.value || 30) })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Ad Required Before Visit?</label>
-                    <select
-                      className="glass-input"
-                      style={{ background: '#0a0b10', color: '#fff' }}
-                      value={visitTaskForm.is_ad ? 'yes' : 'no'}
-                      onChange={(e) => setVisitTaskForm({ ...visitTaskForm, is_ad: e.target.value === 'yes' })}
-                    >
-                      <option value="no">No — Direct Redirect</option>
-                      <option value="yes">Yes — Watch Ad First, Then Redirect</option>
-                    </select>
-                    {visitTaskForm.is_ad && (
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
-                        User will be shown an interstitial ad before being redirected to the visit URL. The timer starts after redirect.
-                      </p>
-                    )}
-                  </div>
-
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.875rem', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <input
-                      type="checkbox"
-                      checked={visitTaskForm.is_active}
-                      onChange={(e) => setVisitTaskForm({ ...visitTaskForm, is_active: e.target.checked })}
-                    />
-                    <span>
-                      <strong style={{ display: 'block', fontSize: '0.85rem' }}>Task is Active (Live)</strong>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Uncheck to hide from users without deleting.</span>
-                    </span>
-                  </label>
-
-                  <button type="submit" className="btn btn-primary" style={{ padding: '12px', marginTop: '4px', fontSize: '0.9rem' }}>
-                    {editingVisitTask ? 'Save Changes' : 'Publish Task'}
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 5: WITHDRAWALS QUEUE */}
-          {activeTab === 'withdrawals' && (
-            <div className="glass-panel" style={{ padding: '30px' }}>
-              <div className="table-container">
-                <table className="glass-table">
-                  <thead>
-                    <tr>
-                      <th>User</th>
-                      <th>Method</th>
-                      <th>Payout Details</th>
-                      <th>Amount</th>
-                      <th>Request Date</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {withdrawalsList.map(w => (
-                      <tr key={w.id}>
-                        <td>
-                          <strong>{w.user_name}</strong>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{w.user_email}</p>
-                        </td>
-                        <td><span className="badge badge-pending" style={{ background: 'rgba(255,255,255,0.05)', color: '#fff' }}>{w.method}</span></td>
-                        <td><code style={{ fontSize: '0.85rem', background: 'rgba(0,0,0,0.2)', padding: '4px 8px', borderRadius: '4px' }}>{w.details}</code></td>
-                        <td><strong style={{ color: 'var(--primary-hover)' }}>₹{parseFloat(w.amount).toFixed(2)}</strong></td>
-                        <td style={{ fontSize: '0.85rem' }}>{new Date(w.created_at).toLocaleString()}</td>
-                        <td>
-                          <span className={`badge badge-${w.status.toLowerCase()}`}>{w.status}</span>
-                        </td>
-                        <td>
-                          {w.status === 'PENDING' ? (
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.75rem', background: 'var(--success)', border: 'none' }} onClick={() => handleApproveWithdrawal(w.id)}>
-                                <Check size={12} /> Settle
-                              </button>
-                              <button className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '0.75rem' }} onClick={() => triggerRejectWithdrawal(w)}>
-                                <X size={12} /> Reject
-                              </button>
-                            </div>
-                          ) : (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Processed</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {withdrawalsList.length === 0 && (
-                      <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>No payout requests matching parameters.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 14: OFFLINE SUBMISSIONS AUDIT PANEL */}
-          {activeTab === 'proofs' && (
-            <div className="glass-panel" style={{ padding: '30px' }}>
-              <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <div>
-                  <h3 style={{ fontSize: '1.25rem', margin: 0 }}>Offline Submissions Audit Panel</h3>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                    Review evidence files and credentials submitted by candidates to approve rewards.
-                  </p>
+                  <button className="btn btn-sm btn-outline-secondary rounded-pill" onClick={fetchProofs}><i className="fas fa-sync-alt mr-1"></i> Refresh Queue</button>
                 </div>
-                <button className="btn btn-secondary" style={{ padding: '8px 16px', gap: '6px' }} onClick={fetchProofs}>
-                  <RefreshCw size={16} /> Refresh Queue
-                </button>
-              </div>
-
-              <div className="table-container">
-                <table className="glass-table">
-                  <thead>
-                    <tr>
-                      <th>User Candidate</th>
-                      <th>Target Campaign</th>
-                      <th>Submitted Evidence</th>
-                      <th>Campaign Payout</th>
-                      <th>Submission Date</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {proofsList.map(p => {
-                      // Safe parsing of user_input JSON
-                      let inputs = [];
-                      if (p.user_input) {
-                        try {
-                          inputs = typeof p.user_input === 'string' ? JSON.parse(p.user_input) : p.user_input;
-                        } catch (err) {
-                          console.error("Error parsing user_input:", err);
+                <div className="card-body table-responsive p-0">
+                  <table className="table table-hover text-nowrap align-middle">
+                    <thead>
+                      <tr className="text-xs text-muted uppercase">
+                        <th>Candidate</th>
+                        <th>Target Campaign</th>
+                        <th>Evidence / Inputs</th>
+                        <th>Compensation</th>
+                        <th>Submitted On</th>
+                        <th className="text-right pr-4">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {proofsList.map(p => {
+                        let inputs = [];
+                        if (p.user_input) {
+                          try { inputs = typeof p.user_input === 'string' ? JSON.parse(p.user_input) : p.user_input; }
+                          catch(e) {}
                         }
-                      }
-
-                      return (
-                        <tr key={p.id}>
-                          <td>
-                            <strong>{p.user_name || 'Anonymous'}</strong>
-                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>ID: <code>{p.user_public_id}</code></p>
-                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{p.user_email}</p>
-                          </td>
-                          <td>
-                            <strong>{p.offer_title}</strong>
-                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Category: <span className="badge badge-pending" style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: 'none', padding: '2px 6px' }}>{p.input_type || 'Manual'}</span></p>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '300px' }}>
-                              {Array.isArray(inputs) ? (
-                                inputs.map((inp, idx) => {
+                        return (
+                          <tr key={p.id}>
+                            <td><strong>{p.user_name || 'Anonymous'}</strong><br /><span className="text-xs text-muted">ID: {p.user_public_id}</span></td>
+                            <td><strong>{p.offer_title}</strong></td>
+                            <td>
+                              <div style={{ maxWidth: '320px', whiteSpace: 'normal' }}>
+                                {Array.isArray(inputs) ? inputs.map((inp, idx) => {
                                   if (inp.type === 'file') {
-                                    // Make sure URL is complete
-                                    const fileUrl = inp.value && inp.value.startsWith('http') 
-                                      ? inp.value 
-                                      : `${API_BASE}${inp.value}`;
+                                    const fileUrl = inp.value.startsWith('http') ? inp.value : `${API_BASE}${inp.value}`;
                                     return (
-                                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{inp.label}:</span>
-                                        <a 
-                                          href={fileUrl} 
-                                          target="_blank" 
-                                          rel="noreferrer" 
-                                          className="btn btn-secondary" 
-                                          style={{ 
-                                            padding: '6px 12px', 
-                                            fontSize: '0.75rem', 
-                                            display: 'inline-flex', 
-                                            alignItems: 'center', 
-                                            gap: '6px',
-                                            alignSelf: 'flex-start',
-                                            textDecoration: 'none',
-                                            background: 'rgba(59, 130, 246, 0.1)',
-                                            color: '#60a5fa',
-                                            border: '1px solid rgba(59, 130, 246, 0.2)'
-                                          }}
-                                        >
-                                          <Eye size={12} /> View Screenshot / Image
-                                        </a>
-                                      </div>
-                                    );
-                                  } else {
-                                    return (
-                                      <div key={idx} style={{ fontSize: '0.85rem' }}>
-                                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{inp.label}: </span>
-                                        <code style={{ background: 'rgba(0,0,0,0.2)', padding: '2px 6px', borderRadius: '4px', wordBreak: 'break-all' }}>{inp.value || 'N/A'}</code>
+                                      <div key={idx} className="mt-1">
+                                        <a href={fileUrl} target="_blank" rel="noreferrer" className="btn btn-xs btn-outline-info rounded-pill px-2"><i className="fas fa-image mr-1"></i> View Screen</a>
                                       </div>
                                     );
                                   }
-                                })
-                              ) : (
-                                <div style={{ fontSize: '0.85rem' }}>
-                                  <span style={{ color: 'var(--text-secondary)' }}>Input: </span>
-                                  <code>{p.user_input || 'N/A'}</code>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td>
-                            <div>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>User Reward</span>
-                              <p style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--accent)', margin: 0 }}>{parseFloat(p.offer_reward || 0).toFixed(2)} coins</p>
-                            </div>
-                          </td>
-                          <td style={{ fontSize: '0.85rem' }}>{new Date(p.last_updated).toLocaleString()}</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button 
-                                className="btn btn-primary" 
-                                style={{ padding: '6px 12px', fontSize: '0.75rem', background: 'var(--success)', border: 'none' }} 
-                                onClick={() => handleApproveProof(p.click_id)}
-                              >
-                                <Check size={12} /> Pass
-                              </button>
-                              <button 
-                                className="btn btn-danger" 
-                                style={{ padding: '6px 12px', fontSize: '0.75rem' }} 
-                                onClick={() => triggerRejectProof(p.click_id)}
-                              >
-                                <X size={12} /> Fail
-                              </button>
-                            </div>
+                                  return (
+                                    <div key={idx} className="text-xs">
+                                      <span className="text-muted font-weight-bold">{inp.label}:</span> <code>{inp.value}</code>
+                                    </div>
+                                  );
+                                }) : <code>{p.user_input}</code>}
+                              </div>
+                            </td>
+                            <td><strong className="text-success">₹{parseFloat(p.offer_reward || 0).toFixed(2)}</strong></td>
+                            <td className="text-sm">{new Date(p.last_updated).toLocaleString()}</td>
+                            <td className="text-right pr-4">
+                              <div className="btn-group">
+                                <button className="btn btn-xs btn-success rounded-pill px-3 mr-2" onClick={() => handleApproveProof(p.click_id)}>Pass</button>
+                                <button className="btn btn-xs btn-danger rounded-pill px-3" onClick={() => triggerRejectProof(p.click_id)}>Fail</button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {proofsList.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="text-center text-muted p-4">No pending campaign proofs to audit.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: DATA ERASURES */}
+            {activeTab === 'erasures' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-header border-0 bg-transparent">
+                  <h3 className="card-title font-weight-bold"><i className="fas fa-exclamation-triangle text-danger mr-2"></i> gdpr deletion requests</h3>
+                </div>
+                <div className="card-body table-responsive p-0">
+                  <table className="table table-hover text-nowrap align-middle">
+                    <thead>
+                      <tr className="text-xs text-muted uppercase">
+                        <th>Email</th>
+                        <th>User Reason</th>
+                        <th>Submitted On</th>
+                        <th>Request Status</th>
+                        <th className="text-right pr-4">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {erasuresList.map(e => (
+                        <tr key={e.id}>
+                          <td><strong>{e.email}</strong></td>
+                          <td style={{ whiteSpace: 'normal', maxWidth: '300px' }}>{e.reason || 'None provided.'}</td>
+                          <td className="text-sm">{new Date(e.created_at).toLocaleString()}</td>
+                          <td><span className={`badge badge-${e.status === 'PENDING' ? 'warning' : 'success'} px-2`}>{e.status}</span></td>
+                          <td className="text-right pr-4">
+                            {e.status === 'PENDING' ? (
+                              <div className="btn-group">
+                                <button className="btn btn-xs btn-danger rounded-pill px-3 mr-2" onClick={() => handleApproveErasure(e.id)}>Purge DB</button>
+                                <button className="btn btn-xs btn-outline-secondary rounded-pill px-3" onClick={() => handleRejectErasure(e.id)}>Dismiss</button>
+                              </div>
+                            ) : <span className="text-xs text-muted">Cleared</span>}
                           </td>
                         </tr>
-                      );
-                    })}
-                    {proofsList.length === 0 && (
-                      <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
-                          No pending offline proofs to audit.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                      ))}
+                      {erasuresList.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="text-center text-muted p-4">No deletion logs.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* TAB 5: DATA ERASURES */}
-          {activeTab === 'erasures' && (
-            <div className="glass-panel" style={{ padding: '30px' }}>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '24px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '12px', padding: '16px' }}>
-                <AlertTriangle size={24} style={{ color: 'var(--danger)', flexShrink: 0 }} />
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-                  <strong>COMPLIANCE BOARD:</strong> According to data protection rights, users have requested permanent deletion of their account databases. Approving a request will completely remove their records from the <code>users</code> table, wiping ledger history, transaction transactions, and metadata completely.
-                </p>
+            {/* TAB 6: BROADCAST CENTER */}
+            {activeTab === 'push' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-body">
+                  <AdminNotifications getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+                </div>
               </div>
+            )}
 
-              <div className="table-container">
-                <table className="glass-table">
-                  <thead>
-                    <tr>
-                      <th>Requested Email</th>
-                      <th>Feedback Reason</th>
-                      <th>Request Date</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {erasuresList.map(e => (
-                      <tr key={e.id}>
-                        <td><strong>{e.email}</strong></td>
-                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{e.reason || 'No feedback shared.'}</td>
-                        <td style={{ fontSize: '0.85rem' }}>{new Date(e.created_at).toLocaleString()}</td>
-                        <td>
-                          <span className={`badge badge-${e.status.toLowerCase()}`}>{e.status}</span>
-                        </td>
-                        <td>
-                          {e.status === 'PENDING' ? (
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '0.75rem' }} onClick={() => handleApproveErasure(e.id)}>
-                                <Trash2 size={12} /> Purge Data
-                              </button>
-                              <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.75rem' }} onClick={() => handleRejectErasure(e.id)}>
-                                <X size={12} /> Dismiss
-                              </button>
-                            </div>
-                          ) : (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Finished</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {erasuresList.length === 0 && (
-                      <tr>
-                        <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>No deletion requests in system database.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+            {/* TAB 7: APP CONFIGS */}
+            {activeTab === 'configs' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-body">
+                  <AdminConfigs getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* TAB 6: BROADCAST CENTER */}
-          {activeTab === 'push' && (
-            <div>
-              <AdminNotifications getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
-            </div>
-          )}
+            {/* TAB 8: BANNERS MANAGER */}
+            {activeTab === 'banners' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-body">
+                  <AdminBanners getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+                </div>
+              </div>
+            )}
 
-          {/* TAB 7: APP CONFIGS */}
-          {activeTab === 'configs' && (
-            <div>
-              <AdminConfigs getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
-            </div>
-          )}
+            {/* TAB 9: PAYOUT METHODS */}
+            {activeTab === 'payouts' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-body">
+                  <AdminPayouts getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+                </div>
+              </div>
+            )}
 
-          {/* TAB 8: BANNERS MANAGER */}
-          {activeTab === 'banners' && (
-            <div>
-              <AdminBanners getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
-            </div>
-          )}
+            {/* TAB 10: REFERRAL SETTINGS */}
+            {activeTab === 'referrals' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-body">
+                  <AdminReferrals getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+                </div>
+              </div>
+            )}
 
-          {/* TAB 9: PAYOUT METHODS */}
-          {activeTab === 'payouts' && (
-            <div>
-              <AdminPayouts getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
-            </div>
-          )}
+            {/* TAB 11: SURPRISE ENVELOPES */}
+            {activeTab === 'lifafas' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-body">
+                  <AdminLifafas getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+                </div>
+              </div>
+            )}
 
-          {/* TAB 10: REFERRAL SETTINGS */}
-          {activeTab === 'referrals' && (
-            <div>
-              <AdminReferrals getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
-            </div>
-          )}
+            {/* TAB 12: SUPPORT TICKETS */}
+            {activeTab === 'tickets' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-body">
+                  <AdminTickets getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+                </div>
+              </div>
+            )}
 
-          {/* TAB 11: SURPRISE ENVELOPES */}
-          {activeTab === 'lifafas' && (
-            <div>
-              <AdminLifafas getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
-            </div>
-          )}
+            {/* TAB 13: FINANCIAL REPORTS */}
+            {activeTab === 'reports' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-body">
+                  <AdminReports getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+                </div>
+              </div>
+            )}
 
-          {/* TAB 12: SUPPORT TICKETS */}
-          {activeTab === 'tickets' && (
-            <div>
-              <AdminTickets getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
-            </div>
-          )}
-
-          {/* TAB 13: FINANCIAL REPORTS */}
-          {activeTab === 'reports' && (
-            <div>
-              <AdminReports getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
-            </div>
-          )}
-
-        </main>
+          </div>
+        </section>
       </div>
+
+      {/* FOOTER */}
+      <footer className="main-footer bg-white border-top-0 text-sm py-3 text-center text-md-left">
+        <strong>Copyright &copy; 2026 StuEarn Admin.</strong> All rights reserved.
+      </footer>
 
       {/* Adjust User Balance Modal */}
       {adjustBalanceModal && selectedUser && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div className="glass-panel" style={{ maxWidth: '420px', width: '100%', padding: '30px' }}>
-            <h3 style={{ fontSize: '1.2rem', marginBottom: '20px' }}>Adjust Balance for {selectedUser.name}</h3>
-            
-            <form onSubmit={handleAdjustBalance} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <button 
-                  type="button" 
-                  className="btn" 
-                  style={{ 
-                    background: adjustType === 'CREDIT' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
-                    border: adjustType === 'CREDIT' ? '1px solid var(--success)' : '1px solid var(--border-glass)',
-                    color: adjustType === 'CREDIT' ? 'var(--success)' : 'var(--text-secondary)'
-                  }}
-                  onClick={() => setAdjustType('CREDIT')}
-                >
-                  <PlusCircle size={16} /> Credit (Add)
-                </button>
-                <button 
-                  type="button" 
-                  className="btn" 
-                  style={{ 
-                    background: adjustType === 'DEBIT' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255,255,255,0.03)',
-                    border: adjustType === 'DEBIT' ? '1px solid var(--danger)' : '1px solid var(--border-glass)',
-                    color: adjustType === 'DEBIT' ? 'var(--danger)' : 'var(--text-secondary)'
-                  }}
-                  onClick={() => setAdjustType('DEBIT')}
-                >
-                  <MinusCircle size={16} /> Debit (Deduct)
-                </button>
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10000 }} role="dialog">
+          <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-content rounded-lg border-0 shadow">
+              <div className="modal-header border-bottom-0">
+                <h5 className="modal-title font-weight-bold">Adjust Wallet Balance</h5>
+                <button type="button" className="close" onClick={() => setAdjustBalanceModal(false)}>&times;</button>
               </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Coin Amount</label>
-                <input 
-                  type="number" 
-                  className="glass-input" 
-                  placeholder="0.00" 
-                  value={adjustAmount}
-                  onChange={(e) => setAdjustAmount(e.target.value)}
-                  step="0.01"
-                  required
-                />
+              <div className="modal-body pt-0">
+                <p className="text-secondary text-xs">Modifying coins balance for: <strong>{selectedUser.name}</strong></p>
+                <form onSubmit={handleAdjustBalance}>
+                  <div className="btn-group btn-group-toggle w-100 mb-3" data-toggle="buttons">
+                    <label className={`btn flex-fill ${adjustType === 'CREDIT' ? 'btn-success' : 'btn-outline-secondary'}`} onClick={() => setAdjustType('CREDIT')}>
+                      <i className="fas fa-plus mr-1"></i> Credit (Add)
+                    </label>
+                    <label className={`btn flex-fill ${adjustType === 'DEBIT' ? 'btn-danger' : 'btn-outline-secondary'}`} onClick={() => setAdjustType('DEBIT')}>
+                      <i className="fas fa-minus mr-1"></i> Debit (Deduct)
+                    </label>
+                  </div>
+                  <div className="form-group mb-3">
+                    <label className="text-muted text-xs font-weight-bold mb-1">Coin Quantity</label>
+                    <input type="number" className="form-control" placeholder="0.00" value={adjustAmount} onChange={e => setAdjustAmount(e.target.value)} step="0.01" required />
+                  </div>
+                  <div className="form-group mb-3">
+                    <label className="text-muted text-xs font-weight-bold mb-1">Ledger Description</label>
+                    <input type="text" className="form-control" placeholder="Manual adjustments details" value={adjustDesc} onChange={e => setAdjustDesc(e.target.value)} />
+                  </div>
+                  <div className="d-flex mt-4 gap-2">
+                    <button type="submit" className="btn btn-primary flex-fill rounded-pill py-2">Apply Ledger Entry</button>
+                    <button type="button" className="btn btn-outline-secondary flex-fill rounded-pill py-2" onClick={() => setAdjustBalanceModal(false)}>Cancel</button>
+                  </div>
+                </form>
               </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Adjustment Reason / Source Description</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  placeholder="e.g. Special community reward"
-                  value={adjustDesc}
-                  onChange={(e) => setAdjustDesc(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '10px' }}>Execute</button>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '10px' }} onClick={() => setAdjustBalanceModal(false)}>Cancel</button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Edit User Info Modal */}
       {editUserModal && selectedUser && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div className="glass-panel" style={{ maxWidth: '480px', width: '100%', padding: '30px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ fontSize: '1.2rem', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Edit Profile Details</span>
-              <button className="btn btn-secondary" style={{ padding: '4px' }} onClick={() => setEditUserModal(false)}><X size={16} /></button>
-            </h3>
-            
-            <form onSubmit={handleEditUserSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Full Name</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  value={editUserForm.name}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, name: e.target.value })}
-                  required
-                />
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10000 }} role="dialog">
+          <div className="modal-dialog modal-dialog-centered modal-lg" role="document">
+            <div className="modal-content rounded-lg border-0 shadow" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+              <div className="modal-header border-bottom-0">
+                <h5 className="modal-title font-weight-bold">Edit Candidate Profile</h5>
+                <button type="button" className="close" onClick={() => setEditUserModal(false)}>&times;</button>
               </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Email Address</label>
-                <input 
-                  type="email" 
-                  className="glass-input" 
-                  value={editUserForm.email}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, email: e.target.value })}
-                  required
-                />
+              <div className="modal-body pt-0">
+                <form onSubmit={handleEditUserSubmit}>
+                  <div className="row">
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Full Name</label>
+                      <input type="text" className="form-control" value={editUserForm.name} onChange={e => setEditUserForm({ ...editUserForm, name: e.target.value })} required />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Email Address</label>
+                      <input type="email" className="form-control" value={editUserForm.email} onChange={e => setEditUserForm({ ...editUserForm, email: e.target.value })} required />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Phone Number</label>
+                      <input type="text" className="form-control" value={editUserForm.phone_number} onChange={e => setEditUserForm({ ...editUserForm, phone_number: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Location</label>
+                      <input type="text" className="form-control" value={editUserForm.location} onChange={e => setEditUserForm({ ...editUserForm, location: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Referral Code</label>
+                      <input type="text" className="form-control" value={editUserForm.referral_code} onChange={e => setEditUserForm({ ...editUserForm, referral_code: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Balance</label>
+                      <input type="number" className="form-control" step="0.01" value={editUserForm.balance} onChange={e => setEditUserForm({ ...editUserForm, balance: e.target.value })} required />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">User ID</label>
+                      <input type="text" className="form-control" value={editUserForm.user_id} onChange={e => setEditUserForm({ ...editUserForm, user_id: e.target.value })} required />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Firebase UID</label>
+                      <input type="text" className="form-control" value={editUserForm.uid} onChange={e => setEditUserForm({ ...editUserForm, uid: e.target.value })} required />
+                    </div>
+                    <div className="col-md-12 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Android Device Identifier</label>
+                      <input type="text" className="form-control" value={editUserForm.android_id} onChange={e => setEditUserForm({ ...editUserForm, android_id: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="d-flex mt-4 gap-2 pb-3">
+                    <button type="submit" className="btn btn-primary flex-fill rounded-pill py-2">Save Changes</button>
+                    <button type="button" className="btn btn-outline-secondary flex-fill rounded-pill py-2" onClick={() => setEditUserModal(false)}>Cancel</button>
+                  </div>
+                </form>
               </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Phone Number</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  value={editUserForm.phone_number}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, phone_number: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Location / Country</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  value={editUserForm.location}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, location: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Referral Code</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  value={editUserForm.referral_code}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, referral_code: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Wallet Balance (Coins)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  className="glass-input" 
-                  value={editUserForm.balance}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, balance: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Public User ID</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  value={editUserForm.user_id}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, user_id: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Firebase UID</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  value={editUserForm.uid}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, uid: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Android Device ID</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  value={editUserForm.android_id}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, android_id: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Daily Spins Count</label>
-                <input 
-                  type="number" 
-                  className="glass-input" 
-                  value={editUserForm.daily_spins_count}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, daily_spins_count: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Current Streak Days</label>
-                <input 
-                  type="number" 
-                  className="glass-input" 
-                  value={editUserForm.current_streak}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, current_streak: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Referred By (User UUID)</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  placeholder="Direct / Organic"
-                  value={editUserForm.referred_by}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, referred_by: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">FCM Push Notification Token</label>
-                <textarea 
-                  rows={2}
-                  className="glass-input" 
-                  value={editUserForm.fcm_token}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, fcm_token: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '10px' }}>Save Changes</button>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '10px' }} onClick={() => setEditUserModal(false)}>Cancel</button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Reject Withdrawal Modal */}
       {rejectModal && selectedWithdrawal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div className="glass-panel" style={{ maxWidth: '420px', width: '100%', padding: '30px' }}>
-            <h3 style={{ fontSize: '1.2rem', marginBottom: '20px' }}>Reject Payout for {selectedWithdrawal.user_name}</h3>
-            
-            <form onSubmit={handleRejectWithdrawalSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Reason for Rejection (Visible to User)</label>
-                <textarea 
-                  className="glass-input" 
-                  rows={4}
-                  placeholder="e.g. Invalid UPI identifier or proof verification failed."
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  required
-                />
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10000 }} role="dialog">
+          <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-content rounded-lg border-0 shadow">
+              <div className="modal-header border-bottom-0">
+                <h5 className="modal-title font-weight-bold">Reject Payout Request</h5>
+                <button type="button" className="close" onClick={() => { setRejectModal(false); setSelectedWithdrawal(null); }}>&times;</button>
               </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <button type="submit" className="btn btn-danger" style={{ flex: 1, padding: '10px' }}>Reject & Refund</button>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '10px' }} onClick={() => { setRejectModal(false); setSelectedWithdrawal(null); }}>Cancel</button>
+              <div className="modal-body pt-0">
+                <form onSubmit={handleRejectWithdrawalSubmit}>
+                  <div className="form-group mb-3">
+                    <label className="text-muted text-xs font-weight-bold mb-1">Reason for Rejection (visible to candidate)</label>
+                    <textarea className="form-control" rows={4} placeholder="e.g. Invalid identifier or metadata verification failure." value={rejectReason} onChange={e => setRejectReason(e.target.value)} required />
+                  </div>
+                  <div className="d-flex mt-4 gap-2">
+                    <button type="submit" className="btn btn-danger flex-fill rounded-pill py-2">Reject & Refund Payout</button>
+                    <button type="button" className="btn btn-outline-secondary flex-fill rounded-pill py-2" onClick={() => { setRejectModal(false); setSelectedWithdrawal(null); }}>Cancel</button>
+                  </div>
+                </form>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Reject Proof Modal */}
       {rejectProofModal && rejectProofClickId && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div className="glass-panel" style={{ maxWidth: '420px', width: '100%', padding: '30px' }}>
-            <h3 style={{ fontSize: '1.2rem', marginBottom: '20px' }}>Reject Proof Submission</h3>
-            
-            <form onSubmit={handleRejectProofSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Reason for Rejection (Visible to User)</label>
-                <textarea 
-                  className="glass-input" 
-                  rows={4}
-                  placeholder="e.g. Screenshot does not match target instructions, or credentials could not be verified."
-                  value={rejectProofReason}
-                  onChange={(e) => setRejectProofReason(e.target.value)}
-                  required
-                />
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10000 }} role="dialog">
+          <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-content rounded-lg border-0 shadow">
+              <div className="modal-header border-bottom-0">
+                <h5 className="modal-title font-weight-bold">Reject Campaign Proof</h5>
+                <button type="button" className="close" onClick={() => { setRejectProofModal(false); setRejectProofClickId(null); setRejectProofReason(''); }}>&times;</button>
               </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <button type="submit" className="btn btn-danger" style={{ flex: 1, padding: '10px' }}>Confirm Rejection</button>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '10px' }} onClick={() => { setRejectProofModal(false); setRejectProofClickId(null); setRejectProofReason(''); }}>Cancel</button>
+              <div className="modal-body pt-0">
+                <form onSubmit={handleRejectProofSubmit}>
+                  <div className="form-group mb-3">
+                    <label className="text-muted text-xs font-weight-bold mb-1">Reason for Rejection (visible to candidate)</label>
+                    <textarea className="form-control" rows={4} placeholder="e.g. Evidence image does not verify campaign actions." value={rejectProofReason} onChange={e => setRejectProofReason(e.target.value)} required />
+                  </div>
+                  <div className="d-flex mt-4 gap-2">
+                    <button type="submit" className="btn btn-danger flex-fill rounded-pill py-2">Confirm Reject</button>
+                    <button type="button" className="btn btn-outline-secondary flex-fill rounded-pill py-2" onClick={() => { setRejectProofModal(false); setRejectProofClickId(null); setRejectProofReason(''); }}>Cancel</button>
+                  </div>
+                </form>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

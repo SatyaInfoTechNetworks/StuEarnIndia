@@ -17,6 +17,11 @@ This guide is the complete, high-fidelity technical specification for integratin
   * When Firebase App Check middleware is activated on the server, all authentication endpoints (`/api/auth/*`) require:
     * `X-App-Check`: `<firebase_app_check_token>`
 
+> [!IMPORTANT]
+> **Identifier Architectural Scope**:
+> * **Firebase UID (`uid`)**: This is strictly utilized *only* for the initial registration (signup) and login/checking pipelines under `/api/auth/*`.
+> * **User UUID (`id`) / Public ID (`user_id`)**: All remaining application endpoints (e.g. wallet ledger, task list progress, daily check-ins, withdrawals, support tickets, etc.) are mapped and processed using the unique User UUID (`id`) or the public 10-character hex identifier (`user_id`) returned during signup/login. Do *not* pass the Firebase UID for these operations.
+
 ---
 
 ## 2. Onboarding & Anti-Cloning Device Telemetry

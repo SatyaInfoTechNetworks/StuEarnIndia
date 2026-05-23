@@ -1227,3 +1227,37 @@ export const rejectProof = async (req, res) => {
     connection.release();
   }
 };
+
+export const resetAllDailySpins = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    // 1. Reset spins count in users table
+    await connection.query('UPDATE users SET daily_spins_count = 0');
+    // 2. Fetch configured default daily spins count
+    const [configRows] = await connection.query('SELECT config_value FROM app_configs WHERE config_key = "spin_daily_limit" LIMIT 1');
+    const defaultSpins = configRows.length > 0 ? parseInt(configRows[0].config_value || 2) : 2;
+    // 3. Reset spins count in lucky_spins table
+    await connection.query('UPDATE lucky_spins SET spins_left = ?', [defaultSpins]);
+    
+    // Log admin action
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'RESET_ALL_DAILY_SPINS',
+      targetId: 'ALL_USERS',
+      payload: { defaultSpins },
+      req
+    });
+
+    await connection.commit();
+    res.json({ success: true, message: 'All users daily spins count successfully reset.' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Reset Daily Spins Error:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  } finally {
+    connection.release();
+  }
+};
+

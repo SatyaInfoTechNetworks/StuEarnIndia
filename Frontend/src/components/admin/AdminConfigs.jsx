@@ -1,141 +1,657 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Plus, Edit3, X, RefreshCw } from 'lucide-react';
+import { Settings, Save, RefreshCw, AlertTriangle, Coins, Sparkles, Smartphone, Eye, EyeOff } from 'lucide-react';
 
 export default function AdminConfigs({ getHeaders, showNotice, API_BASE }) {
-  const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingKey, setEditingKey] = useState(null);
-  const [editingValue, setEditingValue] = useState('');
-  const [savingKey, setSavingKey] = useState(null);
-  // New config form
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [newKey, setNewKey] = useState('');
-  const [newValue, setNewValue] = useState('');
-  const [newDescription, setNewDescription] = useState('');
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [configsList, setConfigsList] = useState([]);
+  const [isResettingSpins, setIsResettingSpins] = useState(false);
+
+  // --- STATE FOR DETAILED CONFIG CARDS ---
+  // A. Spin Probabilities
+  const [spinProbabilities, setSpinProbabilities] = useState([
+    { type: 'JACKPOT', range: [500, 500], prob: 1 },
+    { type: 'BIG',     range: [200, 300], prob: 9 },
+    { type: 'MEDIUM',  range: [50, 100],  prob: 20 },
+    { type: 'SMALL',   range: [10, 30],   prob: 40 },
+    { type: 'NONE',    range: [0, 0],     prob: 30 }
+  ]);
+
+  // B. Loyalty Streak Rewards
+  const [streakRewards, setStreakRewards] = useState({
+    1: 30, 2: 40, 3: 50, 4: 60, 5: 70, 6: 80, 7: 200
+  });
+
+  // C. Update Engine & Maintenance
+  const [versionName, setVersionName] = useState('1.1.2');
+  const [versionCode, setVersionCode] = useState('16');
+  const [updateUrl, setUpdateUrl] = useState('https://play.google.com/store/apps/details?id=com.thinkforgeapps.stuearnindia');
+  const [updateMessage, setUpdateMessage] = useState('A critical update is available!');
+  const [forceUpdate, setForceUpdate] = useState('true');
+  const [isMaintenance, setIsMaintenance] = useState('false');
+
+  // D. Daily Spin Grant
+  const [spinDailyLimit, setSpinDailyLimit] = useState('2');
+
+  // E. Watch & Earn Settings
+  const [watchDailyLimit, setWatchDailyLimit] = useState('5');
+  const [watchMinReward, setWatchMinReward] = useState('5');
+  const [watchMaxReward, setWatchMaxReward] = useState('10');
+
+  // F. Scratch & Win Settings
+  const [scratchDailyLimit, setScratchDailyLimit] = useState('5');
+  const [scratchMinReward, setScratchMinReward] = useState('5');
+  const [scratchMaxReward, setScratchMaxReward] = useState('20');
+
+  // G. Daily Withdrawal Limit
+  const [dailyWithdrawLimit, setDailyWithdrawLimit] = useState('2');
 
   const fetchConfigs = async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/admin/configs`, { headers: getHeaders() });
       const data = await res.json();
-      if (data.success) setConfigs(data.configs || []);
+      if (data.success) {
+        const list = data.configs || [];
+        setConfigsList(list);
+
+        // Map list values to localized card states
+        list.forEach(cfg => {
+          try {
+            if (cfg.config_key === 'spin_probabilities') {
+              const parsed = JSON.parse(cfg.config_value);
+              if (Array.isArray(parsed)) setSpinProbabilities(parsed);
+            } else if (cfg.config_key === 'streak_rewards') {
+              const parsed = JSON.parse(cfg.config_value);
+              if (parsed && typeof parsed === 'object') setStreakRewards(parsed);
+            } else if (cfg.config_key === 'latest_version') {
+              setVersionName(cfg.config_value);
+            } else if (cfg.config_key === 'latest_version_code') {
+              setVersionCode(cfg.config_value);
+            } else if (cfg.config_key === 'update_url') {
+              setUpdateUrl(cfg.config_value);
+            } else if (cfg.config_key === 'update_message') {
+              setUpdateMessage(cfg.config_value);
+            } else if (cfg.config_key === 'force_update') {
+              setForceUpdate(cfg.config_value);
+            } else if (cfg.config_key === 'is_maintenance') {
+              setIsMaintenance(cfg.config_value);
+            } else if (cfg.config_key === 'spin_daily_limit') {
+              setSpinDailyLimit(cfg.config_value);
+            } else if (cfg.config_key === 'watch_video_daily_limit') {
+              setWatchDailyLimit(cfg.config_value);
+            } else if (cfg.config_key === 'watch_video_reward_min') {
+              setWatchMinReward(cfg.config_value);
+            } else if (cfg.config_key === 'watch_video_reward_max') {
+              setWatchMaxReward(cfg.config_value);
+            } else if (cfg.config_key === 'scratch_card_daily_limit') {
+              setScratchDailyLimit(cfg.config_value);
+            } else if (cfg.config_key === 'scratch_card_reward_min') {
+              setScratchMinReward(cfg.config_value);
+            } else if (cfg.config_key === 'scratch_card_reward_max') {
+              setScratchMaxReward(cfg.config_value);
+            } else if (cfg.config_key === 'daily_withdraw_limit') {
+              setDailyWithdrawLimit(cfg.config_value);
+            }
+          } catch (e) {
+            console.error(`Error parsing key ${cfg.config_key}:`, e);
+          }
+        });
+      }
     } catch (err) {
       console.error(err);
+      showNotice('error', 'Failed to retrieve active configurations');
     }
     setLoading(false);
   };
 
-  useEffect(() => { fetchConfigs(); }, []);
+  useEffect(() => {
+    fetchConfigs();
+  }, []);
 
-  const startEditing = (cfg) => {
-    setEditingKey(cfg.key);
-    setEditingValue(cfg.value);
-  };
-
-  const cancelEditing = () => {
-    setEditingKey(null);
-    setEditingValue('');
-  };
-
-  const saveConfig = async (key) => {
-    setSavingKey(key);
+  // --- SAVE METHODS PER CARD ---
+  const saveSingleConfig = async (key, value) => {
     try {
       const res = await fetch(`${API_BASE}/api/admin/configs`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ key, value: editingValue })
+        body: JSON.stringify({ config_key: key, config_value: String(value) })
       });
       const data = await res.json();
-      if (data.success) {
-        showNotice('success', `Config "${key}" updated.`);
-        setEditingKey(null);
-        fetchConfigs();
-      } else {
-        showNotice('error', data.message);
-      }
+      return data.success;
     } catch (err) {
-      showNotice('error', 'Failed to update config');
+      console.error(err);
+      return false;
     }
-    setSavingKey(null);
   };
 
-  const saveNewConfig = async (e) => {
-    e.preventDefault();
-    if (!newKey.trim()) return;
+  // 1. Save Spin Probabilities
+  const handleSaveSpinProbabilities = async () => {
+    // Validate probabilities sum to 100
+    const totalProb = spinProbabilities.reduce((sum, item) => sum + parseFloat(item.prob || 0), 0);
+    if (totalProb !== 100) {
+      showNotice('error', `Spin probabilities must sum up exactly to 100%. Currently: ${totalProb}%`);
+      return;
+    }
+
+    const success = await saveSingleConfig('spin_probabilities', JSON.stringify(spinProbabilities));
+    if (success) {
+      showNotice('success', 'Master Spin Probabilities updated successfully.');
+      fetchConfigs();
+    } else {
+      showNotice('error', 'Failed to save spin probabilities.');
+    }
+  };
+
+  // 2. Reset All Users Spins Bulk Trigger
+  const handleResetSpins = async () => {
+    if (!window.confirm("Are you sure you want to reset daily spins for ALL active database users back to 0?")) return;
+    setIsResettingSpins(true);
     try {
-      const res = await fetch(`${API_BASE}/api/admin/configs`, {
+      const res = await fetch(`${API_BASE}/api/admin/users/reset-spins`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ key: newKey, value: newValue, description: newDescription })
+        body: JSON.stringify({ limit: spinDailyLimit })
       });
       const data = await res.json();
       if (data.success) {
-        showNotice('success', `Config "${newKey}" saved.`);
-        setShowNewForm(false);
-        setNewKey(''); setNewValue(''); setNewDescription('');
-        fetchConfigs();
+        showNotice('success', data.message || 'All user spins reset successfully.');
       } else {
         showNotice('error', data.message);
       }
     } catch (err) {
-      showNotice('error', 'Failed to save config');
+      showNotice('error', 'Network failure during spins reset.');
+    }
+    setIsResettingSpins(false);
+  };
+
+  // 3. Save Loyalty Streak Rewards
+  const handleSaveStreakRewards = async () => {
+    const success = await saveSingleConfig('streak_rewards', JSON.stringify(streakRewards));
+    if (success) {
+      showNotice('success', 'Daily Loyalty Streak Rewards updated successfully.');
+      fetchConfigs();
+    } else {
+      showNotice('error', 'Failed to save streak rewards.');
     }
   };
 
-  const getValuePreview = (value) => {
-    if (!value) return <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>empty</span>;
-    if (value.length > 60) return <span title={value}>{value.substring(0, 60)}...</span>;
-    return value;
+  // 4. Save Update Engine & Maintenance
+  const handleSaveUpdateEngine = async () => {
+    const results = await Promise.all([
+      saveSingleConfig('latest_version', versionName),
+      saveSingleConfig('latest_version_code', versionCode),
+      saveSingleConfig('update_url', updateUrl),
+      saveSingleConfig('update_message', updateMessage),
+      saveSingleConfig('force_update', forceUpdate),
+      saveSingleConfig('is_maintenance', isMaintenance)
+    ]);
+
+    if (results.every(Boolean)) {
+      showNotice('success', 'Update Engine & Maintenance settings updated.');
+      fetchConfigs();
+    } else {
+      showNotice('error', 'One or more engine properties failed to update.');
+    }
   };
+
+  // 5. Save Spin daily Grant
+  const handleSaveSpinGrant = async () => {
+    const success = await saveSingleConfig('spin_daily_limit', spinDailyLimit);
+    if (success) {
+      showNotice('success', 'Daily Spin Grant updated.');
+      fetchConfigs();
+    } else {
+      showNotice('error', 'Failed to update spin grant.');
+    }
+  };
+
+  // 6. Save Watch & Earn Settings
+  const handleSaveWatchSettings = async () => {
+    const results = await Promise.all([
+      saveSingleConfig('watch_video_daily_limit', watchDailyLimit),
+      saveSingleConfig('watch_video_reward_min', watchMinReward),
+      saveSingleConfig('watch_video_reward_max', watchMaxReward)
+    ]);
+    if (results.every(Boolean)) {
+      showNotice('success', 'Watch & Earn settings updated.');
+      fetchConfigs();
+    } else {
+      showNotice('error', 'Failed to save video settings.');
+    }
+  };
+
+  // 7. Save Scratch & Win Settings
+  const handleSaveScratchSettings = async () => {
+    const results = await Promise.all([
+      saveSingleConfig('scratch_card_daily_limit', scratchDailyLimit),
+      saveSingleConfig('scratch_card_reward_min', scratchMinReward),
+      saveSingleConfig('scratch_card_reward_max', scratchMaxReward)
+    ]);
+    if (results.every(Boolean)) {
+      showNotice('success', 'Scratch & Win settings updated.');
+      fetchConfigs();
+    } else {
+      showNotice('error', 'Failed to save scratch card settings.');
+    }
+  };
+
+  // 8. Save Daily Withdrawal Limit
+  const handleSaveWithdrawLimit = async () => {
+    const success = await saveSingleConfig('daily_withdraw_limit', dailyWithdrawLimit);
+    if (success) {
+      showNotice('success', 'Daily Withdrawal limit updated.');
+      fetchConfigs();
+    } else {
+      showNotice('error', 'Failed to update withdrawal limit.');
+    }
+  };
+
+  // Raw Advanced Key-Value Save
+  const handleRawSave = async (key, val) => {
+    const success = await saveSingleConfig(key, val);
+    if (success) {
+      showNotice('success', `Config ${key} saved.`);
+      fetchConfigs();
+    } else {
+      showNotice('error', `Failed to save ${key}`);
+    }
+  };
+
+  if (loading) {
+    return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px' }}>Loading system configurations...</p>;
+  }
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      {/* Configuration Hub Navigation bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
         <div>
-          <h3 style={{ fontSize: '1.15rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Settings size={18} style={{ color: 'var(--primary)' }} /> App Configurations
+          <h3 style={{ fontSize: '1.25rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Settings size={20} style={{ color: 'var(--primary)' }} /> System Configuration Hub
           </h3>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Edit live key-value configurations used by the mobile app.
+            Modify live app probabilities, gamification coefficients, and app version metrics securely.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.82rem' }} onClick={fetchConfigs}>
-            <RefreshCw size={14} /> Refresh
+          <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.82rem', gap: '6px' }} onClick={fetchConfigs}>
+            <RefreshCw size={14} /> Refresh Configs
           </button>
-          <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.82rem' }} onClick={() => setShowNewForm(!showNewForm)}>
-            <Plus size={14} /> New Config
+          <button 
+            className="btn btn-secondary" 
+            style={{ padding: '8px 14px', fontSize: '0.82rem', gap: '6px', border: advancedMode ? '1px solid var(--primary-hover)' : '1px solid var(--border-glass)' }}
+            onClick={() => setAdvancedMode(!advancedMode)}
+          >
+            {advancedMode ? <EyeOff size={14} /> : <Eye size={14} />} 
+            {advancedMode ? 'Standard Dashboard' : 'Advanced Mode (Table)'}
           </button>
         </div>
       </div>
 
-      {/* New Config Form */}
-      {showNewForm && (
-        <div className="glass-panel" style={{ padding: '20px', marginBottom: '20px', border: '1px solid rgba(168,85,247,0.2)', background: 'rgba(168,85,247,0.03)' }}>
-          <h4 style={{ margin: '0 0 16px', fontSize: '0.95rem' }}>Add New Configuration Key</h4>
-          <form onSubmit={saveNewConfig} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Key</label>
-              <input className="glass-input" placeholder="e.g. watch_video_max" value={newKey} onChange={e => setNewKey(e.target.value)} required />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Value</label>
-              <input className="glass-input" placeholder="e.g. 10" value={newValue} onChange={e => setNewValue(e.target.value)} />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Description</label>
-              <input className="glass-input" placeholder="Short description" value={newDescription} onChange={e => setNewDescription(e.target.value)} />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ padding: '12px 16px' }}><Save size={14} /></button>
-          </form>
-        </div>
-      )}
+      {/* RENDER MODE A: SYSTEM CONFIG DASHBOARD (PHP EXACT REPLICA) */}
+      {!advancedMode ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', alignItems: 'start' }}>
+          
+          {/* LEFT COLUMN METRICS */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+            
+            {/* 1. MASTER SPIN PROBABILITIES */}
+            <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ 
+                background: 'rgba(168,85,247,0.06)', 
+                borderBottom: '1px solid var(--border-glass)', 
+                padding: '16px 24px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={16} style={{ color: 'var(--accent)' }} /> Master Spin Probabilities
+                </h4>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 12px', fontSize: '0.75rem', gap: '4px' }} 
+                  onClick={handleSaveSpinProbabilities}
+                >
+                  <Save size={12} /> Save Matrix
+                </button>
+              </div>
 
-      {/* Config Table */}
-      {loading ? (
-        <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px' }}>Loading configurations...</p>
+              <div style={{ padding: '24px' }}>
+                <table className="glass-table" style={{ margin: '0 0 20px' }}>
+                  <thead>
+                    <tr>
+                      <th>Identifier</th>
+                      <th style={{ textAlign: 'center' }}>Min Extent</th>
+                      <th style={{ textAlign: 'center' }}>Max Extent</th>
+                      <th style={{ textAlign: 'center', width: '120px' }}>Probability %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {spinProbabilities.map((row, idx) => (
+                      <tr key={row.type}>
+                        <td>
+                          <strong style={{ color: '#fff', fontSize: '0.85rem' }}>{row.type}</strong>
+                        </td>
+                        <td>
+                          <input 
+                            type="number" 
+                            className="glass-input" 
+                            style={{ padding: '6px 10px', fontSize: '0.8rem', textAlign: 'center' }} 
+                            value={row.range[0]} 
+                            onChange={(e) => {
+                              const updated = [...spinProbabilities];
+                              updated[idx].range[0] = parseInt(e.target.value || 0);
+                              setSpinProbabilities(updated);
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input 
+                            type="number" 
+                            className="glass-input" 
+                            style={{ padding: '6px 10px', fontSize: '0.8rem', textAlign: 'center' }} 
+                            value={row.range[1]} 
+                            onChange={(e) => {
+                              const updated = [...spinProbabilities];
+                              updated[idx].range[1] = parseInt(e.target.value || 0);
+                              setSpinProbabilities(updated);
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input 
+                            type="number" 
+                            className="glass-input" 
+                            style={{ padding: '6px 10px', fontSize: '0.8rem', textAlign: 'center', fontWeight: 800, color: 'var(--accent)' }} 
+                            value={row.prob} 
+                            onChange={(e) => {
+                              const updated = [...spinProbabilities];
+                              updated[idx].prob = parseFloat(e.target.value || 0);
+                              setSpinProbabilities(updated);
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Bulk Reset Button */}
+                <button 
+                  type="button" 
+                  className="btn" 
+                  style={{ 
+                    width: '100%', 
+                    padding: '12px', 
+                    background: '#eab308', 
+                    color: '#000', 
+                    fontWeight: 700, 
+                    fontSize: '0.85rem',
+                    border: 'none',
+                    borderRadius: '8px'
+                  }}
+                  disabled={isResettingSpins}
+                  onClick={handleResetSpins}
+                >
+                  Reset All Users' Daily Spins
+                </button>
+              </div>
+            </div>
+
+            {/* 2. DAILY LOYALTY STREAK REWARDS */}
+            <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ 
+                background: 'rgba(168,85,247,0.06)', 
+                borderBottom: '1px solid var(--border-glass)', 
+                padding: '16px 24px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Coins size={16} style={{ color: 'var(--success)' }} /> Daily Loyalty Streak Rewards
+                </h4>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 12px', fontSize: '0.75rem', gap: '4px' }} 
+                  onClick={handleSaveStreakRewards}
+                >
+                  <Save size={12} /> Save Streak
+                </button>
+              </div>
+
+              <div style={{ padding: '24px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                  {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                    <div key={day} className="form-group" style={{ marginBottom: 0, gridColumn: day === 7 ? 'span 2' : 'span 1' }}>
+                      <label className="form-label" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        Day {day} {day === 7 && <Sparkles size={10} style={{ color: 'var(--accent)' }} />}
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <input 
+                          type="number" 
+                          className="glass-input" 
+                          style={{ paddingRight: '36px' }}
+                          value={streakRewards[day] || 0}
+                          onChange={(e) => {
+                            setStreakRewards({
+                              ...streakRewards,
+                              [day]: parseInt(e.target.value || 0)
+                            });
+                          }}
+                        />
+                        <Coins size={14} style={{ position: 'absolute', right: '12px', top: '13px', color: '#eab308' }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* RIGHT COLUMN METRICS */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+            
+            {/* 3. UPDATE ENGINE & MAINTENANCE */}
+            <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ 
+                background: 'rgba(168,85,247,0.06)', 
+                borderBottom: '1px solid var(--border-glass)', 
+                padding: '16px 24px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Smartphone size={16} style={{ color: 'var(--primary-hover)' }} /> Update Engine & Maintenance
+                </h4>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 12px', fontSize: '0.75rem', gap: '4px' }} 
+                  onClick={handleSaveUpdateEngine}
+                >
+                  <Save size={12} /> Save Updates
+                </button>
+              </div>
+
+              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Version Name</label>
+                    <input type="text" className="glass-input" value={versionName} onChange={e => setVersionName(e.target.value)} />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Version Code</label>
+                    <input type="text" className="glass-input" value={versionCode} onChange={e => setVersionCode(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Update URL</label>
+                  <input type="text" className="glass-input" value={updateUrl} onChange={e => setUpdateUrl(e.target.value)} />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Update Message</label>
+                  <textarea rows={2} className="glass-input" value={updateMessage} onChange={e => setUpdateMessage(e.target.value)} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Critical Force?</label>
+                    <select className="glass-input" style={{ background: '#0a0b10', color: '#fff' }} value={forceUpdate} onChange={e => setForceUpdate(e.target.value)}>
+                      <option value="true">Yes</option>
+                      <option value="false">No</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Maintenance Mode?</label>
+                    <select className="glass-input" style={{ background: '#0a0b10', color: '#fff' }} value={isMaintenance} onChange={e => setIsMaintenance(e.target.value)}>
+                      <option value="true">Enabled</option>
+                      <option value="false">Disabled</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. DAILY SPIN GRANT */}
+            <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ 
+                background: 'rgba(168,85,247,0.06)', 
+                borderBottom: '1px solid var(--border-glass)', 
+                padding: '16px 24px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>Daily Spin Grant</h4>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 12px', fontSize: '0.75rem', gap: '4px' }} 
+                  onClick={handleSaveSpinGrant}
+                >
+                  <Save size={12} /> Save Spins
+                </button>
+              </div>
+              <div style={{ padding: '24px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Daily Spins Allowed</label>
+                  <input type="number" className="glass-input" value={spinDailyLimit} onChange={e => setSpinDailyLimit(e.target.value)} />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>Maximum spins allowed per user per day.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 5. WATCH & EARN SETTINGS */}
+            <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ 
+                background: 'rgba(168,85,247,0.06)', 
+                borderBottom: '1px solid var(--border-glass)', 
+                padding: '16px 24px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>Watch & Earn Settings</h4>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 12px', fontSize: '0.75rem', gap: '4px' }} 
+                  onClick={handleSaveWatchSettings}
+                >
+                  <Save size={12} /> Save Ads
+                </button>
+              </div>
+              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Daily Ads Limit</label>
+                  <input type="number" className="glass-input" value={watchDailyLimit} onChange={e => setWatchDailyLimit(e.target.value)} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Min Reward</label>
+                    <input type="number" className="glass-input" value={watchMinReward} onChange={e => setWatchMinReward(e.target.value)} />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Max Reward</label>
+                    <input type="number" className="glass-input" value={watchMaxReward} onChange={e => setWatchMaxReward(e.target.value)} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 6. SCRATCH & WIN SETTINGS */}
+            <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ 
+                background: 'rgba(168,85,247,0.06)', 
+                borderBottom: '1px solid var(--border-glass)', 
+                padding: '16px 24px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>Scratch & Win Settings</h4>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 12px', fontSize: '0.75rem', gap: '4px' }} 
+                  onClick={handleSaveScratchSettings}
+                >
+                  <Save size={12} /> Save Scratch
+                </button>
+              </div>
+              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Daily Scratch Limit</label>
+                  <input type="number" className="glass-input" value={scratchDailyLimit} onChange={e => setScratchDailyLimit(e.target.value)} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Min Reward</label>
+                    <input type="number" className="glass-input" value={scratchMinReward} onChange={e => setScratchMinReward(e.target.value)} />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Max Reward</label>
+                    <input type="number" className="glass-input" value={scratchMaxReward} onChange={e => setScratchMaxReward(e.target.value)} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 7. DAILY WITHDRAWAL LIMIT */}
+            <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ 
+                background: 'rgba(168,85,247,0.06)', 
+                borderBottom: '1px solid var(--border-glass)', 
+                padding: '16px 24px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>Daily Withdrawal Limit</h4>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 12px', fontSize: '0.75rem', gap: '4px' }} 
+                  onClick={handleSaveWithdrawLimit}
+                >
+                  <Save size={12} /> Save Limit
+                </button>
+              </div>
+              <div style={{ padding: '24px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Max Withdrawals Per User Per Day</label>
+                  <input type="number" className="glass-input" value={dailyWithdrawLimit} onChange={e => setDailyWithdrawLimit(e.target.value)} />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>Set to 0 for unlimited. e.g. Set to 2 to only allow 2 daily withdrawals.</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
       ) : (
+        /* RENDER MODE B: ADVANCED CONFIGS RAW TABLE LIST */
         <div className="glass-panel" style={{ overflow: 'hidden' }}>
           <div className="table-container">
             <table className="glass-table">
@@ -149,49 +665,47 @@ export default function AdminConfigs({ getHeaders, showNotice, API_BASE }) {
                 </tr>
               </thead>
               <tbody>
-                {configs.map(cfg => (
-                  <tr key={cfg.key}>
-                    <td>
-                      <code style={{ background: 'rgba(168,85,247,0.1)', padding: '3px 8px', borderRadius: '5px', fontSize: '0.82rem', color: 'var(--primary-hover)' }}>
-                        {cfg.key}
-                      </code>
-                    </td>
-                    <td>
-                      {editingKey === cfg.key ? (
-                        <input
+                {configsList.map(cfg => {
+                  const [editingValue, setEditingValue] = useState(cfg.config_value);
+                  const [isSaving, setIsSaving] = useState(false);
+
+                  return (
+                    <tr key={cfg.config_key}>
+                      <td>
+                        <code style={{ background: 'rgba(168,85,247,0.1)', padding: '3px 8px', borderRadius: '5px', fontSize: '0.82rem', color: 'var(--primary-hover)' }}>
+                          {cfg.config_key}
+                        </code>
+                      </td>
+                      <td>
+                        <textarea
                           className="glass-input"
-                          style={{ padding: '7px 12px', fontSize: '0.85rem' }}
+                          style={{ padding: '7px 12px', fontSize: '0.85rem', fontFamily: 'monospace', width: '100%', resize: 'vertical' }}
                           value={editingValue}
+                          rows={Math.min(5, Math.max(1, editingValue ? editingValue.split('\n').length : 1))}
                           onChange={e => setEditingValue(e.target.value)}
-                          autoFocus
                         />
-                      ) : (
-                        <span style={{ fontSize: '0.88rem', fontFamily: 'monospace' }}>{getValuePreview(cfg.value)}</span>
-                      )}
-                    </td>
-                    <td style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>{cfg.description || '—'}</td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
-                      {cfg.updated_at ? new Date(cfg.updated_at).toLocaleDateString() : '—'}
-                    </td>
-                    <td>
-                      {editingKey === cfg.key ? (
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={() => saveConfig(cfg.key)} disabled={savingKey === cfg.key}>
-                            <Save size={12} /> {savingKey === cfg.key ? 'Saving...' : 'Save'}
-                          </button>
-                          <button className="btn btn-secondary" style={{ padding: '6px 10px' }} onClick={cancelEditing}><X size={12} /></button>
-                        </div>
-                      ) : (
-                        <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={() => startEditing(cfg)}>
-                          <Edit3 size={12} /> Edit
+                      </td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>{cfg.description || cfg.desc || '—'}</td>
+                      <td style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                        {cfg.updated_at ? new Date(cfg.updated_at).toLocaleDateString() : '—'}
+                      </td>
+                      <td>
+                        <button 
+                          className="btn btn-primary" 
+                          style={{ padding: '8px 12px', fontSize: '0.78rem', gap: '4px' }} 
+                          disabled={isSaving}
+                          onClick={async () => {
+                            setIsSaving(true);
+                            await handleRawSave(cfg.config_key, editingValue);
+                            setIsSaving(false);
+                          }}
+                        >
+                          <Save size={12} /> {isSaving ? 'Saving' : 'Save'}
                         </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {configs.length === 0 && (
-                  <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>No configs found. Add one above!</td></tr>
-                )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

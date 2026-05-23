@@ -103,7 +103,8 @@ import {
   getAdminReports,
   getPendingProofs,
   approveProof,
-  rejectProof
+  rejectProof,
+  resetAllDailySpins
 } from './controllers/adminController.js';
 
 // Middleware Imports
@@ -328,6 +329,9 @@ app.post('/api/admin/tickets/:id/close', authenticateAdmin, closeAdminTicket);
 app.get('/api/admin/proofs', authenticateAdmin, getPendingProofs);
 app.post('/api/admin/proofs/:clickId/approve', authenticateAdmin, approveProof);
 app.post('/api/admin/proofs/:clickId/reject', authenticateAdmin, rejectProof);
+
+// Reset Daily Spins
+app.post('/api/admin/users/reset-spins', authenticateAdmin, resetAllDailySpins);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

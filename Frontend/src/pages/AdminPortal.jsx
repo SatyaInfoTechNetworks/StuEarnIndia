@@ -1217,8 +1217,8 @@ export default function AdminPortal() {
                         {usersList.map(u => (
                           <tr key={u.id} className="text-sm">
                             <td>
-                              <span className="font-mono text-xs text-muted" title={u.id} style={{ cursor: 'pointer' }}>
-                                {u.id ? (u.id.length > 8 ? `${u.id.substring(0, 8)}...` : u.id) : 'N/A'}
+                              <span className="font-mono text-xs text-muted" title={`Internal UUID: ${u.id}\nGoogle UID: ${u.uid || 'N/A'}`} style={{ cursor: 'pointer' }}>
+                                {u.user_id || 'N/A'}
                               </span>
                             </td>
                             <td>
@@ -2000,21 +2000,54 @@ export default function AdminPortal() {
                   {/* Right stats */}
                   <div className="col-md-8">
                     <div className="row bg-light rounded p-3 border mb-3">
-                      <div className="col-6 mb-2">
+                      <div className="col-md-6 mb-3">
                         <label className="text-muted text-xs uppercase mb-1">Available Balance</label>
-                        <h4 className="text-success font-weight-black">₹{parseFloat(selectedUser.balance || 0).toLocaleString()}</h4>
+                        <h4 className="text-success font-weight-black mb-0">₹{parseFloat(selectedUser.balance || 0).toFixed(2)}</h4>
                       </div>
-                      <div className="col-6 mb-2">
+                      <div className="col-md-6 mb-3">
+                        <label className="text-muted text-xs uppercase mb-1">Public Hex ID</label>
+                        <h5 className="text-dark font-weight-bold mb-0 font-mono">{selectedUser.user_id || 'N/A'}</h5>
+                      </div>
+                      
+                      <div className="col-md-6 mb-3">
                         <label className="text-muted text-xs uppercase mb-1">Phone Number</label>
-                        <h5 className="text-dark font-weight-bold">{selectedUser.phone_number || 'N/A'}</h5>
+                        <h5 className="text-dark font-weight-bold mb-0">{selectedUser.phone_number || 'N/A'}</h5>
                       </div>
-                      <div className="col-6 mb-2">
+                      <div className="col-md-6 mb-3">
                         <label className="text-muted text-xs uppercase mb-1">Location</label>
-                        <h6 className="text-dark font-weight-bold">{selectedUser.location || 'N/A'}</h6>
+                        <h5 className="text-dark font-weight-bold mb-0">{selectedUser.location || 'N/A'}</h5>
                       </div>
-                      <div className="col-6 mb-2">
+
+                      <div className="col-md-6 mb-3">
                         <label className="text-muted text-xs uppercase mb-1">Referral Code</label>
-                        <code className="text-indigo font-weight-bold">{selectedUser.referral_code || 'None'}</code>
+                        <h5 className="text-indigo font-weight-bold mb-0 font-mono">{selectedUser.referral_code || 'None'}</h5>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="text-muted text-xs uppercase mb-1">Users Referred</label>
+                        <h5 className="text-dark font-weight-bold mb-0">{selectedUser.referral_count || 0} Members</h5>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <label className="text-muted text-xs uppercase mb-1">Check-in Streak</label>
+                        <h5 className="text-warning font-weight-bold mb-0"><i className="fas fa-fire mr-1"></i> {selectedUser.current_streak || 0} Days</h5>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="text-muted text-xs uppercase mb-1">Spins Claimed Today</label>
+                        <h5 className="text-primary font-weight-bold mb-0"><i className="fas fa-redo mr-1"></i> {selectedUser.daily_spins_count || 0} Spins</h5>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <label className="text-muted text-xs uppercase mb-1">Referred By User ID</label>
+                        <h5 className="text-secondary font-weight-bold mb-0 font-mono">{selectedUser.referred_by || 'Organic'}</h5>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="text-muted text-xs uppercase mb-1">Google UID</label>
+                        <code className="text-xs text-muted text-break">{selectedUser.uid || 'N/A'}</code>
+                      </div>
+                      
+                      <div className="col-md-12 mb-0">
+                        <label className="text-muted text-xs uppercase mb-1">Internal Database UUID</label>
+                        <code className="text-xs text-muted text-break">{selectedUser.id}</code>
                       </div>
                     </div>
 
@@ -2023,10 +2056,27 @@ export default function AdminPortal() {
                       <button className="btn btn-xs btn-primary px-3 rounded-pill" onClick={() => setAdjustBalanceModal(true)}>Trigger adjustment</button>
                     </div>
 
-                    <h6 className="font-weight-bold mb-3"><i className="fas fa-microchip mr-2 text-warning"></i> Device Metadata</h6>
+                    <h6 className="font-weight-bold mb-3"><i className="fas fa-microchip mr-2 text-warning"></i> Device & Compliance Metadata</h6>
                     <div className="p-3 bg-light rounded-lg border mb-4">
-                      <span className="text-xs text-muted font-weight-bold">Android Device Identifier:</span><br />
-                      <code className="text-xs text-danger text-break">{selectedUser.android_id || 'REDACTED'}</code>
+                      <div className="mb-2">
+                        <span className="text-xs text-muted font-weight-bold">Android Device Identifier:</span><br />
+                        <code className="text-xs text-danger text-break">{selectedUser.android_id || 'REDACTED'}</code>
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-xs text-muted font-weight-bold">FCM Push Token:</span><br />
+                        <code className="text-xs text-dark text-break" style={{ maxHeight: '60px', display: 'block', overflowY: 'auto' }}>{selectedUser.fcm_token || 'N/A'}</code>
+                      </div>
+                      {selectedUser.is_banned ? (
+                        <div className="mb-0">
+                          <span className="text-xs text-danger font-weight-bold">Compliance Status: Banned Member</span><br />
+                          <span className="text-xs text-muted font-weight-bold">Reason: </span>
+                          <span className="text-xs text-danger italic">{selectedUser.ban_reason || 'No violation log provided.'}</span>
+                        </div>
+                      ) : (
+                        <div className="mb-0">
+                          <span className="text-xs text-success font-weight-bold">Compliance Status: Active / Good Standing</span>
+                        </div>
+                      )}
                     </div>
 
                     <h6 className="font-weight-bold mb-3"><i className="fas fa-history mr-2 text-primary"></i> Ledger History</h6>

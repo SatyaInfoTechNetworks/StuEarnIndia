@@ -91,8 +91,7 @@ export const listUsers = async (req, res) => {
     );
 
     const [users] = await pool.query(
-      `SELECT u.id, u.user_id, u.uid, u.name, u.email, u.phone_number, u.balance,
-              u.referral_code, u.is_banned, u.ban_reason, u.created_at,
+      `SELECT u.*,
               (SELECT COUNT(*) FROM referral_uses WHERE referrer_id = u.id) as referral_count
        FROM users u ${whereClause}
        ORDER BY u.created_at DESC
@@ -120,7 +119,7 @@ export const getUserTransactionsAdmin = async (req, res) => {
   try {
     const userId = req.params.id;
     const [user] = await pool.query(
-      'SELECT id, user_id, name, email, balance, is_banned, ban_reason, created_at, referral_code FROM users WHERE id = ? LIMIT 1',
+      'SELECT * FROM users WHERE id = ? LIMIT 1',
       [userId]
     );
     const [rows] = await pool.query(

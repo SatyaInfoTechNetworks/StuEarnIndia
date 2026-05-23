@@ -1978,19 +1978,19 @@ export default function AdminPortal() {
                     <h4 className="font-weight-black">{selectedUser.name || 'Anonymous'}</h4>
                     <p className="text-muted text-sm badge badge-light border">{selectedUser.email}</p>
                     
-                    <div className="mt-4 d-flex flex-column gap-2">
-                      <button className="btn btn-outline-primary btn-sm rounded-pill font-weight-bold py-2" onClick={() => triggerEditUser(selectedUser)}>
+                    <div className="mt-4 d-flex flex-column">
+                      <button className="btn btn-outline-primary btn-sm rounded-pill font-weight-bold py-2 mb-2" onClick={() => triggerEditUser(selectedUser)}>
                         <i className="fas fa-edit mr-1"></i> Edit Profile Details
                       </button>
-                      <button className="btn btn-danger btn-sm rounded-pill font-weight-bold py-2 shadow-sm text-white" onClick={() => handleDeleteUser(selectedUser.id)}>
+                      <button className="btn btn-danger btn-sm rounded-pill font-weight-bold py-2 mb-2 shadow-sm text-white" onClick={() => handleDeleteUser(selectedUser.id)}>
                         <i className="fas fa-trash mr-1"></i> Delete User Row
                       </button>
                       {selectedUser.is_banned ? (
-                        <button className="btn btn-success btn-sm rounded-pill font-weight-bold py-2" onClick={() => handleUnbanUser(selectedUser.id)}>
+                        <button className="btn btn-success btn-sm rounded-pill font-weight-bold py-2 mb-2" onClick={() => handleUnbanUser(selectedUser.id)}>
                           <i className="fas fa-check-circle mr-1"></i> Unban Member
                         </button>
                       ) : (
-                        <button className="btn btn-danger btn-sm rounded-pill font-weight-bold py-2" onClick={() => handleBanUser(selectedUser.id)}>
+                        <button className="btn btn-danger btn-sm rounded-pill font-weight-bold py-2 mb-2" onClick={() => handleBanUser(selectedUser.id)}>
                           <i className="fas fa-ban mr-1"></i> Ban Member Row
                         </button>
                       )}
@@ -2085,8 +2085,8 @@ export default function AdminPortal() {
                     <label className="text-muted text-xs font-weight-bold mb-1">Ledger Description</label>
                     <input type="text" className="form-control" placeholder="Manual adjustments details" value={adjustDesc} onChange={e => setAdjustDesc(e.target.value)} />
                   </div>
-                  <div className="d-flex mt-4 gap-2">
-                    <button type="submit" className="btn btn-primary flex-fill rounded-pill py-2">Apply Ledger Entry</button>
+                  <div className="d-flex mt-4">
+                    <button type="submit" className="btn btn-primary flex-fill rounded-pill py-2 mr-2">Apply Ledger Entry</button>
                     <button type="button" className="btn btn-outline-secondary flex-fill rounded-pill py-2" onClick={() => setAdjustBalanceModal(false)}>Cancel</button>
                   </div>
                 </form>
@@ -2133,8 +2133,8 @@ export default function AdminPortal() {
                       <input type="number" className="form-control" step="0.01" value={editUserForm.balance} onChange={e => setEditUserForm({ ...editUserForm, balance: e.target.value })} required />
                     </div>
                   </div>
-                  <div className="d-flex mt-4 gap-2 pb-3">
-                    <button type="submit" className="btn btn-primary flex-fill rounded-pill py-2">Save Changes</button>
+                  <div className="d-flex mt-4 pb-3">
+                    <button type="submit" className="btn btn-primary flex-fill rounded-pill py-2 mr-2">Save Changes</button>
                     <button type="button" className="btn btn-outline-secondary flex-fill rounded-pill py-2" onClick={() => setEditUserModal(false)}>Cancel</button>
                   </div>
                 </form>
@@ -2159,8 +2159,8 @@ export default function AdminPortal() {
                     <label className="text-muted text-xs font-weight-bold mb-1">Reason for Rejection (visible to candidate)</label>
                     <textarea className="form-control" rows={4} placeholder="e.g. Invalid identifier or metadata verification failure." value={rejectReason} onChange={e => setRejectReason(e.target.value)} required />
                   </div>
-                  <div className="d-flex mt-4 gap-2">
-                    <button type="submit" className="btn btn-danger flex-fill rounded-pill py-2">Reject & Refund Payout</button>
+                  <div className="d-flex mt-4">
+                    <button type="submit" className="btn btn-danger flex-fill rounded-pill py-2 mr-2">Reject & Refund Payout</button>
                     <button type="button" className="btn btn-outline-secondary flex-fill rounded-pill py-2" onClick={() => { setRejectModal(false); setSelectedWithdrawal(null); }}>Cancel</button>
                   </div>
                 </form>
@@ -2185,8 +2185,8 @@ export default function AdminPortal() {
                     <label className="text-muted text-xs font-weight-bold mb-1">Reason for Rejection (visible to candidate)</label>
                     <textarea className="form-control" rows={4} placeholder="e.g. Evidence image does not verify campaign actions." value={rejectProofReason} onChange={e => setRejectProofReason(e.target.value)} required />
                   </div>
-                  <div className="d-flex mt-4 gap-2">
-                    <button type="submit" className="btn btn-danger flex-fill rounded-pill py-2">Confirm Reject</button>
+                  <div className="d-flex mt-4">
+                    <button type="submit" className="btn btn-danger flex-fill rounded-pill py-2 mr-2">Confirm Reject</button>
                     <button type="button" className="btn btn-outline-secondary flex-fill rounded-pill py-2" onClick={() => { setRejectProofModal(false); setRejectProofClickId(null); setRejectProofReason(''); }}>Cancel</button>
                   </div>
                 </form>

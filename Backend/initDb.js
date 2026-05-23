@@ -31,6 +31,7 @@ export async function initializeDatabase() {
         balance DECIMAL(10, 2) DEFAULT 0.00,
         referral_code VARCHAR(50) UNIQUE,
         referred_by CHAR(36),
+        android_id VARCHAR(255) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (referred_by) REFERENCES users(id) ON DELETE SET NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -44,6 +45,7 @@ export async function initializeDatabase() {
     await addColumnIfNotExists(connection, 'users', 'last_streak_claim_date', 'DATE NULL');
     await addColumnIfNotExists(connection, 'users', 'is_banned', 'BOOLEAN DEFAULT FALSE');
     await addColumnIfNotExists(connection, 'users', 'ban_reason', 'TEXT NULL');
+    await addColumnIfNotExists(connection, 'users', 'android_id', 'VARCHAR(255) NULL');
     // Custom 10-char hexadecimal public user ID (safe to share, not Firebase UID)
     await addColumnIfNotExists(connection, 'users', 'user_id', 'VARCHAR(10) UNIQUE');
 

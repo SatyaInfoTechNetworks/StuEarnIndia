@@ -10,6 +10,7 @@ Configure these exact URL templates in your publisher dashboards. Replace the br
 
 | Ad Network / Partner | HTTP Method | Target URL Configuration | Chargeback / Reversal Supported? |
 | :--- | :---: | :--- | :---: |
+| **Custom App Offers (In-House S2S)** | `GET` / `POST` | `https://stuearn-api.satyainfotechnetworks.com/api/webhook/postback?click_id={click_id}&tier_title={tier_title}` | **Idempotent** (Credits exact task tier reward) |
 | **PubScale (Offers/Surveys)** | `GET` | `https://stuearn-api.satyainfotechnetworks.com/api/webhook/pubscale?user_id={user_id}&value={value}&token={token}&signature={signature}&offer_name={offer_name}&goal_name={goal_name}&gaid={gaid}&ip={ip}` | **Yes** (Runs validation check) |
 | **PubScale (Chargebacks)** | `GET` | `https://stuearn-api.satyainfotechnetworks.com/api/webhook/pubscale-chargeback?user_id={user_id}&value={value}&token={token}&signature={signature}&offer_name={offer_name}&reason={reason}&gaid={gaid}&ip={ip}` | **Yes** (Automated coin deduction) |
 | **CPX Research** | `GET` | `https://stuearn-api.satyainfotechnetworks.com/api/webhook/cpx-research?status={status}&trans_id={trans_id}&user_id={user_id}&amount_local={amount_local}&hash={hash}&type={type}&offer_id={offer_id}` | **Yes** (Reverses coins on status `2` or `-2`) |

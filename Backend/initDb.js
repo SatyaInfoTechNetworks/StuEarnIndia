@@ -618,6 +618,18 @@ export async function initializeDatabase() {
     await addColumnIfNotExists(connection, 'transactions', 'closing_balance', 'DECIMAL(10, 2) DEFAULT NULL');
     await addColumnIfNotExists(connection, 'transactions', 'tamper_signature', 'VARCHAR(64) DEFAULT NULL');
 
+    // Ensure transactions and withdrawals column types are flexible (legacy ENUM to VARCHAR)
+    try {
+      console.log('⚡ Ensuring column types are flexible (legacy ENUM to VARCHAR)...');
+      await connection.query('ALTER TABLE transactions MODIFY COLUMN type VARCHAR(20) NOT NULL');
+      await connection.query('ALTER TABLE transactions MODIFY COLUMN source VARCHAR(50) NOT NULL');
+      await connection.query('ALTER TABLE withdrawals MODIFY COLUMN method VARCHAR(50) NOT NULL');
+      await connection.query('ALTER TABLE withdrawals MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT \'PENDING\'');
+      console.log('✅ Column type flexibility optimized successfully.');
+    } catch (alterErr) {
+      console.warn('⚠️ Warning during column type alterations:', alterErr.message);
+    }
+
     // Index Optimizations
     try {
       console.log('⚡ Ensuring index optimizations...');

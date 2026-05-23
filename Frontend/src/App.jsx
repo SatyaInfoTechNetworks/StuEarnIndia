@@ -19,6 +19,7 @@ function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/delete-account" element={<DeleteAccount />} />
+        <Route path="/delete_account.php" element={<DeleteAccount />} />
         <Route path="/admin" element={<AdminPortal />} />
         
         {/* Fallback to home */}

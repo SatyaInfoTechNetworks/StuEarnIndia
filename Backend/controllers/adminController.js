@@ -1,6 +1,6 @@
 import pool from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
-import { sendNotification, broadcastNotification } from '../utils/notifications.js';
+import { sendNotification, broadcastNotification, sendTopicNotification } from '../utils/notifications.js';
 import { recordLedgerTransaction } from '../utils/ledger.js';
 
 // ==========================================
@@ -702,30 +702,28 @@ export const rejectErasureRequest = async (req, res) => {
 // ==========================================
 export const triggerPushNotification = async (req, res) => {
   try {
-    const { title, body, user_id } = req.body;
+    const { title, body, image_url, target_type, user_id, topic } = req.body;
     if (!title || !body) return res.status(400).json({ success: false, message: 'Title and body are required' });
 
+    const targetType = target_type || (user_id ? 'specific' : 'broadcast');
     let sentCount = 0;
-    let targetType = 'broadcast';
 
-    if (user_id) {
-      // Find internal ID by public user_id or internal id
+    if (targetType === 'specific') {
+      if (!user_id) return res.status(400).json({ success: false, message: 'User ID is required for specific targeting' });
+      // Find internal ID by public user_id or internal UUID
       const [userRows] = await pool.query('SELECT id FROM users WHERE user_id = ? OR id = ? LIMIT 1', [user_id, user_id]);
       if (userRows.length === 0) return res.status(404).json({ success: false, message: 'Target user not found' });
-      const success = await sendNotification(userRows[0].id, title, body);
+      const success = await sendNotification(userRows[0].id, title, body, image_url);
       sentCount = success ? 1 : 0;
-      targetType = 'specific';
+    } else if (targetType === 'topic') {
+      if (!topic) return res.status(400).json({ success: false, message: 'Topic name is required' });
+      const success = await sendTopicNotification(topic, title, body, image_url);
+      sentCount = success ? 1 : 0;
     } else {
-      const success = await broadcastNotification(title, body);
+      const success = await broadcastNotification(title, body, image_url);
       const [cnt] = await pool.query('SELECT COUNT(*) as c FROM users WHERE fcm_token IS NOT NULL AND fcm_token != ""');
       sentCount = success ? cnt[0].c : 0;
     }
-
-    // Log notification history
-    await pool.query(
-      `INSERT INTO notifications (id, title, message, target_type, target_user_id, sent_count, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [uuidv4(), title, body, targetType, user_id || null, sentCount]
-    );
 
     res.json({ success: true, message: `Notification sent successfully`, sent_count: sentCount });
   } catch (error) {

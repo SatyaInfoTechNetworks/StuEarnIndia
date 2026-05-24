@@ -362,6 +362,9 @@ export async function initializeDatabase() {
     `);
     await addColumnIfNotExists(connection, 'notifications', 'target_user_id', 'VARCHAR(255) NULL');
     await addColumnIfNotExists(connection, 'notifications', 'sent_count', 'INT DEFAULT 0');
+    await addColumnIfNotExists(connection, 'notifications', 'image_url', 'VARCHAR(255) NULL');
+    await addColumnIfNotExists(connection, 'notifications', 'target_topic', 'VARCHAR(50) NULL');
+    await addColumnIfNotExists(connection, 'notifications', 'status', 'VARCHAR(20) DEFAULT "sent"');
 
     // 22. referral_settings: ensure description_text column exists
     await addColumnIfNotExists(connection, 'referral_settings', 'description_text', 'TEXT NULL');

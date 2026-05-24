@@ -62,31 +62,31 @@ export const getRecentEarnings = async (req, res) => {
       // Default icons mapping based on source
       switch (source) {
         case 'PUBSCALE':
-          iconUrl = 'https://ph-files.imgix.net/8979db3d-c443-432c-8155-f6d8469dd3f0.png?auto=format'; 
+          iconUrl = 'https://i.ibb.co/68gPz3Y/pubscale.png';
           break;
         case 'OFFERMARU':
-          iconUrl = 'https://offermaru.com/assets/img/logo.png';
+          iconUrl = 'https://i.ibb.co/1fWfN9k/offermaru.png';
           break;
         case 'OPINION_UNIVERSE':
-          iconUrl = 'https://i.ibb.co/zHb7QtVG/download.png';
+          iconUrl = 'https://i.ibb.co/zXgYqKB/opinionuniverse.png';
           break;
         case 'CPX_RESEARCH':
-          iconUrl = 'https://i.ibb.co/8D5tPXhq/download.png';
+          iconUrl = 'https://i.ibb.co/LdQyJt8/cpx.png';
           break;
         case 'GROWDECK':
-          iconUrl = 'https://i.ibb.co/gM7crSTP/q-KAm-R5-J.png';
+          iconUrl = 'https://i.ibb.co/YyYgX4C/growdeck.png';
           break;
         case 'ADJUMP':
-          iconUrl = 'https://i.ibb.co/N69PZcL4/q-KR97bj.jpg';
+          iconUrl = 'https://i.ibb.co/v4SgYqK/adjump.png';
           break;
         case 'REAL_OPINION':
-          iconUrl = 'https://i.ibb.co/qF7CP6tR/q-KRqs-Qn.png';
+          iconUrl = 'https://i.ibb.co/9pyqK8H/realopinion.png';
           break;
         case 'PLAYTIME':
-          iconUrl = 'https://i.ibb.co/TCj8bcQ/image-4.png';
+          iconUrl = 'https://i.ibb.co/RpyqK8H/playtime.png';
           break;
         case 'POCKETSFULL':
-          iconUrl = 'https://i.ibb.co/tM5wRwgd/download.jpg';
+          iconUrl = 'https://i.ibb.co/rpnYqKB/pocketsfull.png';
           break;
         case 'LIFAFA_BONUS':
           iconUrl = 'https://i.ibb.co/vvHv7WTx/envelope.png';

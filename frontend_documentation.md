@@ -1,6 +1,6 @@
 # StuEarn India - Android Frontend (Jetpack Compose) Integration Guide
 
-This comprehensive documentation details the architecture, dynamic bindings, and endpoint mapping utilized in the Kotlin/Jetpack Compose frontend to integrate with the backend API endpoints (such as Earnings feeds, dynamic Payout Methods, custom user inputs, fixed Redeem Tiers, and balance updates).
+This comprehensive documentation details the architecture, dynamic bindings, and endpoint mapping utilized in the Kotlin/Jetpack Compose frontend to integrate with the backend API endpoints (such as Earnings feeds, dynamic Payout Methods with multi-field credentials, Support Tickets lifecycle, and Firebase Cloud Messaging alerts).
 
 ---
 
@@ -17,8 +17,8 @@ graph TD
 ```
 
 * **Model Layer:** Data transfer objects (DTOs) representing Server responses (e.g. `UserResponse`, `EarningsTickerResponse`, `PayoutMethodsResponse`).
-* **ViewModel Layer:** Jetpack Lifecycle-aware ViewModels (`WalletViewModel`, `ProfileViewModel`, `WithdrawViewModel`) holding Compose states (`StateFlow` or `MutableState`) and exposing unidirectional events to screens.
-* **View Layer (Jetpack Compose):** UI Screens (`WalletScreen`, `WithdrawScreen`, `RedeemTiersScreen`, `ProfileScreen`) constructed with declarative reactive UI.
+* **ViewModel Layer:** Jetpack Lifecycle-aware ViewModels (`WalletViewModel`, `ProfileViewModel`, `SupportTicketViewModel`) holding Compose states (`StateFlow` or `MutableState`) and exposing unidirectional events to screens.
+* **View Layer (Jetpack Compose):** UI Screens declarative reactive UI.
 
 ---
 
@@ -39,7 +39,7 @@ data class EarningsTickerItem(
 ```
 
 ### B. Compose Rendering Component
-The dynamic items are bound inside a horizontal scrolling row or marquee. The `logoUrl` field is loaded dynamically using Coil:
+The logoUrl field is loaded dynamically using Coil:
 
 ```kotlin
 @Composable
@@ -81,11 +81,13 @@ fun EarningTickerItem(item: EarningsTickerItem) {
 
 ---
 
-## 💳 3. Dynamic Payout Methods & fixed Tiers Integration
+## 💳 3. Dynamic Payout Gateways & Multiple Custom Inputs
 
-The withdrawal UI consists of a dynamic grid of active payout methods, supporting custom user input criteria and fixed reward exchange tiers managed live from the admin panel.
+The withdrawal UI consists of active payout methods supporting **multiple custom input criteria** (e.g. Account Number + IFSC Code + Holder Name) and fixed redeem tiers configured dynamically from the admin panel.
 
 ### A. Data Models
+The backend stores multiple inputs as comma-separated values inside `inputType`, `inputLabel`, and `inputPlaceholder`. The Android client should parse these properties into clean lists of fields.
+
 ```kotlin
 data class PayoutMethod(
     @SerializedName("id") val id: String,
@@ -95,9 +97,10 @@ data class PayoutMethod(
     @SerializedName("minCoins") val minCoins: Int,
     @SerializedName("conversionRate") val conversionRate: Double,
     @SerializedName("currencySymbol") val currencySymbol: String,
-    @SerializedName("inputType") val inputType: String,            // text, email, number
-    @SerializedName("inputLabel") val inputLabel: String,          // e.g. "UPI ID"
-    @SerializedName("inputPlaceholder") val inputPlaceholder: String, // e.g. "yourname@upi"
+    @SerializedName("processingTime") val processingTime: String,
+    @SerializedName("inputType") val inputType: String,            // Comma-separated: "text,text,number"
+    @SerializedName("inputLabel") val inputLabel: String,          // Comma-separated: "Account Number,IFSC,Mobile"
+    @SerializedName("inputPlaceholder") val inputPlaceholder: String, // Comma-separated: "Enter number,Enter IFSC,Enter mobile"
     @SerializedName("tiers") val tiers: List<RedeemTier>
 )
 
@@ -109,38 +112,58 @@ data class RedeemTier(
 )
 ```
 
-### B. Dynamically Rendering Payout Address Input Field
-When the user selects a payout method (e.g. UPI, Paytm, Email), the Compose UI dynamically displays a single input field configured on the server-side to collect their target credentials safely:
+### B. Dynamically Parsing & Rendering Multi-Field Input Forms
+Split inputs by commas and map them to standard Compose TextFields. On submit, join the user details as a JSON object or unified string payload.
 
 ```kotlin
+data class InputFieldConfig(
+    val label: String,
+    val placeholder: String,
+    val type: String
+)
+
 @Composable
-fun PayoutDetailsForm(
+fun PayoutMultiDetailsForm(
     method: PayoutMethod,
-    onSubmit: (amountCoins: Int, payoutAddress: String) -> Unit
+    onSubmit: (amountCoins: Int, detailsJson: String) -> Unit
 ) {
-    var payoutAddress by remember { mutableStateOf("") }
+    // 1. Parse Comma-Separated Configurations
+    val labels = method.inputLabel.split(",")
+    val placeholders = method.inputPlaceholder.split(",")
+    val types = method.inputType.split(",")
+    
+    val fieldConfigs = remember(method) {
+        val list = mutableListOf<InputFieldConfig>()
+        val maxLen = maxOf(labels.size, placeholders.size, types.size)
+        for (i in 0 until maxLen) {
+            list.add(
+                InputFieldConfig(
+                    label = labels.getOrNull(i) ?: "Details",
+                    placeholder = placeholders.getOrNull(i) ?: "Enter details",
+                    type = types.getOrNull(i) ?: "text"
+                )
+            )
+        }
+        list
+    }
+
+    // 2. Track inputs map
+    val inputValues = remember { mutableStateMapOf<Int, String>() }
     var selectedTier by remember { mutableStateOf<RedeemTier?>(null) }
 
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-        Text(
-            text = "Select Exchange Amount",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
+        Text("Select Exchange Amount", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         
-        // 1. Grid of Fixed Redeem Tiers
+        // Grid of Fixed Redeem Tiers
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            modifier = Modifier.height(150.dp).padding(vertical = 8.dp)
+            modifier = Modifier.height(140.dp).padding(vertical = 8.dp)
         ) {
             items(method.tiers) { tier ->
                 Button(
                     onClick = { selectedTier = tier },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selectedTier?.id == tier.id) 
-                            MaterialTheme.colorScheme.primary 
-                        else 
-                            MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = if (selectedTier?.id == tier.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                     ),
                     modifier = Modifier.padding(4.dp)
                 ) {
@@ -150,36 +173,43 @@ fun PayoutDetailsForm(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+        Text("Required Receiving Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        
+        // Render Dynamic Dynamic TextFields
+        fieldConfigs.forEachIndexed { index, config ->
+            val currentValue = inputValues[index] ?: ""
+            OutlinedTextField(
+                value = currentValue,
+                onValueChange = { inputValues[index] = it },
+                label = { Text(config.label) },
+                placeholder = { Text(config.placeholder) },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = when (config.type.lowercase().trim()) {
+                        "email" -> KeyboardType.Email
+                        "number" -> KeyboardType.Number
+                        else -> KeyboardType.Text
+                    }
+                ),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            )
+        }
 
-        // 2. Dynamic Payout Input Field
-        Text(
-            text = "Receiving Details",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
-        OutlinedTextField(
-            value = payoutAddress,
-            onValueChange = { payoutAddress = it },
-            label = { Text(method.inputLabel) },           // Dynamic input label (e.g. "UPI ID")
-            placeholder = { Text(method.inputPlaceholder) }, // Dynamic placeholder
-            keyboardOptions = KeyboardOptions(
-                keyboardType = when (method.inputType.lowercase()) { // Dynamic input type
-                    "email" -> KeyboardType.Email
-                    "number" -> KeyboardType.Number
-                    else -> KeyboardType.Text
-                }
-            ),
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-        )
-
+        Spacer(modifier = Modifier.height(16.dp))
+        
         Button(
-            onClick = { 
-                selectedTier?.let { onSubmit(it.coinCost, payoutAddress) } 
+            onClick = {
+                // Compile dynamic details to a JSON object
+                val detailsMap = mutableMapOf<String, String>()
+                fieldConfigs.forEachIndexed { idx, config ->
+                    detailsMap[config.label] = inputValues[idx] ?: ""
+                }
+                val detailsJson = Gson().toJson(detailsMap)
+                selectedTier?.let { onSubmit(it.coinCost, detailsJson) }
             },
-            enabled = selectedTier != null && payoutAddress.isNotBlank(),
+            enabled = selectedTier != null && fieldConfigs.all { inputValues[fieldConfigs.indexOf(it)]?.isNotBlank() == true },
             modifier = Modifier.fillMaxWidth().height(50.dp)
         ) {
-            Text("Confirm Redemptions")
+            Text("Confirm Withdrawal Request")
         }
     }
 }
@@ -187,66 +217,94 @@ fun PayoutDetailsForm(
 
 ---
 
-## ⚡ 4. Real-time Wallet History (Completions & Reversals)
+## 🎫 4. Support Tickets Lifecycle Integration (Both Ends)
 
-The Wallet Ledger is managed through two feeds: **Earnings History** and **Withdrawals Queue** mapping dynamic descriptions and brand assets.
+Users can completely manage support ticket lifecycles dynamically: list active requests, open details thread, respond with replies, and close solved tickets directly.
 
-### A. Earning Item Bindings
+### A. Endpoint Routes Mapping (Retrofit API Service)
 ```kotlin
-data class TransactionItem(
-    @SerializedName("id") val id: String,
-    @SerializedName("amount") val amount: Double,
-    @SerializedName("type") val type: String, // CREDIT or DEBIT
-    @SerializedName("source") val source: String,
-    @SerializedName("description") val description: String,
-    @SerializedName("iconUrl") val iconUrl: String,
-    @SerializedName("date") val date: String
+interface SupportTicketApiService {
+    @POST("/api/tickets")
+    suspend fun createTicket(
+        @Body request: CreateTicketRequest
+    ): Response<GenericResponse>
+
+    @GET("/api/tickets")
+    suspend fun getTicketsList(): Response<TicketsListResponse>
+
+    @GET("/api/tickets/{id}")
+    suspend fun getTicketDetail(
+        @Path("id") ticketId: String
+    ): Response<TicketDetailResponse>
+
+    @POST("/api/tickets/{id}/reply")
+    suspend fun replyToTicket(
+        @Path("id") ticketId: String,
+        @Body replyRequest: ReplyRequest
+    ): Response<GenericResponse>
+
+    @POST("/api/tickets/{id}/close")
+    suspend fun closeTicket(
+        @Path("id") ticketId: String
+    ): Response<GenericResponse>
+}
+```
+
+### B. UI Lifecycle State Rules
+* **Bubble Alignment:** Display replies where `sender_type == "ADMIN"` aligned to the left with highlighted tint, and `sender_type == "USER"` aligned to the right (representing self-replies).
+* **Editor Locking:** If `ticket.status == "CLOSED"`, disable the message text area and submit button. Display a lock icon indicating the ticket is finalized.
+
+---
+
+## 🔔 5. Firebase Cloud Messaging (FCM) Integration
+
+The Android client registers token profiles and handles push broadcast topics for highly scalable push dispatches.
+
+### A. Token Registration
+Synchronize FCM registration tokens upon successful authentication:
+```kotlin
+data class TokenPayload(
+    @SerializedName("fcm_token") val fcmToken: String
 )
+
+// Call immediately on auth / token refreshes
+// API Endpoint: POST /api/user/fcm
+@POST("/api/user/fcm")
+suspend fun registerFcmToken(@Body payload: TokenPayload): Response<GenericResponse>
 ```
 
+### B. Topic Subscriptions (Very Scalable)
+The app must automatically subscribe to the following standard Firebase messaging topics:
+- **`all`** — System-wide broadcast alerts.
+- **`offers`** — Offerwall alerts and survey multipliers.
+- **`games`** — Daily spins, scratch tasks, and playtimes.
+- **`wallet`** — Deductions, approvals, and balance warnings.
+- **`vip`** — Elite bonuses and loyalty events.
+
+Use the standard Firebase Messaging library:
 ```kotlin
-@Composable
-fun TransactionRow(tx: TransactionItem) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp, horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = tx.iconUrl, // Dynamic Postimg/ImgBB logo URL from backend API
-            contentDescription = "Source Icon",
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(8.dp))
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1fr)) {
-            Text(
-                text = tx.description,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = tx.date,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Text(
-            text = if (tx.type == "CREDIT") "+${tx.amount.toInt()}" else "-${tx.amount.toInt()}",
-            color = if (tx.type == "CREDIT") Color(0xFF10B981) else Color(0xFFEF4444),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold
-        )
-    }
+FirebaseMessaging.getInstance().subscribeToTopic("all")
+FirebaseMessaging.getInstance().subscribeToTopic("offers")
+```
+
+### C. Rich Media / Image Banners
+The FCM payload contains a banner image URL in the `image` parameter (both inside the `notification` block and `data` block). In your `FirebaseMessagingService` receiver, fetch the bitmap dynamically using Glide or Coil before generating the system tray builder:
+```kotlin
+val imageUrl = remoteMessage.data["image"] ?: remoteMessage.notification?.imageUrl?.toString()
+if (!imageUrl.isNullOrBlank()) {
+    val futureTarget = Glide.with(context)
+        .asBitmap()
+        .load(imageUrl)
+        .submit()
+    val bitmap = futureTarget.get()
+    notificationBuilder.setStyle(NotificationCompat.BigPictureStyle().bigPicture(bitmap))
 }
 ```
 
 ---
 
-## 🔄 5. Best Practices & API Synchronization
+## 🔄 6. Best Practices & API Synchronization
 
-1. **Reactive UI State Syncing:** Always wrap updates inside your Compose UI with `SwipeRefresh` or `PullRefreshLayout`. When pulled, trigger `ProfileViewModel.refreshWalletBalance()` which requests `/api/wallet/balance` synchronously to refresh the earnings balance card.
-2. **Graceful Reversals Parsing:** Note that the backend returns `DEBIT` entries when offer reversals occur (labeled `PUBSCALE_REVERSAL`, `CPX_RESEARCH_REVERSAL`, or `OPINION_UNIVERSE_REVERSAL`). In Compose, handle negative balances safely, allowing coin amounts to display accurately without crashing layout metrics.
-3. **Whole-Integer Cost Enforcement:** The `/api/wallet/withdraw` handler strictly rejects fractional coins (float or double values) during requests. Validate on the client side that coin costs are whole integers matching `selectedTier.coinCost` before sending payloads.
+1. **Reactive UI State Syncing:** Trigger `ProfileViewModel.refreshWalletBalance()` (requesting `/api/wallet/balance`) immediately upon pull-to-refresh, offer completeds, or payouts to ensure user metrics are synchronized.
+2. **Whole-Integer Costs:** Dynamic payouts validate integers only. Fractional coin requests are rejected.
+3. **Signed Reversals:** Allow balance UI values to display negative balances safely without out-of-range crashes, accounting for S2S chargeback cancellations.

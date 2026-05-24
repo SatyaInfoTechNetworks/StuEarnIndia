@@ -67,184 +67,194 @@ export default function AdminNotifications({ getHeaders, showNotice, API_BASE })
     setSending(false);
   };
 
-  const statusColors = { sending: 'var(--warning)', success: 'var(--success)', error: 'var(--danger)' };
-  const statusBg = { sending: 'rgba(245,158,11,0.1)', success: 'rgba(16,185,129,0.1)', error: 'rgba(239,68,68,0.1)' };
-  const statusBorder = { sending: 'rgba(245,158,11,0.25)', success: 'rgba(16,185,129,0.25)', error: 'rgba(239,68,68,0.25)' };
-
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '28px', alignItems: 'start' }}>
-      {/* Compose Notification */}
-      <div className="glass-panel" style={{ padding: '28px' }}>
-        <h3 style={{ fontSize: '1.1rem', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Bell size={18} style={{ color: 'var(--primary)' }} /> FCM Notification Engine
-        </h3>
-        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '22px' }}>
-          Compose high-fidelity push notifications, configure dynamic targeting and attach banners.
-        </p>
-
-        {sendStatus && (
-          <div style={{ background: statusBg[sendStatus], border: `1px solid ${statusBorder[sendStatus]}`, borderRadius: '10px', padding: '12px 16px', marginBottom: '18px', color: statusColors[sendStatus], fontSize: '0.88rem' }}>
-            {sendStatus === 'sending' && '📡 Broadcasting signal via FCM...'}
-            {sendStatus === 'success' && '✅ Push notification processed and delivered successfully.'}
-            {sendStatus === 'error' && '❌ Transaction failed. Ensure Firebase parameters are validated.'}
-          </div>
-        )}
-
-        <form onSubmit={handleSend} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
-          {/* Target Type Selector */}
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Layers size={13} /> Targeting Audience
-            </label>
-            <select className="glass-input" value={targetType} onChange={e => setTargetType(e.target.value)}>
-              <option value="broadcast">Broadcast (All Active Users)</option>
-              <option value="specific">Specific User (10-Digit ID)</option>
-              <option value="topic">Topic-Based Channel</option>
-            </select>
-          </div>
-
-          {/* Conditional Target UI */}
-          {targetType === 'specific' && (
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Users size={13} /> Target User ID (10-char Hex ID)
-              </label>
-              <input
-                type="text"
-                className="glass-input"
-                placeholder="e.g. SE1A2B3C"
-                value={targetUserId}
-                onChange={e => setTargetUserId(e.target.value)}
-                required
-              />
+    <div className="container-fluid pt-2">
+      <div className="row">
+        {/* Compose Notification Column */}
+        <div className="col-md-6 mb-4">
+          <div className="card card-outline card-primary shadow-sm h-100">
+            <div className="card-header">
+              <h3 className="card-title text-primary font-weight-bold" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bell size={18} className="text-primary" /> FCM Notification Engine
+              </h3>
             </div>
-          )}
+            
+            <div className="card-body">
+              <p className="text-muted text-xs mb-3">
+                Compose high-fidelity push notifications, configure dynamic targeting and attach banners.
+              </p>
 
-          {targetType === 'topic' && (
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Layers size={13} /> Selective Channel Topic
-              </label>
-              <select className="glass-input" value={topic} onChange={e => setTopic(e.target.value)}>
-                <option value="offers">Offers & Survey Completion Alerts</option>
-                <option value="games">Lucky Spins & Games Rewards</option>
-                <option value="wallet">Wallet Balance & Deductions</option>
-                <option value="vip">VIP Status & Elite Bonus Rewards</option>
-              </select>
-            </div>
-          )}
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Notification Title</label>
-            <input
-              type="text"
-              className="glass-input"
-              placeholder="e.g. 🎉 Earn 3x coins this weekend!"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Message Body</label>
-            <textarea
-              className="glass-input"
-              rows={3}
-              placeholder="Short description or alert message..."
-              value={body}
-              onChange={e => setBody(e.target.value)}
-              required
-            />
-          </div>
-
-          {/* Banner URL Input with Preview */}
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Image size={13} /> Banner / Image URL <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span>
-            </label>
-            <input
-              type="text"
-              className="glass-input"
-              placeholder="e.g. https://example.com/banner.png"
-              value={imageUrl}
-              onChange={e => setImageUrl(e.target.value)}
-            />
-            {imageUrl && (
-              <div style={{ marginTop: '10px', background: 'rgba(255,255,255,0.02)', padding: '8px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                <img
-                  src={imageUrl}
-                  style={{ width: '100%', maxHeight: '100px', objectFit: 'cover', borderRadius: '6px' }}
-                  alt="Banner Preview"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              </div>
-            )}
-          </div>
-
-          <button type="submit" className="btn btn-primary" style={{ padding: '12px', marginTop: '4px' }} disabled={sending}>
-            <Send size={15} /> {sending ? 'Transmitting FCM Signals...' : 'Dispatch Alert'}
-          </button>
-        </form>
-      </div>
-
-      {/* Notification History */}
-      <div className="glass-panel" style={{ padding: '28px' }}>
-        <h3 style={{ fontSize: '1.1rem', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <History size={18} style={{ color: 'var(--accent)' }} /> Notification Database Logs
-        </h3>
-
-        {loadingHistory ? (
-          <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '30px 0', fontSize: '0.9rem' }}>Loading...</p>
-        ) : history.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '30px 0', fontSize: '0.9rem' }}>No notifications sent yet.</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '520px', overflowY: 'auto', paddingRight: '4px' }}>
-            {history.map(n => (
-              <div key={n.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '14px 16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                  <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: 0, color: '#fff' }}>{n.title}</p>
-                  
-                  {/* Sent Count Badge */}
-                  {n.sent_count !== undefined && (
-                    <span style={{ fontSize: '0.68rem', background: 'rgba(20,184,166,0.1)', border: '1px solid rgba(20,184,166,0.2)', borderRadius: '99px', padding: '2px 8px', color: 'var(--accent)', flexShrink: 0, marginLeft: '8px' }}>
-                      {n.sent_count} sent
-                    </span>
-                  )}
+              {sendStatus && (
+                <div className={`alert text-sm ${sendStatus === 'success' ? 'alert-success' : sendStatus === 'sending' ? 'alert-warning' : 'alert-danger'} mb-3`}>
+                  {sendStatus === 'sending' && '📡 Broadcasting signal via FCM...'}
+                  {sendStatus === 'success' && '✅ Push notification processed and delivered successfully.'}
+                  {sendStatus === 'error' && '❌ Transaction failed. Ensure Firebase parameters are validated.'}
                 </div>
-                
-                <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '0 0 8px' }}>{n.message}</p>
+              )}
 
-                {/* Banner Log Preview */}
-                {n.image_url && (
-                  <div style={{ marginBottom: '8px', overflow: 'hidden', borderRadius: '6px', maxHeight: '80px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                    <img src={n.image_url} style={{ width: '100%', height: '80px', objectFit: 'cover' }} alt="Log Preview" onError={(e) => { e.target.style.display = 'none'; }} />
+              <form onSubmit={handleSend} className="d-flex flex-column" style={{ gap: '14px' }}>
+                {/* Target Type Selector */}
+                <div className="form-group mb-0">
+                  <label className="text-sm font-weight-bold d-flex align-items-center gap-1">
+                    <Layers size={13} className="mr-1" /> Targeting Audience
+                  </label>
+                  <select className="form-control" value={targetType} onChange={e => setTargetType(e.target.value)}>
+                    <option value="broadcast">Broadcast (All Active Users)</option>
+                    <option value="specific">Specific User (10-Digit ID)</option>
+                    <option value="topic">Topic-Based Channel</option>
+                  </select>
+                </div>
+
+                {/* Conditional Target UI */}
+                {targetType === 'specific' && (
+                  <div className="form-group mb-0">
+                    <label className="text-sm font-weight-bold d-flex align-items-center gap-1">
+                      <Users size={13} className="mr-1" /> Target User ID (10-char Hex ID)
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. SE1A2B3C"
+                      value={targetUserId}
+                      onChange={e => setTargetUserId(e.target.value)}
+                      required
+                    />
                   </div>
                 )}
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Clock size={11} /> {new Date(n.created_at).toLocaleString()}
-                  </span>
-                  
-                  {/* Targeting details */}
-                  <span style={{ textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.03em', fontWeight: 600 }}>
-                    {n.target_type === 'broadcast' && '📢 Global'}
-                    {n.target_type === 'specific' && `👤 Hex ID: ${n.target_user_id || 'N/A'}`}
-                    {n.target_type === 'topic' && `🏷️ Topic: ${n.target_topic || 'general'}`}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                {targetType === 'topic' && (
+                  <div className="form-group mb-0">
+                    <label className="text-sm font-weight-bold d-flex align-items-center gap-1">
+                      <Layers size={13} className="mr-1" /> Selective Channel Topic
+                    </label>
+                    <select className="form-control" value={topic} onChange={e => setTopic(e.target.value)}>
+                      <option value="offers">Offers & Survey Completion Alerts</option>
+                      <option value="games">Lucky Spins & Games Rewards</option>
+                      <option value="wallet">Wallet Balance & Deductions</option>
+                      <option value="vip">VIP Status & Elite Bonus Rewards</option>
+                    </select>
+                  </div>
+                )}
 
-        {/* Pagination */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '16px' }}>
-          <button className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>← Prev</button>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', alignSelf: 'center' }}>Page {page}</span>
-          <button className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={() => setPage(p => p + 1)} disabled={history.length < PER_PAGE}>Next →</button>
+                <div className="form-group mb-0">
+                  <label className="text-sm font-weight-bold">Notification Title</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. 🎉 Earn 3x coins this weekend!"
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group mb-0">
+                  <label className="text-sm font-weight-bold">Message Body</label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    placeholder="Short description or alert message..."
+                    value={body}
+                    onChange={e => setBody(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {/* Banner URL Input with Preview */}
+                <div className="form-group mb-0">
+                  <label className="text-sm font-weight-bold d-flex align-items-center gap-1">
+                    <Image size={13} className="mr-1" /> Banner / Image URL <span className="text-muted font-weight-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. https://example.com/banner.png"
+                    value={imageUrl}
+                    onChange={e => setImageUrl(e.target.value)}
+                  />
+                  {imageUrl && (
+                    <div className="mt-2 p-2 bg-light rounded border text-center">
+                      <img
+                        src={imageUrl}
+                        style={{ width: '100%', maxHeight: '100px', objectFit: 'cover', borderRadius: '4px' }}
+                        alt="Banner Preview"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-block btn-sm mt-2" disabled={sending}>
+                  <Send size={14} className="mr-1" /> {sending ? 'Transmitting FCM Signals...' : 'Dispatch Push Alert'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        {/* Notification History Column */}
+        <div className="col-md-6 mb-4">
+          <div className="card card-outline card-success shadow-sm h-100">
+            <div className="card-header">
+              <h3 className="card-title text-success font-weight-bold" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <History size={18} className="text-success" /> Notification History Database
+              </h3>
+            </div>
+            
+            <div className="card-body d-flex flex-column justify-content-between">
+              <div>
+                {loadingHistory ? (
+                  <p className="text-muted text-center py-5">Loading...</p>
+                ) : history.length === 0 ? (
+                  <p className="text-muted text-center py-5">No notifications sent yet.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '520px', overflowY: 'auto' }}>
+                    {history.map(n => (
+                      <div key={n.id} className="p-3 bg-light rounded border text-left">
+                        <div className="d-flex justify-content-between align-items-start mb-2">
+                          <h6 className="font-weight-bold text-dark m-0" style={{ fontSize: '0.9rem' }}>{n.title}</h6>
+                          {n.sent_count !== undefined && (
+                            <span className="badge badge-success px-2 py-1" style={{ fontSize: '0.68rem' }}>
+                              {n.sent_count} sent
+                            </span>
+                          )}
+                        </div>
+                        
+                        <p className="text-muted text-xs mb-2">{n.message}</p>
+
+                        {/* Banner Log Preview */}
+                        {n.image_url && (
+                          <div className="mb-2 rounded border overflow-hidden" style={{ maxHeight: '80px' }}>
+                            <img src={n.image_url} style={{ width: '100%', height: '80px', objectFit: 'cover' }} alt="Log Preview" onError={(e) => { e.target.style.display = 'none'; }} />
+                          </div>
+                        )}
+
+                        <div className="d-flex justify-content-between align-items-center text-xs text-muted">
+                          <span>
+                            <Clock size={11} className="mr-1 d-inline" /> {new Date(n.created_at).toLocaleString()}
+                          </span>
+                          
+                          {/* Targeting details */}
+                          <span className="font-weight-bold text-uppercase" style={{ fontSize: '0.65rem' }}>
+                            {n.target_type === 'broadcast' && '📢 Global'}
+                            {n.target_type === 'specific' && `👤 ID: ${n.target_user_id || 'N/A'}`}
+                            {n.target_type === 'topic' && `🏷️ Topic: ${n.target_topic || 'general'}`}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Pagination */}
+              <div className="d-flex justify-content-center align-items-center mt-3" style={{ gap: '10px' }}>
+                <button className="btn btn-default btn-xs" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>← Prev</button>
+                <span className="text-xs text-muted font-weight-bold">Page {page}</span>
+                <button className="btn btn-default btn-xs" onClick={() => setPage(p => p + 1)} disabled={history.length < PER_PAGE}>Next →</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

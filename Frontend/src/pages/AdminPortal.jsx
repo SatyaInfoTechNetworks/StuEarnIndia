@@ -150,8 +150,8 @@ export default function AdminPortal() {
 
     // Set body classes for AdminLTE
     document.body.className = 'hold-transition sidebar-mini layout-fixed';
-    document.body.style.backgroundColor = '#0a0b10';
-    document.body.style.color = '#f3f4f6';
+    document.body.style.backgroundColor = '#f4f6f9';
+    document.body.style.color = '#212529';
     document.body.style.fontFamily = '"Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
     return () => {
@@ -1067,7 +1067,7 @@ export default function AdminPortal() {
       </aside>
 
       {/* Content Body */}
-      <div className="content-wrapper">
+      <div className="content-wrapper bg-light">
         
         {/* Dynamic Action Alerts */}
         {actionNotice && (

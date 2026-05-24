@@ -44,33 +44,77 @@ async function completionExists(connection, completionId) {
 // Helper: Send Beautiful formatted Telegram Notification (DRY & Premium)
 async function sendBeautifulTelegramAlert(emoji, title, user, amount, details = {}) {
   try {
-    const formattedAmount = amount !== null 
-      ? `${amount > 0 ? '🪙 +' : '🪙 -'}${Math.abs(amount).toFixed(0)} Coins` 
-      : 'N/A';
-    
-    let text = `✨ <b>${emoji} ${title}</b> ✨\n\n`;
-    
-    text += `👤 <b>User Identity:</b>\n`;
+    // 1. Detect provider and fetch high-quality brand icon
+    let providerKey = 'generic';
+    const combined = `${title} ${details['Offer Name'] || ''} ${details['Offer'] || ''}`.toLowerCase();
+    if (combined.includes('pubscale')) providerKey = 'pubscale';
+    else if (combined.includes('cpx')) providerKey = 'cpx_research';
+    else if (combined.includes('adjump')) providerKey = 'adjump';
+    else if (combined.includes('offermaru')) providerKey = 'offermaru';
+    else if (combined.includes('growdeck')) providerKey = 'growdeck';
+    else if (combined.includes('opinion')) providerKey = 'opinionuniverse';
+    else if (combined.includes('playtime')) providerKey = 'playtimeads';
+    else if (combined.includes('pocketsfull')) providerKey = 'pocketsfull';
+    else if (combined.includes('real opinion') || combined.includes('realopinion')) providerKey = 'realopinion';
+
+    const OFFERWALL_LOGOS = {
+      'pubscale': 'https://i.ibb.co/68gPz3Y/pubscale.png',
+      'cpx_research': 'https://i.ibb.co/LdQyJt8/cpx.png',
+      'adjump': 'https://i.ibb.co/v4SgYqK/adjump.png',
+      'offermaru': 'https://i.ibb.co/1fWfN9k/offermaru.png',
+      'growdeck': 'https://i.ibb.co/YyYgX4C/growdeck.png',
+      'opinionuniverse': 'https://i.ibb.co/zXgYqKB/opinionuniverse.png',
+      'playtimeads': 'https://i.ibb.co/RpyqK8H/playtime.png',
+      'pocketsfull': 'https://i.ibb.co/rpnYqKB/pocketsfull.png',
+      'realopinion': 'https://i.ibb.co/9pyqK8H/realopinion.png',
+      'generic': 'https://i.ibb.co/HpyqK8H/inhouse.png'
+    };
+
+    const imageUrl = OFFERWALL_LOGOS[providerKey] || OFFERWALL_LOGOS['generic'];
+
+    // 2. Zero-width space link to automatically load offerwall brand image preview in Telegram
+    let text = `<a href="${imageUrl}">&#8205;</a>`;
+
+    const alertType = amount && amount < 0 ? 'Reversal' : 'Completion';
+    text += `🔔 <b>Offerwall ${alertType} Alert</b>\n\n`;
+
+    // 3. User Identification (Username / Hex ID)
     if (user) {
-      text += `   • <b>Name:</b> ${user.name || 'N/A'}\n`;
-      if (user.email) text += `   • <b>Email:</b> ${user.email}\n`;
-      text += `   • <b>Hex Public ID:</b> <code>${user.user_id || 'N/A'}</code>\n`;
-      if (amount !== null) text += `   • <b>Final Balance:</b> 🪙 ${parseFloat(user.balance || 0).toFixed(0)} (${formattedAmount})\n`;
+      const username = user.name || user.email?.split('@')[0] || user.user_id || 'User';
+      text += `👤 <b>User:</b> @${username} (UID: <code>${user.user_id || 'N/A'}</code>)\n`;
     } else {
-      text += `   • <i>Anonymous / Not Found</i>\n`;
+      text += `👤 <b>User:</b> <i>Anonymous / Not Found</i>\n`;
     }
-    
-    if (Object.keys(details).length > 0) {
-      text += `\n🎯 <b>Campaign Details:</b>\n`;
-      for (const [key, value] of Object.entries(details)) {
-        if (value !== undefined && value !== null && value !== '') {
-          text += `   • <b>${key}:</b> <code>${value}</code>\n`;
-        }
-      }
+
+    // 4. Offer name & wall
+    const offerName = details['Offer Name'] || details['Offer'] || title || 'External Offer';
+    text += `🔥 <b>Offer Name:</b> ${offerName}\n`;
+
+    const providerName = providerKey === 'generic' 
+      ? 'StuEarn Offerwall' 
+      : providerKey.toUpperCase().replace('_', ' ');
+    text += `📡 <b>Offerwall:</b> ${providerName}\n`;
+
+    // 5. Earned coins
+    if (amount !== null) {
+      const formattedAmount = `${amount > 0 ? '+' : '-'}${Math.abs(amount).toFixed(0)}`;
+      text += `💰 <b>Coins Credited:</b> <b>${formattedAmount} Coins</b>\n`;
     }
+
+    // 6. Transaction Details
+    const transId = details['Transaction ID'] || details['ID'] || 'N/A';
+    text += `🆔 <b>Transaction ID:</b> <code>${transId}</code>\n`;
     
-    text += `\n🕒 <b>System Log Time:</b> <code>${new Date().toISOString()}</code>`;
-    
+    if (details['Reason']) {
+      text += `🚨 <b>Reason:</b> <code>${details['Reason']}</code>\n`;
+    }
+
+    // 7. Explicit image preview link
+    text += `🖼️ <b>Offerwall Image:</b> <a href="${imageUrl}">View Brand Logo</a>\n\n`;
+
+    text += `⚡ <b>Powered by Rewardly</b>\n`;
+    text += `🕒 <b>System Log Time:</b> <code>${new Date().toISOString()}</code>`;
+
     await sendAdminTelegramAlert(text).catch(err => console.error('[TelegramAlert] Failed:', err.message));
   } catch (err) {
     console.error('[TelegramAlert] Formatting Error:', err.message);

@@ -61,7 +61,8 @@ import {
   createTicket,
   listTickets,
   getTicketDetail,
-  replyToTicket
+  replyToTicket,
+  closeUserTicket
 } from './controllers/ticketController.js';
 import {
   listVisitTasks,
@@ -99,6 +100,7 @@ import {
   updateAppConfig,
   listPayoutMethods,
   updatePayoutMethod,
+  createPayoutMethod,
   getReferralSettings,
   updateReferralSettings,
   listLifafas,
@@ -245,6 +247,7 @@ app.post(['/api/tickets', '/api/tickets/create.php', '/api/tickets/create'], aut
 app.get(['/api/tickets', '/api/tickets/list.php', '/api/tickets/list'], authenticateUser, listTickets);
 app.get(['/api/tickets/detail', '/api/tickets/detail.php', '/api/tickets/:id'], authenticateUser, getTicketDetail);
 app.post(['/api/tickets/reply', '/api/tickets/reply.php', '/api/tickets/:id/reply'], authenticateUser, replyToTicket);
+app.post(['/api/tickets/:id/close', '/api/tickets/close.php'], authenticateUser, closeUserTicket);
 
 // ==========================================
 // 11. APP CONFIGURATION
@@ -301,6 +304,7 @@ app.post('/api/admin/withdrawals/:id/reject', authenticateAdmin, rejectWithdrawa
 
 // Payout Methods
 app.get('/api/admin/payout-methods', authenticateAdmin, listPayoutMethods);
+app.post('/api/admin/payout-methods', authenticateAdmin, createPayoutMethod);
 app.post('/api/admin/payout-methods/:id', authenticateAdmin, updatePayoutMethod);
 
 // Erasure

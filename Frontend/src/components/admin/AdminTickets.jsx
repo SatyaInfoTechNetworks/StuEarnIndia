@@ -21,6 +21,7 @@ export default function AdminTickets({ getHeaders, showNotice, API_BASE }) {
       if (data.success) setTickets(data.tickets || []);
     } catch (err) {
       console.error(err);
+      showNotice('error', 'Failed to fetch tickets');
     }
     setLoading(false);
   };
@@ -78,7 +79,8 @@ export default function AdminTickets({ getHeaders, showNotice, API_BASE }) {
 
   const filtered = tickets.filter(t =>
     t.subject?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.user_email?.toLowerCase().includes(searchQuery.toLowerCase())
+    t.user_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.user_public_id?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const statusColor = (s) => {
@@ -108,7 +110,7 @@ export default function AdminTickets({ getHeaders, showNotice, API_BASE }) {
           <Search size={16} style={{ position: 'absolute', left: '14px', top: '14px', color: 'var(--text-muted)' }} />
           <input
             className="glass-input"
-            placeholder="Search by subject or email..."
+            placeholder="Search subject, email, or User ID..."
             style={{ paddingLeft: '40px' }}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
@@ -161,7 +163,10 @@ export default function AdminTickets({ getHeaders, showNotice, API_BASE }) {
                   </span>
                 </div>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>{t.user_email || 'Unknown User'}</p>
-                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>{new Date(t.created_at).toLocaleDateString()}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  <span>ID: {t.user_public_id || 'N/A'}</span>
+                  <span>{new Date(t.created_at).toLocaleDateString()}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -172,51 +177,78 @@ export default function AdminTickets({ getHeaders, showNotice, API_BASE }) {
       {selectedTicket && (
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-glass)', paddingBottom: '14px' }}>
-            <div>
-              <button className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.75rem', marginBottom: '8px' }} onClick={() => setSelectedTicket(null)}>
-                <ChevronLeft size={14} /> Back
-              </button>
-              <h3 style={{ fontSize: '1.1rem', margin: 0 }}>{selectedTicket.subject}</h3>
+            <div style={{ width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <button className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => setSelectedTicket(null)}>
+                  <ChevronLeft size={14} /> Back
+                </button>
+                {selectedTicket.status !== 'CLOSED' && (
+                  <button className="btn btn-danger" style={{ padding: '5px 12px', fontSize: '0.75rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: 'var(--danger)' }} onClick={async () => {
+                    if (!window.confirm("Are you sure you want to close this support ticket?")) return;
+                    try {
+                      const res = await fetch(`${API_BASE}/api/admin/tickets/${selectedTicket.id}/close`, {
+                        method: 'POST', headers: getHeaders()
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        setSelectedTicket({ ...selectedTicket, status: 'CLOSED' });
+                        fetchTickets();
+                        showNotice('success', 'Ticket closed successfully.');
+                      } else {
+                        showNotice('error', data.message);
+                      }
+                    } catch (err) {
+                      showNotice('error', 'Failed to close ticket');
+                    }
+                  }}>
+                    🔒 Close Ticket
+                  </button>
+                )}
+              </div>
+              <h3 style={{ fontSize: '1.15rem', margin: '4px 0 0', color: '#fff' }}>{selectedTicket.subject}</h3>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                {selectedTicket.user_email} &mdash;
-                <span style={{ color: statusColor(selectedTicket.status), marginLeft: '6px' }}>
+                {selectedTicket.user_email} &bull; Public ID: {selectedTicket.user_public_id || 'N/A'} &mdash;
+                <span style={{ color: statusColor(selectedTicket.status), marginLeft: '6px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                   {statusIcon(selectedTicket.status)} {selectedTicket.status}
                 </span>
               </p>
             </div>
           </div>
 
-          {/* Messages */}
+          {/* Messages Thread */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '400px', overflowY: 'auto', paddingRight: '4px' }}>
-            {/* Original message */}
+            {/* Original User Inquiry */}
             <div style={{ alignSelf: 'flex-start', maxWidth: '80%' }}>
               <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
                 {selectedTicket.user_email} &bull; {new Date(selectedTicket.created_at).toLocaleString()}
               </p>
               <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px 12px 12px 2px', padding: '12px 16px' }}>
-                <p style={{ fontSize: '0.9rem', margin: 0, lineHeight: 1.5 }}>{selectedTicket.message}</p>
+                <p style={{ fontSize: '0.9rem', margin: 0, lineHeight: 1.5, color: '#f3f4f6' }}>{selectedTicket.message}</p>
               </div>
             </div>
 
-            {/* Replies */}
-            {thread.map(r => (
-              <div key={r.id} style={{ alignSelf: r.is_admin ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
-                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px', textAlign: r.is_admin ? 'right' : 'left' }}>
-                  {r.is_admin ? '⚡ Admin' : selectedTicket.user_email} &bull; {new Date(r.created_at).toLocaleString()}
-                </p>
-                <div style={{
-                  background: r.is_admin ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.04)',
-                  border: r.is_admin ? '1px solid rgba(168,85,247,0.25)' : '1px solid rgba(255,255,255,0.07)',
-                  borderRadius: r.is_admin ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                  padding: '12px 16px'
-                }}>
-                  <p style={{ fontSize: '0.9rem', margin: 0, lineHeight: 1.5 }}>{r.message}</p>
+            {/* Thread Replies */}
+            {thread.map(r => {
+              const isAdmin = r.sender_type === 'ADMIN';
+              return (
+                <div key={r.id} style={{ alignSelf: isAdmin ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
+                  <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px', textAlign: isAdmin ? 'right' : 'left' }}>
+                    {isAdmin ? '⚡ Admin' : selectedTicket.user_email} &bull; {new Date(r.created_at).toLocaleString()}
+                  </p>
+                  <div style={{
+                    background: isAdmin ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.04)',
+                    border: isAdmin ? '1px solid rgba(168,85,247,0.25)' : '1px solid rgba(255,255,255,0.07)',
+                    borderRadius: isAdmin ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                    padding: '12px 16px'
+                  }}>
+                    <p style={{ fontSize: '0.9rem', margin: 0, lineHeight: 1.5, color: '#f3f4f6' }}>{r.message}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {thread.length === 0 && (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '10px' }}>No replies yet.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '10px' }}>No replies in this thread yet.</p>
             )}
           </div>
 
@@ -226,7 +258,7 @@ export default function AdminTickets({ getHeaders, showNotice, API_BASE }) {
               <textarea
                 className="glass-input"
                 rows={3}
-                placeholder="Write your admin reply..."
+                placeholder="Write your admin response here..."
                 value={replyText}
                 onChange={e => setReplyText(e.target.value)}
                 required
@@ -237,14 +269,14 @@ export default function AdminTickets({ getHeaders, showNotice, API_BASE }) {
                   Close ticket after sending
                 </label>
                 <button type="submit" className="btn btn-primary" style={{ padding: '9px 20px', fontSize: '0.85rem' }} disabled={sending}>
-                  <Send size={14} /> {sending ? 'Sending...' : 'Send Reply'}
+                  <Send size={14} /> {sending ? 'Sending Response...' : 'Send Reply'}
                 </button>
               </div>
             </form>
           )}
           {selectedTicket.status === 'CLOSED' && (
             <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              <Lock size={14} style={{ marginRight: '6px' }} /> This ticket is closed. No further replies can be added.
+              <Lock size={14} style={{ marginRight: '6px', display: 'inline' }} /> This ticket is closed. No further replies can be added.
             </div>
           )}
         </div>

@@ -845,6 +845,62 @@ export const listPayoutMethods = async (req, res) => {
   }
 };
 
+export const createPayoutMethod = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { id, name, description, icon_url, min_coins, conversion_rate, processing_time, is_active, input_type, input_label, input_placeholder, tiers } = req.body;
+
+    if (!id || !name) {
+      return res.status(400).json({ success: false, message: 'ID and Name are required' });
+    }
+
+    await connection.beginTransaction();
+
+    await connection.query(
+      `INSERT INTO payout_methods (id, name, description, icon_url, min_coins, conversion_rate, processing_time, is_active, input_type, input_label, input_placeholder)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id.toLowerCase().trim(),
+        name,
+        description || '',
+        icon_url || '',
+        parseInt(min_coins || 0),
+        parseFloat(conversion_rate || 0),
+        processing_time || 'Instant',
+        is_active ? 1 : 0,
+        input_type || 'text',
+        input_label || 'Details',
+        input_placeholder || 'Enter details'
+      ]
+    );
+
+    // Sync payout tiers if provided
+    if (Array.isArray(tiers)) {
+      for (const tier of tiers) {
+        const coinCost = parseInt(tier.coin_cost || tier.coinCost || 0);
+        const val = parseFloat(tier.monetary_value || tier.monetaryValue || 0);
+        const sym = tier.currency_symbol || tier.currencySymbol || '₹';
+        if (coinCost > 0 && val > 0) {
+          const tierId = `${id}_${coinCost}`;
+          await connection.query(
+            'INSERT INTO payout_tiers (id, method_id, coin_cost, monetary_value, currency_symbol) VALUES (?, ?, ?, ?, ?)',
+            [tierId, id, coinCost, val, sym]
+          );
+        }
+      }
+    }
+
+    await connection.commit();
+    res.json({ success: true, message: 'Payout method created successfully' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Create Payout Method Error:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  } finally {
+    connection.release();
+  }
+};
+
 export const updatePayoutMethod = async (req, res) => {
   const connection = await pool.getConnection();
   try {

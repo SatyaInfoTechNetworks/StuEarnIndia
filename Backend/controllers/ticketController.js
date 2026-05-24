@@ -136,3 +136,37 @@ export const replyToTicket = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+// ----------------------------------------------------
+// CLOSE TICKET (USER SIDE)
+// ----------------------------------------------------
+export const closeUserTicket = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const ticketId = req.params.id || req.body.ticket_id;
+
+    if (!ticketId) {
+      return res.status(400).json({ success: false, message: 'Ticket ID is required' });
+    }
+
+    // Ensure the ticket exists and belongs to the user
+    const [tickets] = await pool.query(
+      'SELECT id FROM tickets WHERE id = ? AND user_id = ? LIMIT 1',
+      [ticketId, userId]
+    );
+
+    if (tickets.length === 0) {
+      return res.status(404).json({ success: false, message: 'Support ticket not found' });
+    }
+
+    await pool.query('UPDATE tickets SET status = "CLOSED" WHERE id = ?', [ticketId]);
+
+    res.json({
+      success: true,
+      message: 'Support ticket closed successfully'
+    });
+  } catch (error) {
+    console.error('Close Ticket Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};

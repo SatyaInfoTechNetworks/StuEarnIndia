@@ -331,12 +331,11 @@ export const getTopEarners = async (req, res) => {
         ) as total_earnings,
         (
           COALESCE(
-            (SELECT COUNT(t.id) 
-             FROM transactions t 
-             WHERE t.user_id = u.id 
-             AND t.type = 'CREDIT'
-             AND t.source NOT IN ('LIFAFA_BONUS', 'LUCKY_SPIN')
-             ${dateFilterT}
+            (SELECT COUNT(oc.id) 
+             FROM offer_completions oc 
+             WHERE oc.user_id = u.id 
+             AND oc.status = 'COMPLETED'
+             ${dateFilterOC}
             ), 0
           )
         ) as transactions_count

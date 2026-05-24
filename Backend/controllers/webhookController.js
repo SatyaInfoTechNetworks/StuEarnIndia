@@ -41,6 +41,42 @@ async function completionExists(connection, completionId) {
   return rows.length > 0;
 }
 
+// Helper: Send Beautiful formatted Telegram Notification (DRY & Premium)
+async function sendBeautifulTelegramAlert(emoji, title, user, amount, details = {}) {
+  try {
+    const formattedAmount = amount !== null 
+      ? `${amount > 0 ? '🪙 +' : '🪙 -'}${Math.abs(amount).toFixed(0)} Coins` 
+      : 'N/A';
+    
+    let text = `✨ <b>${emoji} ${title}</b> ✨\n\n`;
+    
+    text += `👤 <b>User Identity:</b>\n`;
+    if (user) {
+      text += `   • <b>Name:</b> ${user.name || 'N/A'}\n`;
+      if (user.email) text += `   • <b>Email:</b> ${user.email}\n`;
+      text += `   • <b>Hex Public ID:</b> <code>${user.user_id || 'N/A'}</code>\n`;
+      if (amount !== null) text += `   • <b>Final Balance:</b> 🪙 ${parseFloat(user.balance || 0).toFixed(0)} (${formattedAmount})\n`;
+    } else {
+      text += `   • <i>Anonymous / Not Found</i>\n`;
+    }
+    
+    if (Object.keys(details).length > 0) {
+      text += `\n🎯 <b>Campaign Details:</b>\n`;
+      for (const [key, value] of Object.entries(details)) {
+        if (value !== undefined && value !== null && value !== '') {
+          text += `   • <b>${key}:</b> <code>${value}</code>\n`;
+        }
+      }
+    }
+    
+    text += `\n🕒 <b>System Log Time:</b> <code>${new Date().toISOString()}</code>`;
+    
+    await sendAdminTelegramAlert(text).catch(err => console.error('[TelegramAlert] Failed:', err.message));
+  } catch (err) {
+    console.error('[TelegramAlert] Formatting Error:', err.message);
+  }
+}
+
 // =========================================================================
 // 1. GENERIC POSTBACK (Original Node.js Implementation)
 // =========================================================================
@@ -218,7 +254,12 @@ export const handlePubscale = async (req, res) => {
     await connection.commit();
 
     // Admin Alert
-    sendAdminTelegramAlert(`✅ <b>PubScale Completion</b>\nUser: ${internalId} (UID: ${user_id})\nAmount: ${reward}\nOffer: ${offer_name}`).catch(console.error);
+    sendBeautifulTelegramAlert('✅', 'PubScale Completion', user, reward, {
+      'Offer Name': offer_name,
+      'Goal Target': goal_name || 'N/A',
+      'Transaction ID': token,
+      'IP Address': ip || 'N/A'
+    });
 
     // User Notification
     sendNotification(internalId, "Pubscale Offer Completed! 🪙", `You received ${reward} coins from ${offer_name}`).catch(console.error);
@@ -280,8 +321,18 @@ export const handlePubscaleChargeback = async (req, res) => {
 
     // Transaction Ledger (DEBIT)
     const transId = uuidv4();
-    const finalOfferName = (origRows.length > 0 && origRows[0].offer_name) ? origRows[0].offer_name : offer_name;
-    const description = `Chargeback: ${finalOfferName} (${reason})`;
+    let finalReason = 'Reversed by provider';
+    if (reason && typeof reason === 'string' && reason.trim().length > 0) {
+      finalReason = reason.trim();
+    } else if (req.query.reason && typeof req.query.reason === 'string' && req.query.reason.trim().length > 0) {
+      finalReason = req.query.reason.trim();
+    }
+
+    const finalOfferName = (origRows.length > 0 && origRows[0].offer_name)
+      ? origRows[0].offer_name
+      : (offer_name && offer_name.trim().length > 0 ? offer_name.trim() : 'External Offer');
+
+    const description = `Chargeback: ${finalOfferName} (${finalReason})`;
     await connection.query(
       `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at)
        VALUES (?, ?, ?, 'DEBIT', 'PUBSCALE_REVERSAL', ?, ?, NOW())`,
@@ -291,7 +342,12 @@ export const handlePubscaleChargeback = async (req, res) => {
     await connection.commit();
 
     // Admin Alert
-    sendAdminTelegramAlert(`🚨 <b>PubScale Chargeback</b>\nUser: ${internalId} (UID: ${user_id})\nAmount: ${deduction}\nReason: ${reason}\nOffer: ${finalOfferName}`).catch(console.error);
+    await sendBeautifulTelegramAlert('🚨', 'PubScale Chargeback', user, -deduction, {
+      'Offer Name': finalOfferName,
+      'Reason': finalReason,
+      'Transaction ID': token,
+      'IP Address': ip || 'N/A'
+    });
 
     // Notification
     sendNotification(internalId, "Action Required: Points Reversed ❗", `Points for '${finalOfferName}' were reversed by the provider.`).catch(console.error);
@@ -366,7 +422,11 @@ export const handleCpxResearch = async (req, res) => {
 
       await connection.commit();
 
-      sendAdminTelegramAlert(`🚨 <b>CPX Reversal</b>\nUser: ${orig.user_id}\nAmount: ${amount}\nReason: ${reason}\nTransID: ${trans_id}`).catch(console.error);
+      const user = await resolveUser(connection, orig.user_id);
+      await sendBeautifulTelegramAlert('🚨', 'CPX Survey Reversal', user, -amount, {
+        'Reason': reason,
+        'Transaction ID': trans_id
+      });
 
       sendNotification(orig.user_id, "Survey Reversal ⚠️", `A CPX Research survey reward of ${amount} coins was reversed.`).catch(console.error);
 
@@ -409,7 +469,11 @@ export const handleCpxResearch = async (req, res) => {
 
     await connection.commit();
 
-    sendAdminTelegramAlert(`✅ <b>CPX Completion</b>\nUser: ${internalId} (UID: ${user_id})\nAmount: ${reward}\nOffer: Survey/Offer\nTransID: ${trans_id}`).catch(console.error);
+    await sendBeautifulTelegramAlert('✅', 'CPX Survey Completion', user, reward, {
+      'Offer Name': 'CPX Research Survey',
+      'Survey Type': type || 'Survey Completion',
+      'Transaction ID': trans_id
+    });
 
     sendNotification(internalId, "Survey Reward! 📝", `You earned ${reward} coins for completing a CPX Research survey`).catch(console.error);
 
@@ -478,7 +542,11 @@ export const handleAdjump = async (req, res) => {
 
     await connection.commit();
 
-    sendAdminTelegramAlert(`✅ <b>Adjump Completion</b>\nUser: ${internalId} (UID: ${user_id_param})\nAmount: ${reward} coins\nOffer: ${campaign}\nID: ${transaction_id}`).catch(console.error);
+    await sendBeautifulTelegramAlert('✅', 'Adjump Completion', user, reward, {
+      'Offer Name': campaign,
+      'Offer ID': offer_id_param || 'N/A',
+      'Transaction ID': transaction_id
+    });
 
     sendNotification(internalId, "Adjump Reward Received! 🪙", `You received ${reward} coins for completing an offer on Adjump`).catch(console.error);
 
@@ -568,7 +636,11 @@ export const handleOffermaru = async (req, res) => {
 
     await connection.commit();
 
-    sendAdminTelegramAlert(`✅ <b>Offermaru Completion</b>\nUser: ${internalId} (UID: ${user_id})\nAmount: ${reward}\nOffer: ${offer_name}`).catch(console.error);
+    await sendBeautifulTelegramAlert('✅', 'Offermaru Completion', user, reward, {
+      'Offer Name': offer_name,
+      'Offer ID': offer_id || 'N/A',
+      'Transaction ID': transaction_id
+    });
 
     sendNotification(internalId, "Offermaru Reward! 💎", `You received ${reward} coins for completing '${offer_name}'`).catch(console.error);
 
@@ -638,7 +710,11 @@ export const handleGrowdeck = async (req, res) => {
 
     await connection.commit();
 
-    sendAdminTelegramAlert(`✅ <b>GrowDeck Completion</b>\nUser: ${internalId} (UID: ${user_id})\nAmount: ${payout} coins\nOffer: ${campaign}\nTransaction: ${transaction_id}`).catch(console.error);
+    await sendBeautifulTelegramAlert('✅', 'Growdeck Completion', user, payout, {
+      'Offer Name': campaign,
+      'Offer ID': offer_id || 'N/A',
+      'Transaction ID': transaction_id
+    });
 
     sendNotification(internalId, "GrowDeck Reward Received! 🪙", `You received ${payout} coins from GrowDeck Playtime`).catch(console.error);
 
@@ -704,12 +780,14 @@ export const handleOpinionUniverse = async (req, res) => {
     // Reversal case
     if (status === '2') {
       const [origRows] = await connection.query('SELECT * FROM offer_completions WHERE completion_id = ? LIMIT 1', [transaction_id]);
+      const user = await resolveUser(connection, origRows.length > 0 ? origRows[0].user_id : user_id);
+      const deduction = origRows.length > 0 ? parseFloat(origRows[0].payout_coins || payoutParam || 0) : parseFloat(payoutParam || 0);
+
       if (origRows.length > 0) {
         const orig = origRows[0];
         if (orig.status !== 'REVERSED') {
           await connection.beginTransaction();
           await connection.query('UPDATE offer_completions SET status = "REVERSED" WHERE completion_id = ?', [transaction_id]);
-          const deduction = parseFloat(orig.payout_coins || payoutParam || 0);
           await connection.query('UPDATE users SET balance = balance - ? WHERE id = ?', [deduction, orig.user_id]);
           
           const transId = uuidv4();
@@ -723,7 +801,10 @@ export const handleOpinionUniverse = async (req, res) => {
           sendNotification(orig.user_id, "Action Required: Points Reversed ❗", `Points for Opinion Universe '${offer_name}' were reversed.`).catch(console.error);
         }
       }
-      sendAdminTelegramAlert(`🚨 <b>Opinion Universe Reversal</b>\nUser: ${user_id}\nAmount: ${payoutParam}\nOffer: ${offer_name}`).catch(console.error);
+      await sendBeautifulTelegramAlert('🚨', 'Opinion Universe Reversal', user, -deduction, {
+        'Offer Name': offer_name,
+        'Transaction ID': transaction_id
+      });
       return res.send('1');
     }
 
@@ -759,7 +840,11 @@ export const handleOpinionUniverse = async (req, res) => {
 
     await connection.commit();
 
-    sendAdminTelegramAlert(`✅ <b>Opinion Universe Completion</b>\nUser: ${internalId} (UID: ${user_id})\nAmount: ${reward}\nOffer: ${offer_name}`).catch(console.error);
+    await sendBeautifulTelegramAlert('✅', 'Opinion Universe Completion', user, reward, {
+      'Offer Name': offer_name,
+      'Offer ID': offer_id || 'N/A',
+      'Transaction ID': transaction_id
+    });
 
     sendNotification(internalId, "Opinion Universe Reward! 💎", `You received ${reward} coins for completing '${offer_name}'`).catch(console.error);
 
@@ -834,7 +919,11 @@ export const handlePlaytimeAds = async (req, res) => {
 
     await connection.commit();
 
-    sendAdminTelegramAlert(`✅ <b>Playtime Ads Reward</b>\nUser: ${internalId}\nAmount: ${payout} coins\nOffer: ${offer_name}\nTask: ${task_name}`).catch(console.error);
+    await sendBeautifulTelegramAlert('✅', 'Playtime Ads Completion', user, payout, {
+      'Offer Name': fullOfferName,
+      'Offer ID': offer_id || 'N/A',
+      'Transaction ID': transaction_id
+    });
 
     sendNotification(internalId, "Playtime Reward Received! 🎮", `You received ${payout} coins for playing ${offer_name} (${task_name || 'Milestone'})`).catch(console.error);
 
@@ -907,7 +996,11 @@ export const handlePocketsfull = async (req, res) => {
 
       await connection.commit();
 
-      sendAdminTelegramAlert(`✅ <b>Pocketsfull Reward</b>\nUser: ${internalId}\nAmount: ${payout} coins\nOffer: ${offer_id}`).catch(console.error);
+      await sendBeautifulTelegramAlert('✅', 'Pocketsfull Completion', user, payout, {
+        'Offer Name': offerName,
+        'Offer ID': offer_id || 'N/A',
+        'Transaction ID': trans_id
+      });
 
       sendNotification(internalId, "Pocketsfull Reward! 🎉", `You received ${payout} coins for completing a Pocketsfull ${type}!`).catch(console.error);
 
@@ -946,7 +1039,10 @@ export const handlePocketsfull = async (req, res) => {
 
       await connection.commit();
 
-      sendAdminTelegramAlert(`🚨 <b>Pocketsfull Chargeback</b>\nUser: ${internalId}\nAmount: ${deduction} coins\nReversed Transaction ID: ${trans_id}`).catch(console.error);
+      await sendBeautifulTelegramAlert('🚨', 'Pocketsfull Chargeback', user, -deduction, {
+        'Offer Name': finalOfferName,
+        'Transaction ID': trans_id
+      });
 
       sendNotification(internalId, "Action Required: Points Reversed ❗", `Points for '${finalOfferName}' were reversed due to rejection by the provider.`).catch(console.error);
 
@@ -1012,7 +1108,10 @@ export const handleRealOpinion = async (req, res) => {
 
     await connection.commit();
 
-    sendAdminTelegramAlert(`✅ <b>Real Opinion Completion</b>\nUser: ${internalId} (UID: ${user_id})\nAmount: ${reward}\nID: ${trans_id}`).catch(console.error);
+    await sendBeautifulTelegramAlert('✅', 'Real Opinion Completion', user, reward, {
+      'Offer Name': 'Real Opinion Survey',
+      'Transaction ID': trans_id
+    });
 
     sendNotification(internalId, "Real Opinion Reward Received! 🪙", `You received ${reward} coins from Real Opinion`).catch(console.error);
 
@@ -1069,7 +1168,12 @@ export const handleOfferCompleted = async (req, res) => {
 
     await connection.commit();
 
-    sendAdminTelegramAlert(`⏳ <b>New Offer Submission</b>\nUser: ${internalId}\nOfferID: ${offer_id}\nPayout: ${reward}\nProvider: ${provider}\nStatus: Pending Validation`).catch(console.error);
+    await sendBeautifulTelegramAlert('⏳', 'Offer Validation Pending', user, reward, {
+      'Offer ID': offer_id || 'N/A',
+      'Provider': provider,
+      'Transaction ID': completion_id,
+      'Status': 'Pending Validation'
+    });
 
     sendNotification(internalId, "Offer Recorded", "We've received your offer submission. It's currently pending validation.").catch(console.error);
 

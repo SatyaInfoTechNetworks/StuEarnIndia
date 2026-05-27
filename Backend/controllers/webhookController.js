@@ -819,15 +819,15 @@ export const handleOpinionUniverse = async (req, res) => {
       return res.status(400).send('0');
     }
 
-    // Optional signature check
-    if (ENABLE_SIGNATURE_VERIFICATION && signature) {
-      const params = { ...req.query };
-      delete params.SIG;
-      const sortedKeys = Object.keys(params).sort();
-      const queryString = sortedKeys.map(k => `${k}=${encodeURIComponent(params[k])}`).join('&');
-      const expectedSig = crypto.createHash('sha256').update(queryString + OPINION_UNIVERSE_TOKEN).digest('hex');
+    // Signature check
+    if (signature) {
+      const expectedSig = crypto
+        .createHmac('sha256', OPINION_UNIVERSE_TOKEN)
+        .update(transaction_id)
+        .digest('hex');
 
       if (!safeCompare(signature, expectedSig)) {
+        console.warn('[OPINION_UNIVERSE] Signature Mismatch. Received:', signature, 'Expected:', expectedSig);
         return res.status(403).send('0');
       }
     }

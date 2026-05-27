@@ -83,7 +83,13 @@ export const getEarnings = async (req, res) => {
     let earningIcons = {};
     if (configRows && configRows.length > 0) {
       try {
-        earningIcons = JSON.parse(configRows[0].config_value);
+        const parsed = JSON.parse(configRows[0].config_value);
+        if (parsed && typeof parsed === 'object') {
+          // Normalize all config keys to uppercase to prevent casing mismatches
+          Object.keys(parsed).forEach(k => {
+            earningIcons[k.trim().toUpperCase()] = parsed[k];
+          });
+        }
       } catch (e) {
         console.error('Failed to parse earning_icons config:', e);
       }
@@ -140,7 +146,7 @@ export const getEarnings = async (req, res) => {
       }
 
       // Legacy S2S specific icon urls mapping
-      let iconUrl = r.offer_icon || earningIcons[r.source];
+      let iconUrl = r.offer_icon || (r.source ? earningIcons[r.source.toUpperCase()] : null);
       if (!iconUrl) {
         switch (r.source) {
           case 'PUBSCALE':

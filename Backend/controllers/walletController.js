@@ -148,15 +148,30 @@ export const getEarnings = async (req, res) => {
       // Dynamic icon resolution: check offer icon first, then admin config by source key,
       // then fall back to hardcoded defaults. Handles key aliases (e.g. STREAK_REWARD -> DAILY_BONUS).
       const sourceKey = (r.source || '').toUpperCase();
-      // Alias map: some DB source names differ from earning_icons config keys
+
+      // Full alias map: maps every DB source name to its canonical earning_icons config key.
+      // Sources that ARE in earning_icons => map directly.
+      // Sources that are aliased (reversal variants, legacy names) => map to their parent key.
       const iconKeyAlias = {
-        'STREAK_REWARD': 'DAILY_BONUS',
-        'PUBSCALE_REVERSAL': 'PUBSCALE',
-        'CPX_RESEARCH_REVERSAL': 'CPX_RESEARCH',
-        'POCKETSFULL_REVERSAL': 'POCKETSFULL',
-        'REFERRAL_BONUS': 'REFERRAL',
-        'COMMISSION': 'REFERRAL',
-        'OFFER': 'OFFLINE_OFFER'
+        // Streak / Daily
+        'STREAK_REWARD':          'DAILY_BONUS',
+        // Reversal variants — use same icon as the original network
+        'PUBSCALE_REVERSAL':      'PUBSCALE',
+        'CPX_RESEARCH_REVERSAL':  'CPX_RESEARCH',
+        'POCKETSFULL_REVERSAL':   'POCKETSFULL',
+        // Referral aliases
+        'REFERRAL_BONUS':         'REFERRAL',
+        'COMMISSION':             'REFERRAL',
+        // Legacy offer alias
+        'OFFER':                  'OFFLINE_OFFER',
+        // Visit & Earn — map to a generic gift icon (no admin key yet)
+        'VISIT_EARN':             'OFFLINE_OFFER',
+        // Telegram join — map to referral icon (social action)
+        'TELEGRAM_JOIN':          'REFERRAL',
+        // Admin manual credit/debit — use admin icon
+        'MANUAL_ADJUSTMENT':      'ADMIN_CREDIT',
+        // Withdrawal debit
+        'WITHDRAWAL':             'DEBIT_WITHDRAWAL'
       };
       const resolvedKey = iconKeyAlias[sourceKey] || sourceKey;
 
@@ -164,6 +179,7 @@ export const getEarnings = async (req, res) => {
 
       if (!iconUrl) {
         switch (sourceKey) {
+          // ---- Ad Networks ----
           case 'PUBSCALE':
           case 'PUBSCALE_REVERSAL':
             iconUrl = 'https://i.ibb.co/68gPz3Y/pubscale.png';
@@ -194,13 +210,17 @@ export const getEarnings = async (req, res) => {
           case 'POCKETSFULL_REVERSAL':
             iconUrl = 'https://i.ibb.co/rpnYqKB/pocketsfull.png';
             break;
+          case 'TIMEWALL':
+            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            break;
+          // ---- In-House / Manual Offers ----
+          case 'OFFER':
+          case 'OFFLINE_OFFER':
+            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            break;
+          // ---- Bonus / Gamification ----
           case 'LIFAFA_BONUS':
             iconUrl = 'https://i.ibb.co/vvHv7WTx/envelope.png';
-            break;
-          case 'REFERRAL_BONUS':
-          case 'COMMISSION':
-          case 'REFERRAL':
-            iconUrl = 'https://img.icons8.com/color/96/conference-call.png';
             break;
           case 'STREAK_REWARD':
           case 'DAILY_BONUS':
@@ -209,14 +229,31 @@ export const getEarnings = async (req, res) => {
           case 'LUCKY_SPIN':
             iconUrl = 'https://www.vhv.rs/dpng/d/574-5746224_spin-the-wheel-png-png-download-spin-the.png';
             break;
-          case 'WATCH_VIDEO':
-            iconUrl = 'https://img.icons8.com/color/96/youtube-play.png';
-            break;
           case 'SCRATCH_CARD':
             iconUrl = 'https://i.ibb.co/5X03C8wq/scratchcard-1.png';
             break;
-          case 'TIMEWALL':
-            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+          case 'WATCH_VIDEO':
+            iconUrl = 'https://img.icons8.com/color/96/youtube-play.png';
+            break;
+          case 'VISIT_EARN':
+            iconUrl = 'https://img.icons8.com/color/96/internet.png';
+            break;
+          // ---- Social / Referral ----
+          case 'REFERRAL':
+          case 'REFERRAL_BONUS':
+          case 'COMMISSION':
+            iconUrl = 'https://img.icons8.com/color/96/conference-call.png';
+            break;
+          case 'TELEGRAM_JOIN':
+            iconUrl = 'https://img.icons8.com/color/96/telegram-app.png';
+            break;
+          // ---- Admin & System ----
+          case 'MANUAL_ADJUSTMENT':
+            iconUrl = 'https://img.icons8.com/color/96/admin-settings-male.png';
+            break;
+          case 'WITHDRAWAL':
+          case 'DEBIT_WITHDRAWAL':
+            iconUrl = 'https://img.icons8.com/color/96/wallet--v1.png';
             break;
           default:
             iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';

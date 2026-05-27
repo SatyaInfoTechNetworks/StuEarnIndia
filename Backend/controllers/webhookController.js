@@ -953,12 +953,22 @@ export const handlePlaytimeAds = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const params = { ...req.query, ...req.body };
+    
+    // Log incoming Playtime Ads callback request
+    console.log('🎮 [PLAYTIME_ADS] Incoming webhook request:', {
+      ip: req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.ip,
+      query: req.query,
+      body: req.body,
+      headers: req.headers
+    });
+
     const { user_id, offer_id = '', offer_name = 'Playtime Offer', amount = 0, signature, task_id = '', task_name = '' } = params;
 
     const APPLICATION_KEY = process.env.PLAYTIME_APP_KEY || "59c2f0110111f993";
     const APPLICATION_SECRET_KEY = process.env.PLAYTIME_APP_SECRET || "3QDAWT60JYHQ2IWZ";
 
     if (!user_id || !amount || !signature) {
+      console.warn('⚠️ [PLAYTIME_ADS] Missing required parameters:', { user_id, amount, signature });
       return res.status(400).json({ status: 'error', message: 'Missing required parameters' });
     }
 
@@ -967,6 +977,12 @@ export const handlePlaytimeAds = async (req, res) => {
     const calculatedSig = crypto.createHash('sha1').update(rawString).digest('hex');
 
     if (!safeCompare(signature, calculatedSig)) {
+      console.warn('⚠️ [PLAYTIME_ADS] Signature verification failed!', {
+        received: signature,
+        calculated: calculatedSig,
+        rawString: rawString,
+        params: params
+      });
       return res.status(403).json({ status: 'error', message: 'Signature verification failed' });
     }
 
@@ -974,12 +990,14 @@ export const handlePlaytimeAds = async (req, res) => {
 
     const user = await resolveUser(connection, user_id);
     if (!user) {
+      console.warn('⚠️ [PLAYTIME_ADS] User lookup failed! User not found for ID/UID/user_id:', user_id);
       return res.status(404).json({ status: 'error', message: 'User not found' });
     }
 
     const internalId = user.id;
 
     if (await completionExists(connection, transaction_id)) {
+      console.log('ℹ️ [PLAYTIME_ADS] Duplicate transaction ignored:', transaction_id);
       return res.status(200).json({ status: 'success', message: 'Duplicate transaction ignored' });
     }
 
@@ -1014,6 +1032,13 @@ export const handlePlaytimeAds = async (req, res) => {
     sendNotification(internalId, "Playtime Reward Received! 🎮", `You received ${payout} coins for playing ${offer_name} (${task_name || 'Milestone'})`).catch(console.error);
 
     processReferralRewards(internalId, payout, '0').catch(err => console.error('Playtime Referral Commission error:', err.message));
+
+    console.log('✅ [PLAYTIME_ADS] User credited successfully:', {
+      user_id: user_id,
+      internalId: internalId,
+      payout: payout,
+      transaction_id: transaction_id
+    });
 
     return res.status(200).json({ status: 'success', message: 'User rewarded successfully' });
   } catch (error) {

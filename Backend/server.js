@@ -76,6 +76,7 @@ import {
   getAdminStats,
   listUsers,
   getUserTransactionsAdmin,
+  getAllTransactionsAdmin,
   updateUserBalance,
   updateUser,
   banUser,
@@ -285,6 +286,7 @@ app.get('/api/admin/reports', authenticateAdmin, getAdminReports);
 // User Management
 app.get('/api/admin/users', authenticateAdmin, listUsers);
 app.get('/api/admin/users/:id/transactions', authenticateAdmin, getUserTransactionsAdmin);
+app.get('/api/admin/transactions', authenticateAdmin, getAllTransactionsAdmin);
 app.post('/api/admin/users/:id/balance', authenticateAdmin, updateUserBalance);
 app.put('/api/admin/users/:id', authenticateAdmin, updateUser);
 app.post('/api/admin/users/:id/ban', authenticateAdmin, banUser);

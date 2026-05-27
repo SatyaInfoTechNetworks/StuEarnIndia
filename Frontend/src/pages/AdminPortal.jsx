@@ -110,6 +110,17 @@ export default function AdminPortal() {
   // Erasures states
   const [erasuresList, setErasuresList] = useState([]);
 
+  // Global Transactions states
+  const [globalTransactionsList, setGlobalTransactionsList] = useState([]);
+  const [globalTransactionsSearch, setGlobalTransactionsSearch] = useState('');
+  const [debouncedGlobalTransactionsSearch, setDebouncedGlobalTransactionsSearch] = useState('');
+  const [globalTransactionsPage, setGlobalTransactionsPage] = useState(1);
+  const [globalTransactionsTotal, setGlobalTransactionsTotal] = useState(0);
+  const [globalTransactionsPages, setGlobalTransactionsPages] = useState(1);
+  const [globalTransactionsType, setGlobalTransactionsType] = useState('ALL');
+  const [globalTransactionsSource, setGlobalTransactionsSource] = useState('ALL');
+  const globalTransactionsLimit = 50;
+
   // Offline task manual proof verification states
   const [proofsList, setProofsList] = useState([]);
   const [rejectProofClickId, setRejectProofClickId] = useState(null);
@@ -309,6 +320,46 @@ export default function AdminPortal() {
       fetchWithdrawals();
     }
   }, [withdrawalStatus, activeTab, isAuthenticated]);
+
+  // Debounce global transactions search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedGlobalTransactionsSearch(globalTransactionsSearch);
+      setGlobalTransactionsPage(1); // Reset page on search
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [globalTransactionsSearch]);
+
+  const fetchGlobalTransactions = async () => {
+    try {
+      const typeParam = globalTransactionsType !== 'ALL' ? `&type=${globalTransactionsType}` : '';
+      const sourceParam = globalTransactionsSource !== 'ALL' ? `&source=${globalTransactionsSource}` : '';
+      const searchParam = debouncedGlobalTransactionsSearch ? `&search=${debouncedGlobalTransactionsSearch}` : '';
+      
+      const res = await fetch(
+        `${API_BASE}/api/admin/transactions?page=${globalTransactionsPage}&limit=${globalTransactionsLimit}${searchParam}${typeParam}${sourceParam}`, 
+        { headers: getHeaders() }
+      );
+      if (!checkResponseStatus(res)) return;
+      const data = await res.json();
+      if (data.success) {
+        setGlobalTransactionsList(data.transactions || []);
+        if (data.pagination) {
+          setGlobalTransactionsTotal(data.total || 0);
+          setGlobalTransactionsPages(data.pagination.totalPages || 1);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching global transactions:", err);
+    }
+  };
+
+  // Fetch global transactions when query, page or filters change
+  useEffect(() => {
+    if (isAuthenticated && activeTab === 'transactions') {
+      fetchGlobalTransactions();
+    }
+  }, [debouncedGlobalTransactionsSearch, globalTransactionsPage, globalTransactionsType, globalTransactionsSource, activeTab, isAuthenticated]);
 
   const fetchProofs = async () => {
     try {
@@ -1042,6 +1093,12 @@ export default function AdminPortal() {
                   {stats.open_tickets > 0 && (
                     <span className="badge badge-info float-right px-2">{stats.open_tickets}</span>
                   )}
+                </a>
+              </li>
+              <li className="nav-item">
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('transactions'); }} className={`nav-link ${activeTab === 'transactions' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-history mr-2"></i>
+                  <p>Global Ledger</p>
                 </a>
               </li>
 
@@ -1949,6 +2006,131 @@ export default function AdminPortal() {
                 <div className="card-body">
                   <AdminReports getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
                 </div>
+              </div>
+            )}
+
+            {/* TAB 15: GLOBAL TRANSACTIONS AUDIT */}
+            {activeTab === 'transactions' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-header border-0 bg-transparent pb-0">
+                  <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+                    <h3 className="card-title font-weight-bold mb-3 mb-md-0"><i className="fas fa-history mr-2 text-indigo"></i>Global Ledger & User Transactions</h3>
+                    <div className="d-flex flex-wrap align-items-center" style={{ gap: '10px' }}>
+                      <input
+                        type="text"
+                        className="form-control form-control-sm rounded-pill px-3"
+                        placeholder="Search name, email, description..."
+                        style={{ width: '220px' }}
+                        value={globalTransactionsSearch}
+                        onChange={e => setGlobalTransactionsSearch(e.target.value)}
+                      />
+                      <select
+                        className="form-control form-control-sm rounded-pill"
+                        style={{ width: '130px' }}
+                        value={globalTransactionsType}
+                        onChange={e => { setGlobalTransactionsType(e.target.value); setGlobalTransactionsPage(1); }}
+                      >
+                        <option value="ALL">All Types</option>
+                        <option value="CREDIT">Credits (+)</option>
+                        <option value="DEBIT">Debits (-)</option>
+                      </select>
+                      <select
+                        className="form-control form-control-sm rounded-pill"
+                        style={{ width: '160px' }}
+                        value={globalTransactionsSource}
+                        onChange={e => { setGlobalTransactionsSource(e.target.value); setGlobalTransactionsPage(1); }}
+                      >
+                        <option value="ALL">All Sources</option>
+                        <option value="OFFER">Offers</option>
+                        <option value="DAILY_BONUS">Daily Checkin</option>
+                        <option value="STREAK_REWARD">Streak Reward</option>
+                        <option value="LUCKY_SPIN">Lucky Spin</option>
+                        <option value="SCRATCH_CARD">Scratch Card</option>
+                        <option value="WATCH_VIDEO">Video Ads</option>
+                        <option value="REFERRAL">Referrals</option>
+                        <option value="REFERRAL_BONUS">Referral Bonus</option>
+                        <option value="COMMISSION">Commission</option>
+                        <option value="LIFAFA_BONUS">Lifafa</option>
+                        <option value="WITHDRAWAL">Withdrawals</option>
+                        <option value="MANUAL_ADJUSTMENT">Admin Manual</option>
+                      </select>
+                      <button className="btn btn-sm btn-outline-secondary rounded-pill" onClick={fetchGlobalTransactions}><i className="fas fa-sync-alt"></i></button>
+                    </div>
+                  </div>
+                </div>
+                <div className="card-body p-0 table-responsive mt-3">
+                  <table className="table table-hover align-middle mb-0">
+                    <thead className="bg-light">
+                      <tr className="text-xs text-muted uppercase">
+                        <th className="pl-4">User Details</th>
+                        <th>Type</th>
+                        <th>Source</th>
+                        <th>Amount (Coins)</th>
+                        <th>Description</th>
+                        <th>Date & Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {globalTransactionsList.map(t => (
+                        <tr key={t.id} className="text-sm">
+                          <td className="pl-4">
+                            <strong>{t.user_name || 'N/A'}</strong><br />
+                            <span className="text-xs text-muted">{t.user_email || 'N/A'}</span>
+                          </td>
+                          <td>
+                            <span className={`badge badge-${t.type === 'CREDIT' ? 'success' : 'danger'} px-2 py-1 rounded-pill`}>
+                              {t.type}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="badge badge-light border px-2 py-1">{t.source}</span>
+                          </td>
+                          <td>
+                            <strong className={t.type === 'CREDIT' ? 'text-success' : 'text-danger'}>
+                              {t.type === 'CREDIT' ? '+' : '-'}{parseFloat(t.amount).toFixed(0)} Coins
+                            </strong>
+                          </td>
+                          <td style={{ whiteSpace: 'normal', maxWidth: '300px' }}>
+                            {t.description || '-'}
+                          </td>
+                          <td className="text-xs text-muted">
+                            {new Date(t.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                        </tr>
+                      ))}
+                      {globalTransactionsList.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="text-center text-muted p-4">No matching ledger transactions found.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Pagination Controls */}
+                {globalTransactionsPages > 1 && (
+                  <div className="card-footer bg-transparent d-flex justify-content-between align-items-center border-top">
+                    <span className="text-xs text-muted">Showing {globalTransactionsList.length} of {globalTransactionsTotal} entries</span>
+                    <div className="btn-group">
+                      <button
+                        className="btn btn-sm btn-outline-secondary"
+                        disabled={globalTransactionsPage === 1}
+                        onClick={() => setGlobalTransactionsPage(p => Math.max(1, p - 1))}
+                      >
+                        Previous
+                      </button>
+                      <span className="btn btn-sm btn-light disabled font-weight-bold">
+                        Page {globalTransactionsPage} of {globalTransactionsPages}
+                      </span>
+                      <button
+                        className="btn btn-sm btn-outline-secondary"
+                        disabled={globalTransactionsPage === globalTransactionsPages}
+                        onClick={() => setGlobalTransactionsPage(p => Math.min(globalTransactionsPages, p + 1))}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

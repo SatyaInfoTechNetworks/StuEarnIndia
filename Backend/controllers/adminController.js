@@ -1383,3 +1383,65 @@ export const resetAllDailySpins = async (req, res) => {
   }
 };
 
+export const getAllTransactionsAdmin = async (req, res) => {
+  try {
+    const { search, type, source, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let whereParts = [];
+    const params = [];
+
+    if (search) {
+      whereParts.push('(u.name LIKE ? OR u.email LIKE ? OR u.user_id LIKE ? OR t.description LIKE ? OR t.source LIKE ?)');
+      const searchWildcard = `%${search.trim()}%`;
+      params.push(searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard);
+    }
+
+    if (type && type !== 'ALL') {
+      whereParts.push('t.type = ?');
+      params.push(type);
+    }
+
+    if (source && source !== 'ALL') {
+      whereParts.push('t.source = ?');
+      params.push(source);
+    }
+
+    const whereClause = whereParts.length > 0 ? 'WHERE ' + whereParts.join(' AND ') : '';
+
+    const query = `
+      SELECT t.id, t.user_id, t.amount, t.type, t.source, t.description, t.created_at,
+             u.name as user_name, u.email as user_email, u.user_id as user_public_id
+      FROM transactions t
+      JOIN users u ON t.user_id = u.id
+      ${whereClause}
+      ORDER BY t.created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM transactions t
+      JOIN users u ON t.user_id = u.id
+      ${whereClause}
+    `;
+
+    const [rows] = await pool.query(query, [...params, parseInt(limit), offset]);
+    const [countRows] = await pool.query(countQuery, params);
+
+    res.json({
+      success: true,
+      transactions: rows,
+      total: countRows[0].total,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(countRows[0].total / parseInt(limit)) || 1,
+        limit: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Admin Get All Transactions Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+

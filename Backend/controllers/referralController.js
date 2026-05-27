@@ -302,10 +302,21 @@ export const getReferralHistory = async (req, res) => {
 // Internal Helper: Sync user referrals from database
 async function syncUserReferrals(referrerId, code) {
   try {
-    // Find all users who signed up using this code
+    // Get all identifiers of the referrer to match potential referrals
+    const [referrerRows] = await pool.query(
+      'SELECT id, referral_code, user_id, uid FROM users WHERE id = ? LIMIT 1',
+      [referrerId]
+    );
+    if (referrerRows.length === 0) return;
+    const ref = referrerRows[0];
+    const cleanReferralCode = ref.referral_code || code;
+    const cleanUserHexId = ref.user_id;
+    const cleanUid = ref.uid;
+
+    // Find all users who signed up using any of these codes/identifiers
     const [referredUsers] = await pool.query(
-      'SELECT id FROM users WHERE referred_by = ? OR referred_by = ?',
-      [referrerId, code]
+      'SELECT id FROM users WHERE referred_by = ? OR referred_by = ? OR referred_by = ? OR referred_by = ?',
+      [ref.id, cleanReferralCode, cleanUserHexId, cleanUid]
     );
 
     for (const u of referredUsers) {

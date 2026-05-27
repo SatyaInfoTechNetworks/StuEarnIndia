@@ -508,14 +508,34 @@ export async function initializeDatabase() {
         key: 'is_maintenance',
         value: 'false',
         desc: 'Enable or disable maintenance mode.'
+      },
+      {
+        key: 'earning_icons',
+        value: JSON.stringify({
+          "PUBSCALE": "https://i.ibb.co/68gPz3Y/pubscale.png",
+          "OFFERMARU": "https://i.ibb.co/1fWfN9k/offermaru.png",
+          "OPINION_UNIVERSE": "https://i.ibb.co/zXgYqKB/opinionuniverse.png",
+          "CPX_RESEARCH": "https://i.ibb.co/LdQyJt8/cpx.png",
+          "GROWDECK": "https://i.ibb.co/YyYgX4C/growdeck.png",
+          "ADJUMP": "https://i.ibb.co/v4SgYqK/adjump.png",
+          "REAL_OPINION": "https://i.ibb.co/9pyqK8H/realopinion.png",
+          "PLAYTIME": "https://i.ibb.co/RpyqK8H/playtime.png",
+          "POCKETSFULL": "https://i.ibb.co/rpnYqKB/pocketsfull.png",
+          "LIFAFA_BONUS": "https://i.ibb.co/vvHv7WTx/envelope.png",
+          "LUCKY_SPIN": "https://www.vhv.rs/dpng/d/574-5746224_spin-the-wheel-png-png-download-spin-the.png",
+          "DAILY_BONUS": "https://img.icons8.com/color/96/calendar.png",
+          "WATCH_VIDEO": "https://img.icons8.com/color/96/youtube-play.png",
+          "SCRATCH_CARD": "https://i.ibb.co/5X03C8wq/scratchcard-1.png",
+          "REFERRAL": "https://img.icons8.com/color/96/conference-call.png"
+        }),
+        desc: 'Dynamic icon mappings for wallet and offer completions.'
       }
     ];
 
     for (const config of configs) {
       await connection.query(
-        `INSERT INTO app_configs (config_key, config_value, description) 
-         VALUES (?, ?, ?) 
-         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
+        `INSERT IGNORE INTO app_configs (config_key, config_value, description) 
+         VALUES (?, ?, ?)`,
         [config.key, config.value, config.desc]
       );
     }
@@ -554,10 +574,9 @@ export async function initializeDatabase() {
 
     for (const m of payoutMethods) {
       await connection.query(
-        `INSERT INTO payout_methods 
+        `INSERT IGNORE INTO payout_methods 
           (id, name, description, icon_url, min_coins, conversion_rate, currency_symbol, processing_time, input_type, input_label, input_placeholder, is_active) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
-         ON DUPLICATE KEY UPDATE name=VALUES(name), description=VALUES(description), icon_url=VALUES(icon_url), min_coins=VALUES(min_coins), conversion_rate=VALUES(conversion_rate), currency_symbol=VALUES(currency_symbol), processing_time=VALUES(processing_time), input_type=VALUES(input_type), input_label=VALUES(input_label), input_placeholder=VALUES(input_placeholder), is_active=VALUES(is_active)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [m.id, m.name, m.description, m.icon_url, m.min_coins, m.conversion_rate, m.currency_symbol, m.processing_time, m.input_type, m.input_label, m.input_placeholder, m.is_active]
       );
     }
@@ -575,10 +594,9 @@ export async function initializeDatabase() {
 
     for (const t of payoutTiers) {
       await connection.query(
-        `INSERT INTO payout_tiers 
+        `INSERT IGNORE INTO payout_tiers 
           (id, method_id, coin_cost, monetary_value, currency_symbol) 
-         VALUES (?, ?, ?, ?, ?) 
-         ON DUPLICATE KEY UPDATE method_id=VALUES(method_id), coin_cost=VALUES(coin_cost), monetary_value=VALUES(monetary_value), currency_symbol=VALUES(currency_symbol)`,
+         VALUES (?, ?, ?, ?, ?)`,
         [t.id, t.method_id, t.coin_cost, t.monetary_value, t.currency_symbol]
       );
     }

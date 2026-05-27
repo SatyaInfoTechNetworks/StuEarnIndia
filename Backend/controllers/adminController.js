@@ -714,8 +714,8 @@ export const triggerPushNotification = async (req, res) => {
 
     if (targetType === 'specific') {
       if (!user_id) return res.status(400).json({ success: false, message: 'User ID is required for specific targeting' });
-      // Find internal ID by public user_id or internal UUID
-      const [userRows] = await pool.query('SELECT id FROM users WHERE user_id = ? OR id = ? LIMIT 1', [user_id, user_id]);
+      // Find internal ID by public user_id, internal UUID, or Firebase UID
+      const [userRows] = await pool.query('SELECT id FROM users WHERE user_id = ? OR id = ? OR uid = ? LIMIT 1', [user_id, user_id, user_id]);
       if (userRows.length === 0) return res.status(404).json({ success: false, message: 'Target user not found' });
       const success = await sendNotification(userRows[0].id, title, body, image_url);
       sentCount = success ? 1 : 0;

@@ -46,6 +46,25 @@ export default function AdminConfigs({ getHeaders, showNotice, API_BASE }) {
   // G. Daily Withdrawal Limit
   const [dailyWithdrawLimit, setDailyWithdrawLimit] = useState('2');
 
+  // H. Earning and Offerwall Icons
+  const [earningIcons, setEarningIcons] = useState({
+    "PUBSCALE": "https://i.ibb.co/68gPz3Y/pubscale.png",
+    "OFFERMARU": "https://i.ibb.co/1fWfN9k/offermaru.png",
+    "OPINION_UNIVERSE": "https://i.ibb.co/zXgYqKB/opinionuniverse.png",
+    "CPX_RESEARCH": "https://i.ibb.co/LdQyJt8/cpx.png",
+    "GROWDECK": "https://i.ibb.co/YyYgX4C/growdeck.png",
+    "ADJUMP": "https://i.ibb.co/v4SgYqK/adjump.png",
+    "REAL_OPINION": "https://i.ibb.co/9pyqK8H/realopinion.png",
+    "PLAYTIME": "https://i.ibb.co/RpyqK8H/playtime.png",
+    "POCKETSFULL": "https://i.ibb.co/rpnYqKB/pocketsfull.png",
+    "LIFAFA_BONUS": "https://i.ibb.co/vvHv7WTx/envelope.png",
+    "LUCKY_SPIN": "https://www.vhv.rs/dpng/d/574-5746224_spin-the-wheel-png-png-download-spin-the.png",
+    "DAILY_BONUS": "https://img.icons8.com/color/96/calendar.png",
+    "WATCH_VIDEO": "https://img.icons8.com/color/96/youtube-play.png",
+    "SCRATCH_CARD": "https://i.ibb.co/5X03C8wq/scratchcard-1.png",
+    "REFERRAL": "https://img.icons8.com/color/96/conference-call.png"
+  });
+
   const fetchConfigs = async () => {
     setLoading(true);
     try {
@@ -92,6 +111,9 @@ export default function AdminConfigs({ getHeaders, showNotice, API_BASE }) {
               setScratchMaxReward(cfg.config_value);
             } else if (cfg.config_key === 'daily_withdraw_limit') {
               setDailyWithdrawLimit(cfg.config_value);
+            } else if (cfg.config_key === 'earning_icons') {
+              const parsed = JSON.parse(cfg.config_value);
+              if (parsed && typeof parsed === 'object') setEarningIcons(parsed);
             }
           } catch (e) {
             console.error(`Error parsing key ${cfg.config_key}:`, e);
@@ -244,6 +266,17 @@ export default function AdminConfigs({ getHeaders, showNotice, API_BASE }) {
       fetchConfigs();
     } else {
       showNotice('error', 'Failed to update withdrawal limit.');
+    }
+  };
+
+  // 9. Save Earning Icons
+  const handleSaveEarningIcons = async () => {
+    const success = await saveSingleConfig('earning_icons', JSON.stringify(earningIcons));
+    if (success) {
+      showNotice('success', 'Earning and Offerwall Icons updated.');
+      fetchConfigs();
+    } else {
+      showNotice('error', 'Failed to update earning icons.');
     }
   };
 
@@ -443,6 +476,56 @@ export default function AdminConfigs({ getHeaders, showNotice, API_BASE }) {
                           }}
                         />
                         <Coins size={14} style={{ position: 'absolute', right: '12px', top: '13px', color: '#eab308' }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 8. MASTER EARNING ICONS */}
+            <div className="glass-panel" style={{ padding: 0, overflow: 'hidden', marginBottom: '30px' }}>
+              <div style={{ 
+                background: 'rgba(168,85,247,0.06)', 
+                borderBottom: '1px solid var(--border-glass)', 
+                padding: '16px 24px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={16} style={{ color: 'var(--accent)' }} /> Master Earning & Game Logos
+                </h4>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 12px', fontSize: '0.75rem', gap: '4px' }} 
+                  onClick={handleSaveEarningIcons}
+                >
+                  <Save size={12} /> Save Logos
+                </button>
+              </div>
+
+              <div style={{ padding: '24px', maxHeight: '450px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '14px' }}>
+                  {Object.keys(earningIcons).map(key => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '40px', height: '40px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border-glass)' }}>
+                        <img src={earningIcons[key]} alt={key} style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.target.src = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png'; }} />
+                      </div>
+                      <div style={{ flexGrow: 1 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold' }}>{key.replace('_', ' ')}</label>
+                        <input 
+                          type="text" 
+                          className="glass-input" 
+                          style={{ padding: '6px 10px', fontSize: '0.8rem' }}
+                          value={earningIcons[key] || ''}
+                          onChange={(e) => {
+                            setEarningIcons({
+                              ...earningIcons,
+                              [key]: e.target.value
+                            });
+                          }}
+                        />
                       </div>
                     </div>
                   ))}

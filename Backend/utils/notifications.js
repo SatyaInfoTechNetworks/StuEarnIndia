@@ -2,6 +2,10 @@ import admin from 'firebase-admin';
 import fs from 'fs';
 import path from 'path';
 import pool from '../db.js';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let firebaseApp = null;
 const serviceAccountPath = process.env.FCM_SERVICE_ACCOUNT_PATH || './config/service-account.json';
@@ -13,14 +17,30 @@ try {
       credential: admin.credential.cert(serviceAccount)
     });
     console.log('✅ Firebase Admin SDK initialized successfully from env variable.');
-  } else if (fs.existsSync(serviceAccountPath)) {
-    const serviceAccount = JSON.parse(fs.readFileSync(path.resolve(serviceAccountPath), 'utf8'));
-    firebaseApp = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
-    console.log('✅ Firebase Admin SDK initialized successfully from file.');
   } else {
-    console.warn(`⚠️ Firebase service-account.json not found. Push notifications will be mocked. Define FCM_SERVICE_ACCOUNT_JSON in environment or place file at ${serviceAccountPath}.`);
+    let resolvedPath = null;
+    const pathsToCheck = [
+      path.resolve(serviceAccountPath),
+      path.resolve(process.cwd(), 'Backend', serviceAccountPath),
+      path.resolve(__dirname, '..', serviceAccountPath)
+    ];
+
+    for (const p of pathsToCheck) {
+      if (fs.existsSync(p)) {
+        resolvedPath = p;
+        break;
+      }
+    }
+
+    if (resolvedPath) {
+      const serviceAccount = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+      firebaseApp = admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+      console.log(`✅ Firebase Admin SDK initialized successfully from file: ${resolvedPath}`);
+    } else {
+      console.warn(`⚠️ Firebase service-account.json not found. Push notifications will be mocked. Checked paths: ${pathsToCheck.join(', ')}`);
+    }
   }
 } catch (err) {
   console.error('❌ Failed to initialize Firebase Admin SDK:', err.message);
@@ -31,20 +51,24 @@ try {
  */
 export async function sendNotification(userId, title, body, imageUrl = null) {
   try {
-    // 1. Get user fcm_token & uid
-    const [rows] = await pool.query('SELECT fcm_token, uid FROM users WHERE id = ? LIMIT 1', [userId]);
+    // 1. Get user fcm_token, uid, and id using multiple identifier types
+    const [rows] = await pool.query(
+      'SELECT id, fcm_token, uid, user_id FROM users WHERE id = ? OR user_id = ? OR uid = ? LIMIT 1',
+      [userId, userId, userId]
+    );
     
     if (rows.length === 0) return false;
     const user = rows[0];
+    const resolvedUserId = user.id;
 
     // Log to notification history
     await pool.query(
       'INSERT INTO notifications (id, title, message, image_url, target_type, target_user_id, sent_count, created_at) VALUES (UUID(), ?, ?, ?, "specific", ?, 1, NOW())',
-      [title, body, imageUrl || null, userId]
+      [title, body, imageUrl || null, resolvedUserId]
     );
 
     if (!user.fcm_token) {
-      console.log(`ℹ️ User ${userId} has no FCM token. Notification logged but not sent.`);
+      console.log(`ℹ️ User ${resolvedUserId} has no FCM token. Notification logged but not sent.`);
       return true;
     }
 
@@ -66,7 +90,7 @@ export async function sendNotification(userId, title, body, imageUrl = null) {
       };
 
       await admin.messaging().send(message);
-      console.log(`📲 Push notification sent to user ${userId}`);
+      console.log(`📲 Push notification sent to user ${resolvedUserId}`);
     } else {
       console.log(`📲 [Mock Push] ${title}: ${body} (Sent to token: ${user.fcm_token}, Banner: ${imageUrl || 'None'})`);
     }

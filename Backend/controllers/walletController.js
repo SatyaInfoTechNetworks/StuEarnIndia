@@ -78,6 +78,17 @@ export const getEarnings = async (req, res) => {
       [userId, limit, offset]
     );
 
+    // Fetch dynamic icons config from DB
+    const [configRows] = await pool.query("SELECT config_value FROM app_configs WHERE config_key = 'earning_icons' LIMIT 1").catch(() => [[]]);
+    let earningIcons = {};
+    if (configRows && configRows.length > 0) {
+      try {
+        earningIcons = JSON.parse(configRows[0].config_value);
+      } catch (e) {
+        console.error('Failed to parse earning_icons config:', e);
+      }
+    }
+
     const transactions = rows.map(r => {
       let description = r.description;
       if (!description) {
@@ -129,59 +140,59 @@ export const getEarnings = async (req, res) => {
       }
 
       // Legacy S2S specific icon urls mapping
-      let iconUrl = r.offer_icon;
+      let iconUrl = r.offer_icon || earningIcons[r.source];
       if (!iconUrl) {
         switch (r.source) {
           case 'PUBSCALE':
           case 'PUBSCALE_REVERSAL':
-            iconUrl = 'https://i.ibb.co/68gPz3Y/pubscale.png';
+            iconUrl = earningIcons['PUBSCALE'] || 'https://i.ibb.co/68gPz3Y/pubscale.png';
             break;
           case 'OFFERMARU':
-            iconUrl = 'https://i.ibb.co/1fWfN9k/offermaru.png';
+            iconUrl = earningIcons['OFFERMARU'] || 'https://i.ibb.co/1fWfN9k/offermaru.png';
             break;
           case 'OPINION_UNIVERSE':
-            iconUrl = 'https://i.ibb.co/zXgYqKB/opinionuniverse.png';
+            iconUrl = earningIcons['OPINION_UNIVERSE'] || 'https://i.ibb.co/zXgYqKB/opinionuniverse.png';
             break;
           case 'CPX_RESEARCH':
           case 'CPX_RESEARCH_REVERSAL':
-            iconUrl = 'https://i.ibb.co/LdQyJt8/cpx.png';
+            iconUrl = earningIcons['CPX_RESEARCH'] || 'https://i.ibb.co/LdQyJt8/cpx.png';
             break;
           case 'GROWDECK':
-            iconUrl = 'https://i.ibb.co/YyYgX4C/growdeck.png';
+            iconUrl = earningIcons['GROWDECK'] || 'https://i.ibb.co/YyYgX4C/growdeck.png';
             break;
           case 'ADJUMP':
-            iconUrl = 'https://i.ibb.co/v4SgYqK/adjump.png';
+            iconUrl = earningIcons['ADJUMP'] || 'https://i.ibb.co/v4SgYqK/adjump.png';
             break;
           case 'REAL_OPINION':
-            iconUrl = 'https://i.ibb.co/9pyqK8H/realopinion.png';
+            iconUrl = earningIcons['REAL_OPINION'] || 'https://i.ibb.co/9pyqK8H/realopinion.png';
             break;
           case 'PLAYTIME':
-            iconUrl = 'https://i.ibb.co/RpyqK8H/playtime.png';
+            iconUrl = earningIcons['PLAYTIME'] || 'https://i.ibb.co/RpyqK8H/playtime.png';
             break;
           case 'POCKETSFULL':
           case 'POCKETSFULL_REVERSAL':
-            iconUrl = 'https://i.ibb.co/rpnYqKB/pocketsfull.png';
+            iconUrl = earningIcons['POCKETSFULL'] || 'https://i.ibb.co/rpnYqKB/pocketsfull.png';
             break;
           case 'LIFAFA_BONUS':
-            iconUrl = 'https://i.ibb.co/vvHv7WTx/envelope.png';
+            iconUrl = earningIcons['LIFAFA_BONUS'] || 'https://i.ibb.co/vvHv7WTx/envelope.png';
             break;
           case 'REFERRAL_BONUS':
           case 'COMMISSION':
           case 'REFERRAL':
-            iconUrl = 'https://img.icons8.com/color/96/conference-call.png';
+            iconUrl = earningIcons['REFERRAL'] || 'https://img.icons8.com/color/96/conference-call.png';
             break;
           case 'STREAK_REWARD':
           case 'DAILY_BONUS':
-            iconUrl = 'https://img.icons8.com/color/96/calendar.png';
+            iconUrl = earningIcons['DAILY_BONUS'] || 'https://img.icons8.com/color/96/calendar.png';
             break;
           case 'LUCKY_SPIN':
-            iconUrl = 'https://www.vhv.rs/dpng/d/574-5746224_spin-the-wheel-png-png-download-spin-the.png';
+            iconUrl = earningIcons['LUCKY_SPIN'] || 'https://www.vhv.rs/dpng/d/574-5746224_spin-the-wheel-png-png-download-spin-the.png';
             break;
           case 'WATCH_VIDEO':
-            iconUrl = 'https://img.icons8.com/color/96/youtube-play.png';
+            iconUrl = earningIcons['WATCH_VIDEO'] || 'https://img.icons8.com/color/96/youtube-play.png';
             break;
           case 'SCRATCH_CARD':
-            iconUrl = 'https://i.ibb.co/5X03C8wq/scratchcard-1.png';
+            iconUrl = earningIcons['SCRATCH_CARD'] || 'https://i.ibb.co/5X03C8wq/scratchcard-1.png';
             break;
           default:
             iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';

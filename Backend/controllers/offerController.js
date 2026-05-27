@@ -182,9 +182,15 @@ export const getOfferById = async (req, res) => {
 
     // Check user progress if user_id is provided
     if (userId) {
+      const [uRows] = await pool.query(
+        'SELECT id FROM users WHERE id = ? OR uid = ? OR user_id = ? LIMIT 1',
+        [userId, userId, userId]
+      );
+      const resolvedUserId = uRows.length > 0 ? uRows[0].id : userId;
+
       const [progressRows] = await pool.query(
         'SELECT * FROM user_offer_progress WHERE user_id = ? AND offer_id = ? LIMIT 1',
-        [userId, offerId]
+        [resolvedUserId, offerId]
       );
 
       if (progressRows.length > 0) {
@@ -265,12 +271,26 @@ export const getOfferById = async (req, res) => {
 // Start Offer (Click logging)
 export const startOffer = async (req, res) => {
   try {
-    const userId = req.body.user_id || req.user.id;
+    const userId = req.body.user_id || (req.user ? req.user.id : null);
     const { offer_id } = req.body || req.params;
 
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User ID is required' });
+    }
     if (!offer_id) {
       return res.status(400).json({ success: false, message: 'Offer ID is required' });
     }
+
+    // Resolve user_id (public hex, UUID, or Firebase UID) to primary UUID and location
+    const [uRows] = await pool.query(
+      'SELECT id, location FROM users WHERE id = ? OR uid = ? OR user_id = ? LIMIT 1',
+      [userId, userId, userId]
+    );
+    if (uRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const resolvedUserId = uRows[0].id;
+    const userLocation = uRows[0].location;
 
     // 1. Fetch the offer to verify caps and targeting
     const [offerRows] = await pool.query('SELECT daily_completion_cap, country_targeting FROM offers WHERE id = ? LIMIT 1', [offer_id]);
@@ -294,9 +314,8 @@ export const startOffer = async (req, res) => {
 
     // Country targeting check
     if (offer.country_targeting && offer.country_targeting !== '*' && offer.country_targeting !== 'IN') {
-      const [uRows] = await pool.query('SELECT location FROM users WHERE id = ? LIMIT 1', [userId]);
-      if (uRows.length > 0 && uRows[0].location) {
-        const userLoc = uRows[0].location.trim().toUpperCase();
+      if (userLocation) {
+        const userLoc = userLocation.trim().toUpperCase();
         const allowed = offer.country_targeting.split(',').map(c => c.trim().toUpperCase());
         const matchesTarget = allowed.some(c => 
           userLoc.includes(c) || 
@@ -311,7 +330,7 @@ export const startOffer = async (req, res) => {
     // 2. Check if already started
     const [progressRows] = await pool.query(
       'SELECT click_id FROM user_offer_progress WHERE user_id = ? AND offer_id = ? LIMIT 1',
-      [userId, offer_id]
+      [resolvedUserId, offer_id]
     );
 
     if (progressRows.length > 0) {
@@ -325,7 +344,7 @@ export const startOffer = async (req, res) => {
     await pool.query(
       `INSERT INTO user_offer_progress (id, click_id, user_id, offer_id, status, completed_tiers, last_updated) 
        VALUES (?, ?, ?, ?, 'STARTED', '[]', NOW())`,
-      [uuidv4(), clickId, userId, offer_id]
+      [uuidv4(), clickId, resolvedUserId, offer_id]
     );
 
     res.json({ success: true, click_id: clickId });
@@ -533,13 +552,14 @@ export const getOfferHistory = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing user_id' });
     }
 
-    // Resolve real user UUID if UID is passed
+    // Resolve real user UUID if UID or hex ID is passed
     let realUserId = userId;
-    if (userId.length !== 36) {
-      const [uRows] = await pool.query('SELECT id FROM users WHERE uid = ? LIMIT 1', [userId]);
-      if (uRows.length > 0) {
-        realUserId = uRows[0].id;
-      }
+    const [uRows] = await pool.query(
+      'SELECT id FROM users WHERE id = ? OR uid = ? OR user_id = ? LIMIT 1',
+      [userId, userId, userId]
+    );
+    if (uRows.length > 0) {
+      realUserId = uRows[0].id;
     }
 
     const query = `

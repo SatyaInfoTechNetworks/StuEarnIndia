@@ -124,19 +124,16 @@ export const signupUser = async (req, res) => {
       }
     }
 
-    // Resolve referral code to referrer user UUID
+    // Resolve referral code to referrer user UUID (supports referral_code, user_id hex, uid, id)
     let referrerUuid = null;
     if (referred_by) {
-      if (referred_by.length === 36) {
-        referrerUuid = referred_by;
-      } else {
-        const [refRows] = await pool.query(
-          'SELECT id FROM users WHERE LOWER(referral_code) = LOWER(?) LIMIT 1',
-          [referred_by.trim()]
-        );
-        if (refRows.length > 0) {
-          referrerUuid = refRows[0].id;
-        }
+      const cleanReferredBy = referred_by.trim();
+      const [refRows] = await pool.query(
+        'SELECT id FROM users WHERE id = ? OR LOWER(referral_code) = LOWER(?) OR user_id = ? OR uid = ? LIMIT 1',
+        [cleanReferredBy, cleanReferredBy, cleanReferredBy, cleanReferredBy]
+      );
+      if (refRows.length > 0) {
+        referrerUuid = refRows[0].id;
       }
     }
 
@@ -278,14 +275,16 @@ async function handleReferralMapping(referredUserId, referrerCode) {
   try {
     if (!referrerCode) return;
     
-    // Find referrer ID by referral code
+    // Find referrer ID by referral code, user_id (public hex), id (UUID), or uid
+    const cleanReferrerCode = referrerCode.trim();
     const [refRows] = await pool.query(
-      'SELECT id FROM users WHERE LOWER(referral_code) = LOWER(?) LIMIT 1',
-      [referrerCode.trim()]
+      'SELECT id, referral_code FROM users WHERE id = ? OR LOWER(referral_code) = LOWER(?) OR user_id = ? OR uid = ? LIMIT 1',
+      [cleanReferrerCode, cleanReferrerCode, cleanReferrerCode, cleanReferrerCode]
     );
     
     if (refRows.length === 0) return;
     const referrerId = refRows[0].id;
+    const actualReferrerCode = refRows[0].referral_code || cleanReferrerCode;
 
     // Check if referral mapping already exists
     const [existRows] = await pool.query(
@@ -311,7 +310,7 @@ async function handleReferralMapping(referredUserId, referrerCode) {
 
       await pool.query(
         'INSERT INTO referral_uses (id, referrer_id, referred_user_id, referral_code) VALUES (?, ?, ?, ?)',
-        [uuidv4(), referrerId, referredUserId, referrerCode]
+        [uuidv4(), referrerId, referredUserId, actualReferrerCode]
       );
     }
   } catch (err) {

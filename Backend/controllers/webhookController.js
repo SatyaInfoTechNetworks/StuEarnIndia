@@ -148,6 +148,17 @@ export const handlePostback = async (req, res) => {
     const progress = progressRows[0];
     const { offer_id, user_id } = progress;
     
+    // Resolve user_id (it could be stored as public hex, Firebase UID, or UUID) to primary UUID
+    const [uRows] = await connection.query(
+      'SELECT id FROM users WHERE id = ? OR user_id = ? OR uid = ? LIMIT 1',
+      [user_id, user_id, user_id]
+    );
+    if (uRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'User not found for this click' });
+    }
+    const resolvedUserId = uRows[0].id;
+
     let completedTiers = [];
     if (progress.completed_tiers) {
       try {
@@ -203,7 +214,7 @@ export const handlePostback = async (req, res) => {
 
     await connection.query(
       'UPDATE users SET balance = balance + ? WHERE id = ?',
-      [reward, user_id]
+      [reward, resolvedUserId]
     );
 
     const transId = uuidv4();
@@ -211,18 +222,18 @@ export const handlePostback = async (req, res) => {
     await connection.query(
       `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
        VALUES (?, ?, ?, 'CREDIT', 'OFFER', ?, ?, NOW())`,
-      [transId, user_id, reward, `Completed: ${displayTitle}`, click_id]
+      [transId, resolvedUserId, reward, `Completed: ${displayTitle}`, click_id]
     );
 
     await connection.commit();
 
     await sendNotification(
-      user_id,
+      resolvedUserId,
       "Coins Received!",
       `You earned ${reward.toFixed(0)} coins for completing ${displayTitle}.`
     );
 
-    processReferralRewards(user_id, reward, offer_id).catch(err => 
+    processReferralRewards(resolvedUserId, reward, offer_id).catch(err => 
       console.error('Error processing referral rewards:', err.message)
     );
 
@@ -1247,8 +1258,8 @@ async function processReferralRewards(referredUserId, rewardAmount, offerId) {
     const referrerCode = userRows[0].referred_by;
 
     const [referrerRows] = await connection.query(
-      'SELECT id, name FROM users WHERE LOWER(referral_code) = LOWER(?) LIMIT 1',
-      [referrerCode.trim()]
+      'SELECT id, name FROM users WHERE LOWER(referral_code) = LOWER(?) OR user_id = ? OR id = ? OR uid = ? LIMIT 1',
+      [referrerCode.trim(), referrerCode.trim(), referrerCode.trim(), referrerCode.trim()]
     );
     if (referrerRows.length === 0) {
       await connection.rollback();

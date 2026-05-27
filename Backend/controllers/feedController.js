@@ -55,47 +55,68 @@ export const getRecentEarnings = async (req, res) => {
 
     const [rows] = await pool.query(query, [maxLimit]);
 
-    const earnings = rows.map(row => {
-      const source = row.source;
-      let iconUrl = '';
+    // Fetch dynamic icons config from DB
+    const [configRows] = await pool.query("SELECT config_value FROM app_configs WHERE config_key = 'earning_icons' LIMIT 1").catch(() => [[]]);
+    let earningIcons = {};
+    if (configRows && configRows.length > 0) {
+      try {
+        const parsed = JSON.parse(configRows[0].config_value);
+        if (parsed && typeof parsed === 'object') {
+          Object.keys(parsed).forEach(k => {
+            earningIcons[k.trim().toUpperCase()] = parsed[k];
+          });
+        }
+      } catch (e) {
+        console.error('Failed to parse earning_icons config for ticker:', e);
+      }
+    }
 
-      // Default icons mapping based on source
-      switch (source) {
-        case 'PUBSCALE':
-          iconUrl = 'https://i.ibb.co/68gPz3Y/pubscale.png';
-          break;
-        case 'OFFERMARU':
-          iconUrl = 'https://i.ibb.co/1fWfN9k/offermaru.png';
-          break;
-        case 'OPINION_UNIVERSE':
-          iconUrl = 'https://i.ibb.co/zXgYqKB/opinionuniverse.png';
-          break;
-        case 'CPX_RESEARCH':
-          iconUrl = 'https://i.ibb.co/LdQyJt8/cpx.png';
-          break;
-        case 'GROWDECK':
-          iconUrl = 'https://i.ibb.co/YyYgX4C/growdeck.png';
-          break;
-        case 'ADJUMP':
-          iconUrl = 'https://i.ibb.co/v4SgYqK/adjump.png';
-          break;
-        case 'REAL_OPINION':
-          iconUrl = 'https://i.ibb.co/9pyqK8H/realopinion.png';
-          break;
-        case 'PLAYTIME':
-          iconUrl = 'https://i.ibb.co/RpyqK8H/playtime.png';
-          break;
-        case 'POCKETSFULL':
-          iconUrl = 'https://i.ibb.co/rpnYqKB/pocketsfull.png';
-          break;
-        case 'TIMEWALL':
-          iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
-          break;
-        case 'OFFER':
-        case 'OFFLINE_OFFER':
-        default:
-          iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
-          break;
+    const earnings = rows.map(row => {
+      const source = row.source || '';
+      const sourceUpper = source.toUpperCase();
+      
+      // Look up customized icon from admin config first, then fall back to default assets
+      let iconUrl = earningIcons[sourceUpper] || '';
+
+      if (!iconUrl) {
+        // Default icons mapping based on source
+        switch (sourceUpper) {
+          case 'PUBSCALE':
+            iconUrl = 'https://i.ibb.co/68gPz3Y/pubscale.png';
+            break;
+          case 'OFFERMARU':
+            iconUrl = 'https://i.ibb.co/1fWfN9k/offermaru.png';
+            break;
+          case 'OPINION_UNIVERSE':
+            iconUrl = 'https://i.ibb.co/zXgYqKB/opinionuniverse.png';
+            break;
+          case 'CPX_RESEARCH':
+            iconUrl = 'https://i.ibb.co/LdQyJt8/cpx.png';
+            break;
+          case 'GROWDECK':
+            iconUrl = 'https://i.ibb.co/YyYgX4C/growdeck.png';
+            break;
+          case 'ADJUMP':
+            iconUrl = 'https://i.ibb.co/v4SgYqK/adjump.png';
+            break;
+          case 'REAL_OPINION':
+            iconUrl = 'https://i.ibb.co/9pyqK8H/realopinion.png';
+            break;
+          case 'PLAYTIME':
+            iconUrl = 'https://i.ibb.co/RpyqK8H/playtime.png';
+            break;
+          case 'POCKETSFULL':
+            iconUrl = 'https://i.ibb.co/rpnYqKB/pocketsfull.png';
+            break;
+          case 'TIMEWALL':
+            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            break;
+          case 'OFFER':
+          case 'OFFLINE_OFFER':
+          default:
+            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            break;
+        }
       }
 
       // Calculate time ago safely with error handling

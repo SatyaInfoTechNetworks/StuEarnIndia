@@ -34,10 +34,10 @@ export const listBanners = async (req, res) => {
 // ----------------------------------------------------
 export const getRecentEarnings = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit || 20);
+    const limit = parseInt(req.query.limit || 10);
     const maxLimit = Math.min(100, Math.max(1, limit));
 
-    // Select recent credits from transactions table matching standard sources
+    // Select recent credits from transactions table matching standard offerwall/S2S webhook sources
     const query = `
       SELECT 
         u.name as username,
@@ -48,7 +48,7 @@ export const getRecentEarnings = async (req, res) => {
       FROM transactions t
       JOIN users u ON t.user_id = u.id
       WHERE t.type = 'CREDIT' 
-      AND t.source IN ('OFFER', 'PUBSCALE', 'OFFERMARU', 'OPINION_UNIVERSE', 'CPX_RESEARCH', 'GROWDECK', 'ADJUMP', 'REAL_OPINION', 'PLAYTIME', 'POCKETSFULL', 'STREAK_REWARD', 'LUCKY_SPIN', 'SCRATCH_CARD', 'WATCH_VIDEO')
+      AND t.source IN ('OFFER', 'OFFLINE_OFFER', 'PUBSCALE', 'OFFERMARU', 'OPINION_UNIVERSE', 'CPX_RESEARCH', 'GROWDECK', 'ADJUMP', 'REAL_OPINION', 'PLAYTIME', 'POCKETSFULL', 'TIMEWALL')
       ORDER BY t.created_at DESC
       LIMIT ?
     `;
@@ -88,26 +88,11 @@ export const getRecentEarnings = async (req, res) => {
         case 'POCKETSFULL':
           iconUrl = 'https://i.ibb.co/rpnYqKB/pocketsfull.png';
           break;
-        case 'LIFAFA_BONUS':
-          iconUrl = 'https://i.ibb.co/vvHv7WTx/envelope.png';
-          break;
-        case 'REFERRAL':
-        case 'REFERRAL_BONUS':
-          iconUrl = 'https://img.icons8.com/color/96/conference-call.png';
-          break;
-        case 'STREAK_REWARD':
-        case 'DAILY_BONUS':
-          iconUrl = 'https://img.icons8.com/color/96/calendar.png';
-          break;
-        case 'LUCKY_SPIN':
-          iconUrl = 'https://www.vhv.rs/dpng/d/574-5746224_spin-the-wheel-png-png-download-spin-the.png';
-          break;
-        case 'SCRATCH_CARD':
+        case 'TIMEWALL':
           iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
           break;
-        case 'WATCH_VIDEO':
-          iconUrl = 'https://img.icons8.com/color/96/youtube-play.png';
-          break;
+        case 'OFFER':
+        case 'OFFLINE_OFFER':
         default:
           iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
           break;

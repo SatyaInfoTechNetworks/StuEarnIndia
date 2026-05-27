@@ -640,13 +640,14 @@ To cross-verify users via Telegram:
 ```
 
 ### B. Recent Global Earnings Ticker/Marquee
-Displays dynamic, real-time transaction updates of active app users.
+Displays dynamic, real-time transaction updates of active app users. By default, it returns the **recent 10 transactions** and strictly **excludes** non-offerwall/daily tasks (such as Lucky Spin, Streak Rewards, and Visit & Earn tasks).
 * **Endpoint**: `GET /api/ticker/earnings`
+* **Query Parameters (Optional)**: `limit=10` (default 10, max 100)
 * **Response**:
 ```json
 {
   "success": true,
-  "ticker": [
+  "data": [
     {
       "username": "Devraj",
       "amount": 250.00,
@@ -654,7 +655,8 @@ Displays dynamic, real-time transaction updates of active app users.
       "logo_url": "https://cdn.stuearn.com/logos/cpx.png",
       "time_ago": "3 mins ago"
     }
-  ]
+  ],
+  "count": 1
 }
 ```
 

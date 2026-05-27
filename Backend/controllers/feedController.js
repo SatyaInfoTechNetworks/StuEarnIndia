@@ -98,30 +98,39 @@ export const getRecentEarnings = async (req, res) => {
           break;
       }
 
-      // Calculate time ago
-      const timestamp = new Date(row.timestamp).getTime();
-      const now = Date.now();
-      const diff = now - timestamp;
-      let timeAgo = '';
+      // Calculate time ago safely with error handling
+      let timeAgo = 'recently';
+      try {
+        if (row.timestamp) {
+          const parsedDate = new Date(row.timestamp);
+          const timestamp = parsedDate.getTime();
+          if (!isNaN(timestamp)) {
+            const now = Date.now();
+            const diff = now - timestamp;
 
-      if (diff < 60000) {
-        timeAgo = 'just now';
-      } else if (diff < 3600000) {
-        const minutes = Math.floor(diff / 60000);
-        timeAgo = `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-      } else if (diff < 86400000) {
-        const hours = Math.floor(diff / 3600000);
-        timeAgo = `${hours} hour${hours > 1 ? 's' : ''} ago`;
-      } else if (diff < 604800000) {
-        const days = Math.floor(diff / 86400000);
-        timeAgo = `${days} day${days > 1 ? 's' : ''} ago`;
-      } else {
-        timeAgo = new Date(row.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            if (diff < 60000) {
+              timeAgo = 'just now';
+            } else if (diff < 3600000) {
+              const minutes = Math.floor(diff / 60000);
+              timeAgo = `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+            } else if (diff < 86400000) {
+              const hours = Math.floor(diff / 3600000);
+              timeAgo = `${hours} hour${hours > 1 ? 's' : ''} ago`;
+            } else if (diff < 604800000) {
+              const days = Math.floor(diff / 86400000);
+              timeAgo = `${days} day${days > 1 ? 's' : ''} ago`;
+            } else {
+              timeAgo = parsedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error formatting transaction timestamp:', err);
       }
 
       return {
-        username: row.username,
-        amount: parseFloat(row.amount),
+        username: row.username || 'User',
+        amount: parseFloat(row.amount || 0),
         offer_name: row.description || `${row.source} Reward`,
         logo_url: iconUrl,
         timestamp: row.timestamp,

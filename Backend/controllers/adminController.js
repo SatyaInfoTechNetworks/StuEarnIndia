@@ -1445,3 +1445,65 @@ export const getAllTransactionsAdmin = async (req, res) => {
   }
 };
 
+export const deleteTransactionAdmin = async (req, res) => {
+  const transactionId = req.params.id;
+  const revertBalance = req.query.revertBalance === 'true' || req.body.revertBalance === true;
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // 1. Fetch transaction details first
+    const [txRows] = await connection.query('SELECT * FROM transactions WHERE id = ? LIMIT 1', [transactionId]);
+    if (txRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'Transaction not found' });
+    }
+    const tx = txRows[0];
+
+    // 2. Revert user balance if requested
+    if (revertBalance) {
+      const txAmount = parseFloat(tx.amount || 0);
+      if (tx.type === 'CREDIT') {
+        // Subtract the credited amount
+        await connection.query('UPDATE users SET balance = balance - ? WHERE id = ?', [txAmount, tx.user_id]);
+      } else if (tx.type === 'DEBIT') {
+        // Add back the debited amount
+        await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [txAmount, tx.user_id]);
+      }
+    }
+
+    // 3. If there is a reference ID, delete from offer_completions (e.g. to clear duplicate locks for testing webhooks)
+    if (tx.reference_id) {
+      await connection.query('DELETE FROM offer_completions WHERE completion_id = ?', [tx.reference_id]);
+    }
+
+    // Also try deleting by completion_id = transactionId just in case
+    await connection.query('DELETE FROM offer_completions WHERE completion_id = ?', [transactionId]);
+
+    // 4. Delete the transaction itself
+    await connection.query('DELETE FROM transactions WHERE id = ?', [transactionId]);
+
+    // Log admin audit action using the standard helper
+    await logAdminAction(connection, {
+      adminId: req.admin?.id || 'admin',
+      actionType: 'DELETE_TRANSACTION',
+      targetId: tx.user_id,
+      payload: { transactionId, revertBalance, txDetails: tx },
+      req
+    });
+
+    await connection.commit();
+    res.json({
+      success: true,
+      message: 'Transaction successfully deleted. Associated offer completion locks cleared.'
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Admin Delete Transaction Error:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  } finally {
+    connection.release();
+  }
+};
+

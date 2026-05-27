@@ -118,7 +118,8 @@ import {
   approveProof,
   rejectProof,
   resetAllDailySpins,
-  deleteUser
+  deleteUser,
+  deleteTransactionAdmin
 } from './controllers/adminController.js';
 
 // Middleware Imports
@@ -290,6 +291,7 @@ app.get('/api/admin/reports', authenticateAdmin, getAdminReports);
 app.get('/api/admin/users', authenticateAdmin, listUsers);
 app.get('/api/admin/users/:id/transactions', authenticateAdmin, getUserTransactionsAdmin);
 app.get('/api/admin/transactions', authenticateAdmin, getAllTransactionsAdmin);
+app.delete('/api/admin/transactions/:id', authenticateAdmin, deleteTransactionAdmin);
 app.post('/api/admin/users/:id/balance', authenticateAdmin, updateUserBalance);
 app.put('/api/admin/users/:id', authenticateAdmin, updateUser);
 app.post('/api/admin/users/:id/ban', authenticateAdmin, banUser);

@@ -1389,3 +1389,188 @@ async function processReferralRewards(referredUserId, rewardAmount, offerId) {
     connection.release();
   }
 }
+
+// =========================================================================
+// 13. TIMEWALL POSTBACK (GET/POST)
+// =========================================================================
+export const handleTimewall = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const TIMEWALL_SECRET = "e1bd718416cbd32f670bd4587a4f3313";
+    const params = { ...req.query, ...req.body };
+    const { 
+      user_id: user_id_param, 
+      transaction_id, 
+      revenue: revenueParam = '0', 
+      reward: rewardParam = '0', 
+      hash, 
+      ip = '', 
+      type = 'credit', 
+      withdraw_id = '', 
+      reason = '', 
+      offer_name = 'Timewall Withdrawal' 
+    } = params;
+
+    console.log('📝 [TIMEWALL] Incoming webhook request:', {
+      ip: req.ip,
+      params: params
+    });
+
+    if (!user_id_param || !transaction_id) {
+      console.error('❌ [TIMEWALL] Validation failed: missing user_id or transaction_id');
+      return res.status(400).json({ status: 'error', message: 'Missing required parameters' });
+    }
+
+    // Verify Hash/Signature: sha256(userID . revenue . SecretKey)
+    if (hash) {
+      const rawUserId = req.query.user_id || req.body.user_id || user_id_param;
+      const rawRevenue = req.query.revenue || req.body.revenue || revenueParam;
+      const payload = `${rawUserId}${rawRevenue}${TIMEWALL_SECRET}`;
+      const calculatedHash = crypto.createHash('sha256').update(payload).digest('hex');
+
+      console.log(`🔒 [TIMEWALL] Verifying signature. Received: ${hash}, Expected: ${calculatedHash}`);
+
+      if (!safeCompare(hash.toLowerCase(), calculatedHash.toLowerCase())) {
+        console.warn('❌ [TIMEWALL] Signature Mismatch! Rejecting.');
+        return res.status(403).json({ status: 'error', message: 'Invalid signature' });
+      }
+      console.log('✅ [TIMEWALL] Signature verified successfully.');
+    } else {
+      console.log('ℹ️ [TIMEWALL] No signature hash provided. Skipping verification.');
+    }
+
+    const user = await resolveUser(connection, user_id_param);
+    if (!user) {
+      console.error(`❌ [TIMEWALL] User not found for identifier: ${user_id_param}`);
+      return res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+    const internalId = user.id;
+    console.log(`✅ [TIMEWALL] Resolved user: ${user.name} (UUID: ${internalId})`);
+
+    const reward = parseFloat(rewardParam || 0);
+    const revenue = parseFloat(revenueParam || 0);
+
+    // Reversal / Chargeback Case
+    if (type.toLowerCase() === 'chargeback' || reward < 0 || revenue < 0) {
+      console.log(`🚨 [TIMEWALL] Processing chargeback/reversal for Transaction: ${transaction_id}`);
+      const [origRows] = await connection.query('SELECT * FROM offer_completions WHERE completion_id = ? LIMIT 1', [transaction_id]);
+      const deduction = Math.abs(reward);
+
+      if (origRows.length > 0 && origRows[0].status === 'REVERSED') {
+        console.log('ℹ️ [TIMEWALL] Transaction already reversed in database.');
+        return res.status(200).json({ status: 'success', message: 'Already reversed' });
+      }
+
+      await connection.beginTransaction();
+      await connection.query('UPDATE offer_completions SET status = "REVERSED" WHERE completion_id = ?', [transaction_id]);
+      await connection.query('UPDATE users SET balance = balance - ? WHERE id = ?', [deduction, internalId]);
+
+      const transId = uuidv4();
+      const description = `Chargeback: Timewall (${reason || offer_name})`;
+      await connection.query(
+        `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at)
+         VALUES (?, ?, ?, 'DEBIT', 'TIMEWALL_REVERSAL', ?, ?, NOW())`,
+        [transId, internalId, deduction, description, transaction_id]
+      );
+      await connection.commit();
+      console.log('✅ [TIMEWALL] Chargeback executed successfully.');
+
+      await sendBeautifulTelegramAlert('🚨', 'Timewall Chargeback', user, -deduction, {
+        'Offer Name': offer_name,
+        'Reason': reason || 'Reversal by provider',
+        'Transaction ID': transaction_id
+      });
+
+      sendNotification(internalId, "Action Required: Points Reversed ❗", `Points for Timewall '${offer_name}' were reversed.`).catch(console.error);
+
+      return res.status(200).json({ status: 'success', message: 'Chargeback processed successfully' });
+    }
+
+    // Hold Case
+    if (type.toLowerCase() === 'hold') {
+      console.log(`⏳ [TIMEWALL] Processing hold validation for Transaction: ${transaction_id}`);
+      if (await completionExists(connection, transaction_id)) {
+        console.log('ℹ️ [TIMEWALL] Hold transaction already exists, skipping.');
+        return res.status(200).json({ status: 'success', message: 'Transaction already recorded' });
+      }
+
+      await connection.beginTransaction();
+      await connection.query(
+        `INSERT INTO offer_completions (completion_id, user_id, offer_id, provider, payout_coins, status, raw_payload, offer_name, goal_name, gaid, ip_address)
+         VALUES (?, ?, '0', 'timewall', ?, 'PENDING_VALIDATION', ?, ?, 'Timewall Hold', '', ?)`,
+        [transaction_id, internalId, reward, JSON.stringify(params), offer_name, ip]
+      );
+      await connection.commit();
+      console.log('✅ [TIMEWALL] Hold recorded successfully.');
+
+      await sendBeautifulTelegramAlert('⏳', 'Timewall Validation Pending', user, reward, {
+        'Offer Name': offer_name,
+        'Transaction ID': transaction_id,
+        'Status': 'Pending Validation'
+      });
+
+      sendNotification(internalId, "Offer Recorded", "We've received your Timewall submission. It's currently pending validation.").catch(console.error);
+      return res.status(200).json({ status: 'success', message: 'Hold recorded successfully' });
+    }
+
+    // Hold Cancelled Case
+    if (type.toLowerCase() === 'hold_cancelled') {
+      console.log(`❌ [TIMEWALL] Processing hold cancellation for Transaction: ${transaction_id}`);
+      const [origRows] = await connection.query('SELECT * FROM offer_completions WHERE completion_id = ? LIMIT 1', [transaction_id]);
+      if (origRows.length === 0) {
+        return res.status(200).json({ status: 'success', message: 'Hold transaction not found' });
+      }
+
+      await connection.beginTransaction();
+      await connection.query('UPDATE offer_completions SET status = "CANCELLED" WHERE completion_id = ?', [transaction_id]);
+      await connection.commit();
+      console.log('✅ [TIMEWALL] Hold cancelled successfully.');
+
+      sendNotification(internalId, "Timewall Offer Cancelled ⚠️", `Your pending Timewall offer '${offer_name}' was cancelled.`).catch(console.error);
+      return res.status(200).json({ status: 'success', message: 'Hold cancelled successfully' });
+    }
+
+    // Standard Approved/Credit Case
+    if (await completionExists(connection, transaction_id)) {
+      console.log(`ℹ️ [TIMEWALL] Duplicate credit transaction ignored: ${transaction_id}`);
+      return res.status(200).json({ status: 'success', message: 'Duplicate transaction ignored' });
+    }
+
+    await connection.beginTransaction();
+
+    await connection.query(
+      `INSERT INTO offer_completions (completion_id, user_id, offer_id, provider, payout_coins, status, raw_payload, offer_name, goal_name, gaid, ip_address)
+       VALUES (?, ?, '0', 'timewall', ?, 'COMPLETED', ?, ?, 'Offer Completion', '', ?)`,
+      [transaction_id, internalId, reward, JSON.stringify(params), offer_name, ip]
+    );
+
+    await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [reward, internalId]);
+
+    const transId = uuidv4();
+    await connection.query(
+      `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at)
+       VALUES (?, ?, ?, 'CREDIT', 'TIMEWALL', ?, ?, NOW())`,
+      [transId, internalId, reward, `Timewall: ${offer_name}`, transaction_id]
+    );
+
+    await connection.commit();
+    console.log('✅ [TIMEWALL] Credit successfully processed.');
+
+    await sendBeautifulTelegramAlert('✅', 'Timewall Completion', user, reward, {
+      'Offer Name': offer_name,
+      'Transaction ID': transaction_id
+    });
+
+    sendNotification(internalId, "Timewall Reward Received! 🪙", `You received ${reward} coins for completing an offer on Timewall`).catch(console.error);
+
+    processReferralRewards(internalId, reward, '0').catch(err => console.error('Timewall Referral Commission error:', err.message));
+
+    return res.status(200).json({ status: 'success', message: 'User rewarded successfully' });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('❌ [TIMEWALL] Webhook error:', error);
+    return res.status(500).json({ status: 'error', message: error.message });
+  } finally {
+    connection.release();
+  }
+};

@@ -41,7 +41,8 @@ import {
   handlePlaytimeAds,
   handlePocketsfull,
   handleRealOpinion,
-  handleOfferCompleted
+  handleOfferCompleted,
+  handleTimewall
 } from './controllers/webhookController.js';
 import {
   listBanners,
@@ -275,6 +276,8 @@ app.get('/api/webhook/pocketsfull', handlePocketsfull);
 app.post('/api/webhook/pocketsfull', handlePocketsfull);
 app.post('/api/webhook/realopinion', handleRealOpinion);
 app.post('/api/webhook/offer-completed', handleOfferCompleted);
+app.get('/api/webhook/timewall', handleTimewall);
+app.post('/api/webhook/timewall', handleTimewall);
 
 // ==========================================
 // 7. ADMINISTRATIVE ROUTES

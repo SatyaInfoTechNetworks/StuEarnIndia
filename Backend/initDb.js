@@ -526,7 +526,8 @@ export async function initializeDatabase() {
           "DAILY_BONUS": "https://img.icons8.com/color/96/calendar.png",
           "WATCH_VIDEO": "https://img.icons8.com/color/96/youtube-play.png",
           "SCRATCH_CARD": "https://i.ibb.co/5X03C8wq/scratchcard-1.png",
-          "REFERRAL": "https://img.icons8.com/color/96/conference-call.png"
+          "REFERRAL": "https://img.icons8.com/color/96/conference-call.png",
+          "TIMEWALL": "https://i.ibb.co/twLPSHST/giftbox-1139982.png"
         }),
         desc: 'Dynamic icon mappings for wallet and offer completions.'
       }

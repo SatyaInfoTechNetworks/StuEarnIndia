@@ -200,6 +200,9 @@ export const getEarnings = async (req, res) => {
           case 'SCRATCH_CARD':
             iconUrl = earningIcons['SCRATCH_CARD'] || 'https://i.ibb.co/5X03C8wq/scratchcard-1.png';
             break;
+          case 'TIMEWALL':
+            iconUrl = earningIcons['TIMEWALL'] || 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            break;
           default:
             iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
             break;

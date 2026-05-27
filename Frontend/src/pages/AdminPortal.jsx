@@ -1728,10 +1728,10 @@ export default function AdminPortal() {
                               <div className="text-xs text-muted">{w.user_email}</div>
                             </td>
                             <td className="text-center">
-                              <div className="badge badge-light border font-weight-bold p-2">{parseFloat(w.amount).toFixed(0)} <span className="text-xs font-normal">Coins</span></div>
+                              <div className="badge badge-light border font-weight-bold p-2">{parseFloat(w.amount_coins || w.amount).toFixed(0)} <span className="text-xs font-normal">Coins</span></div>
                             </td>
                             <td className="text-center">
-                              <h5 className="mb-0 font-weight-bold text-primary">₹{parseFloat(w.amount).toFixed(2)}</h5>
+                              <h5 className="mb-0 font-weight-bold text-primary">₹{parseFloat(w.amount_currency || (w.amount * 0.01)).toFixed(2)}</h5>
                             </td>
                             <td>
                               <div className="font-weight-bold">{w.method}</div>

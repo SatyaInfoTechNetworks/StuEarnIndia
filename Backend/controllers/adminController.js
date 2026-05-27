@@ -32,8 +32,8 @@ export const getAdminStats = async (req, res) => {
     const [todayUsers]        = await pool.query('SELECT COUNT(*) as c FROM users WHERE DATE(created_at) = CURDATE()');
     const [offerCount]        = await pool.query('SELECT COUNT(*) as c FROM offers WHERE is_active = 1');
     const [pendingWdCount]    = await pool.query('SELECT COUNT(*) as c FROM withdrawals WHERE status = "PENDING"');
-    const [pendingWdVal]      = await pool.query('SELECT COALESCE(SUM(amount),0) as t FROM withdrawals WHERE status = "PENDING"');
-    const [settledWdVal]      = await pool.query('SELECT COALESCE(SUM(amount),0) as t FROM withdrawals WHERE status = "APPROVED"');
+    const [pendingWdVal]      = await pool.query('SELECT COALESCE(SUM(COALESCE(amount_currency, amount * 0.01)),0) as t FROM withdrawals WHERE status = "PENDING"');
+    const [settledWdVal]      = await pool.query('SELECT COALESCE(SUM(COALESCE(amount_currency, amount * 0.01)),0) as t FROM withdrawals WHERE status = "APPROVED"');
     const [coinsIssued]       = await pool.query('SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE type = "CREDIT"');
     const [coinsSpent]        = await pool.query('SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE type = "DEBIT"');
     const [completions]       = await pool.query('SELECT COUNT(*) as c FROM offer_completions');
@@ -567,7 +567,10 @@ export const listWithdrawals = async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      `SELECT w.id, w.user_id, w.amount, w.method, w.details, w.status, w.created_at,
+      `SELECT w.id, w.user_id, w.amount, 
+              COALESCE(w.amount_coins, w.amount) as amount_coins, 
+              COALESCE(w.amount_currency, w.amount * 0.01) as amount_currency, 
+              w.method, w.details, w.status, w.created_at,
               u.name as user_name, u.email as user_email, u.user_id as user_public_id
        FROM withdrawals w JOIN users u ON w.user_id = u.id
        ${whereClause}
@@ -597,7 +600,8 @@ export const approveWithdrawal = async (req, res) => {
     await connection.query('UPDATE withdrawals SET status = "APPROVED" WHERE id = ?', [withdrawalId]);
     await connection.commit();
 
-    await sendNotification(rows[0].user_id, 'Withdrawal Settled', `Your payout of ₹${parseFloat(rows[0].amount).toFixed(2)} has been processed!`);
+    const displayVal = parseFloat(rows[0].amount_currency || (rows[0].amount * 0.01)).toFixed(2);
+    await sendNotification(rows[0].user_id, 'Withdrawal Settled', `Your payout of ₹${displayVal} has been processed!`);
     res.json({ success: true, message: 'Withdrawal approved' });
   } catch (error) {
     await connection.rollback();
@@ -628,7 +632,7 @@ export const rejectWithdrawal = async (req, res) => {
     await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [refundAmt, withdrawal.user_id]);
     await connection.commit();
 
-    await sendNotification(withdrawal.user_id, 'Withdrawal Rejected', `Your withdrawal was rejected and ₹${refundAmt.toFixed(2)} refunded to your wallet.`);
+    await sendNotification(withdrawal.user_id, 'Withdrawal Rejected', `Your withdrawal was rejected and ${refundAmt.toFixed(0)} Coins refunded to your wallet.`);
     res.json({ success: true, message: 'Withdrawal rejected and balance refunded' });
   } catch (error) {
     await connection.rollback();

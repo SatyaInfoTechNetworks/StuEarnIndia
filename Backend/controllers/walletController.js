@@ -145,63 +145,78 @@ export const getEarnings = async (req, res) => {
         }
       }
 
-      // Legacy S2S specific icon urls mapping
-      let iconUrl = r.offer_icon || (r.source ? earningIcons[r.source.toUpperCase()] : null);
+      // Dynamic icon resolution: check offer icon first, then admin config by source key,
+      // then fall back to hardcoded defaults. Handles key aliases (e.g. STREAK_REWARD -> DAILY_BONUS).
+      const sourceKey = (r.source || '').toUpperCase();
+      // Alias map: some DB source names differ from earning_icons config keys
+      const iconKeyAlias = {
+        'STREAK_REWARD': 'DAILY_BONUS',
+        'PUBSCALE_REVERSAL': 'PUBSCALE',
+        'CPX_RESEARCH_REVERSAL': 'CPX_RESEARCH',
+        'POCKETSFULL_REVERSAL': 'POCKETSFULL',
+        'REFERRAL_BONUS': 'REFERRAL',
+        'COMMISSION': 'REFERRAL',
+        'OFFER': 'OFFLINE_OFFER'
+      };
+      const resolvedKey = iconKeyAlias[sourceKey] || sourceKey;
+
+      let iconUrl = r.offer_icon || earningIcons[resolvedKey] || '';
+
       if (!iconUrl) {
-        switch (r.source) {
+        switch (sourceKey) {
           case 'PUBSCALE':
           case 'PUBSCALE_REVERSAL':
-            iconUrl = earningIcons['PUBSCALE'] || 'https://i.ibb.co/68gPz3Y/pubscale.png';
+            iconUrl = 'https://i.ibb.co/68gPz3Y/pubscale.png';
             break;
           case 'OFFERMARU':
-            iconUrl = earningIcons['OFFERMARU'] || 'https://i.ibb.co/1fWfN9k/offermaru.png';
+            iconUrl = 'https://i.ibb.co/1fWfN9k/offermaru.png';
             break;
           case 'OPINION_UNIVERSE':
-            iconUrl = earningIcons['OPINION_UNIVERSE'] || 'https://i.ibb.co/zXgYqKB/opinionuniverse.png';
+            iconUrl = 'https://i.ibb.co/zXgYqKB/opinionuniverse.png';
             break;
           case 'CPX_RESEARCH':
           case 'CPX_RESEARCH_REVERSAL':
-            iconUrl = earningIcons['CPX_RESEARCH'] || 'https://i.ibb.co/LdQyJt8/cpx.png';
+            iconUrl = 'https://i.ibb.co/LdQyJt8/cpx.png';
             break;
           case 'GROWDECK':
-            iconUrl = earningIcons['GROWDECK'] || 'https://i.ibb.co/YyYgX4C/growdeck.png';
+            iconUrl = 'https://i.ibb.co/YyYgX4C/growdeck.png';
             break;
           case 'ADJUMP':
-            iconUrl = earningIcons['ADJUMP'] || 'https://i.ibb.co/v4SgYqK/adjump.png';
+            iconUrl = 'https://i.ibb.co/v4SgYqK/adjump.png';
             break;
           case 'REAL_OPINION':
-            iconUrl = earningIcons['REAL_OPINION'] || 'https://i.ibb.co/9pyqK8H/realopinion.png';
+            iconUrl = 'https://i.ibb.co/9pyqK8H/realopinion.png';
             break;
           case 'PLAYTIME':
-            iconUrl = earningIcons['PLAYTIME'] || 'https://i.ibb.co/RpyqK8H/playtime.png';
+            iconUrl = 'https://i.ibb.co/RpyqK8H/playtime.png';
             break;
           case 'POCKETSFULL':
           case 'POCKETSFULL_REVERSAL':
-            iconUrl = earningIcons['POCKETSFULL'] || 'https://i.ibb.co/rpnYqKB/pocketsfull.png';
+            iconUrl = 'https://i.ibb.co/rpnYqKB/pocketsfull.png';
             break;
           case 'LIFAFA_BONUS':
-            iconUrl = earningIcons['LIFAFA_BONUS'] || 'https://i.ibb.co/vvHv7WTx/envelope.png';
+            iconUrl = 'https://i.ibb.co/vvHv7WTx/envelope.png';
             break;
           case 'REFERRAL_BONUS':
           case 'COMMISSION':
           case 'REFERRAL':
-            iconUrl = earningIcons['REFERRAL'] || 'https://img.icons8.com/color/96/conference-call.png';
+            iconUrl = 'https://img.icons8.com/color/96/conference-call.png';
             break;
           case 'STREAK_REWARD':
           case 'DAILY_BONUS':
-            iconUrl = earningIcons['DAILY_BONUS'] || 'https://img.icons8.com/color/96/calendar.png';
+            iconUrl = 'https://img.icons8.com/color/96/calendar.png';
             break;
           case 'LUCKY_SPIN':
-            iconUrl = earningIcons['LUCKY_SPIN'] || 'https://www.vhv.rs/dpng/d/574-5746224_spin-the-wheel-png-png-download-spin-the.png';
+            iconUrl = 'https://www.vhv.rs/dpng/d/574-5746224_spin-the-wheel-png-png-download-spin-the.png';
             break;
           case 'WATCH_VIDEO':
-            iconUrl = earningIcons['WATCH_VIDEO'] || 'https://img.icons8.com/color/96/youtube-play.png';
+            iconUrl = 'https://img.icons8.com/color/96/youtube-play.png';
             break;
           case 'SCRATCH_CARD':
-            iconUrl = earningIcons['SCRATCH_CARD'] || 'https://i.ibb.co/5X03C8wq/scratchcard-1.png';
+            iconUrl = 'https://i.ibb.co/5X03C8wq/scratchcard-1.png';
             break;
           case 'TIMEWALL':
-            iconUrl = earningIcons['TIMEWALL'] || 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
             break;
           default:
             iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
@@ -281,7 +296,8 @@ export const getRedeems = async (req, res) => {
         amountCurrency: parseFloat(r.amount_currency || 0),
         method: r.method_name || r.method_id || 'Unknown',
         methodId: r.method_id,
-        methodLogo: r.method_logo || '',
+        // Fall back to a generic wallet icon when the payout method has no logo configured
+        methodLogo: r.method_logo || 'https://img.icons8.com/color/96/wallet--v1.png',
         details: details,
         status: r.status,
         statusText: r.status ? (r.status.charAt(0) + r.status.slice(1).toLowerCase()) : 'Pending',

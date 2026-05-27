@@ -792,7 +792,12 @@ export const handleOpinionUniverse = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const OPINION_UNIVERSE_TOKEN = "edeb747df552564cf19058001f70a64d0f7c51347c1d6a5f2da3fb669995a2c5";
-    const ENABLE_SIGNATURE_VERIFICATION = false;
+    
+    console.log('📝 [OPINION_UNIVERSE] Incoming webhook request:', {
+      ip: req.ip,
+      query: req.query,
+      headers: req.headers
+    });
 
     const user_id = req.query.userid || req.query.SID || '';
     const payoutParam = req.query.PAYOUT || 0;
@@ -808,14 +813,17 @@ export const handleOpinionUniverse = async (req, res) => {
     // Check placeholder / test callback
     const isTestCallback = (user_id.includes('{') || String(payoutParam).includes('{'));
     if (isTestCallback) {
+      console.log('⚠️ [OPINION_UNIVERSE] Bypassing test callback placeholder. Returning "1"');
       return res.send('1');
     }
 
     if (transaction_id.includes('{') || !transaction_id) {
       transaction_id = `OU_${user_id}_${offer_id}_${payoutParam}_${Date.now()}`;
+      console.log(`ℹ️ [OPINION_UNIVERSE] Generated synthetic transaction ID: ${transaction_id}`);
     }
 
     if (!user_id || !transaction_id) {
+      console.error('❌ [OPINION_UNIVERSE] Validation failed: missing userid or TransactionID');
       return res.status(400).send('0');
     }
 
@@ -826,21 +834,32 @@ export const handleOpinionUniverse = async (req, res) => {
         .update(transaction_id)
         .digest('hex');
 
+      console.log(`🔒 [OPINION_UNIVERSE] Verifying signature. Received: ${signature}, Expected: ${expectedSig}`);
+
       if (!safeCompare(signature, expectedSig)) {
-        console.warn('[OPINION_UNIVERSE] Signature Mismatch. Received:', signature, 'Expected:', expectedSig);
+        console.warn('❌ [OPINION_UNIVERSE] Signature Mismatch! Rejecting request with "0"');
         return res.status(403).send('0');
       }
+      console.log('✅ [OPINION_UNIVERSE] Signature verified successfully.');
+    } else {
+      console.log('ℹ️ [OPINION_UNIVERSE] No signature SIG provided. Skipping verification.');
     }
 
     // Reversal case
     if (status === '2') {
+      console.log(`🚨 [OPINION_UNIVERSE] Reversal status received for Transaction: ${transaction_id}`);
       const [origRows] = await connection.query('SELECT * FROM offer_completions WHERE completion_id = ? LIMIT 1', [transaction_id]);
       const user = await resolveUser(connection, origRows.length > 0 ? origRows[0].user_id : user_id);
       const deduction = origRows.length > 0 ? parseFloat(origRows[0].payout_coins || payoutParam || 0) : parseFloat(payoutParam || 0);
 
+      if (!user) {
+        console.warn(`⚠️ [OPINION_UNIVERSE] Reversal failed: User not found for identifier: ${user_id}`);
+      }
+
       if (origRows.length > 0) {
         const orig = origRows[0];
         if (orig.status !== 'REVERSED') {
+          console.log(`📉 [OPINION_UNIVERSE] Reversing ${deduction} coins for user: ${user?.name || user_id}`);
           await connection.beginTransaction();
           await connection.query('UPDATE offer_completions SET status = "REVERSED" WHERE completion_id = ?', [transaction_id]);
           await connection.query('UPDATE users SET balance = balance - ? WHERE id = ?', [deduction, orig.user_id]);
@@ -852,9 +871,14 @@ export const handleOpinionUniverse = async (req, res) => {
             [transId, orig.user_id, deduction, `Chargeback: Opinion Universe (${offer_name})`, transaction_id]
           );
           await connection.commit();
+          console.log('✅ [OPINION_UNIVERSE] Database balance deducted and debit ledger written.');
           
           sendNotification(orig.user_id, "Action Required: Points Reversed ❗", `Points for Opinion Universe '${offer_name}' were reversed.`).catch(console.error);
+        } else {
+          console.log('ℹ️ [OPINION_UNIVERSE] Transaction already reversed in database.');
         }
+      } else {
+        console.warn('⚠️ [OPINION_UNIVERSE] Original completion record not found for reversal.');
       }
       await sendBeautifulTelegramAlert('🚨', 'Opinion Universe Reversal', user, -deduction, {
         'Offer Name': offer_name,
@@ -863,14 +887,18 @@ export const handleOpinionUniverse = async (req, res) => {
       return res.send('1');
     }
 
+    console.log(`👤 [OPINION_UNIVERSE] Resolving user identifier: ${user_id}`);
     const user = await resolveUser(connection, user_id);
     if (!user) {
+      console.error(`❌ [OPINION_UNIVERSE] User not found for identifier: ${user_id}`);
       return res.status(404).send('0');
     }
 
     const internalId = user.id;
+    console.log(`✅ [OPINION_UNIVERSE] Resolved user: ${user.name} (UUID: ${internalId})`);
 
     if (await completionExists(connection, transaction_id)) {
+      console.log(`ℹ️ [OPINION_UNIVERSE] Duplicate transaction ignored: ${transaction_id}`);
       return res.send('1');
     }
 
@@ -878,6 +906,8 @@ export const handleOpinionUniverse = async (req, res) => {
 
     const reward = parseFloat(payoutParam || 0);
     const clientIp = ip_address || req.ip || 'unknown';
+    
+    console.log(`💰 [OPINION_UNIVERSE] Crediting ${reward} coins to user ${user.name}`);
     await connection.query(
       `INSERT INTO offer_completions (completion_id, user_id, offer_id, provider, payout_coins, status, raw_payload, offer_name, goal_name, gaid, ip_address)
        VALUES (?, ?, '0', 'opinionuniverse', ?, 'COMPLETED', ?, ?, ?, ?, ?)`,
@@ -894,6 +924,7 @@ export const handleOpinionUniverse = async (req, res) => {
     );
 
     await connection.commit();
+    console.log('✅ [OPINION_UNIVERSE] Database balance credited and credit ledger written successfully.');
 
     await sendBeautifulTelegramAlert('✅', 'Opinion Universe Completion', user, reward, {
       'Offer Name': offer_name,
@@ -908,7 +939,7 @@ export const handleOpinionUniverse = async (req, res) => {
     return res.send('1');
   } catch (error) {
     await connection.rollback();
-    console.error('Opinion Universe Webhook Error:', error);
+    console.error('❌ [OPINION_UNIVERSE] Webhook Error:', error);
     return res.send('0');
   } finally {
     connection.release();

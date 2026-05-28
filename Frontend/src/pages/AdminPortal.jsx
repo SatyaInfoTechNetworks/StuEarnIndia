@@ -10,6 +10,7 @@ import AdminPayouts from '../components/admin/AdminPayouts';
 import AdminReferrals from '../components/admin/AdminReferrals';
 import AdminLifafas from '../components/admin/AdminLifafas';
 import AdminReports from '../components/admin/AdminReports';
+import AdminContests from '../components/admin/AdminContests';
 
 export default function AdminPortal() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -1050,6 +1051,12 @@ export default function AdminPortal() {
                 <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('visit-earn'); }} className={`nav-link ${activeTab === 'visit-earn' ? 'active' : ''}`}>
                   <i className="nav-icon fas fa-coins mr-2"></i>
                   <p>Visit & Earn</p>
+                </a>
+              </li>
+              <li className="nav-item">
+                <a href="#" onClick={() => { resetOfferForm(); setSelectedUser(null); setActiveTab('contests'); }} className={`nav-link ${activeTab === 'contests' ? 'active' : ''}`}>
+                  <i className="nav-icon fas fa-trophy mr-2 text-warning"></i>
+                  <p>Contests & Giveaways</p>
                 </a>
               </li>
 
@@ -2131,6 +2138,15 @@ export default function AdminPortal() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* TAB 16: CONTESTS MANAGEMENT */}
+            {activeTab === 'contests' && (
+              <div className="card card-white shadow-none border rounded-lg">
+                <div className="card-body">
+                  <AdminContests getHeaders={getHeaders} showNotice={showNotice} API_BASE={API_BASE} />
+                </div>
               </div>
             )}
 

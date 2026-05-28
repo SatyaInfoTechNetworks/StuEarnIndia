@@ -447,6 +447,67 @@ export async function initializeDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // 27. contests Table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS contests (
+        id CHAR(36) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NULL,
+        type ENUM('LUCKY_DRAW', 'REFERRAL', 'EARNINGS') NOT NULL,
+        start_time DATETIME NOT NULL,
+        end_time DATETIME NOT NULL,
+        max_entries_per_day INT DEFAULT 3,
+        total_winners INT DEFAULT 1,
+        status ENUM('ACTIVE', 'COMPLETED', 'CANCELLED') DEFAULT 'ACTIVE',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 28. contest_rewards Table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS contest_rewards (
+        id CHAR(36) PRIMARY KEY,
+        contest_id CHAR(36) NOT NULL,
+        reward_position INT NOT NULL,
+        reward_type ENUM('COINS', 'CASH', 'GIFTCARD') NOT NULL,
+        reward_value DECIMAL(10, 2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (contest_id) REFERENCES contests(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 29. contest_entries Table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS contest_entries (
+        id CHAR(36) PRIMARY KEY,
+        user_id CHAR(36) NOT NULL,
+        contest_id CHAR(36) NOT NULL,
+        entry_source ENUM('AD', 'REFERRAL', 'EARNINGS', 'FREE') NOT NULL,
+        entries_count INT DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_user_contest_source (user_id, contest_id, entry_source),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (contest_id) REFERENCES contests(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 30. contest_winners Table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS contest_winners (
+        id CHAR(36) PRIMARY KEY,
+        contest_id CHAR(36) NOT NULL,
+        user_id CHAR(36) NOT NULL,
+        reward_position INT NOT NULL,
+        reward_type ENUM('COINS', 'CASH', 'GIFTCARD') NOT NULL,
+        reward_value DECIMAL(10, 2) NOT NULL,
+        reward_given BOOLEAN DEFAULT FALSE,
+        selected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (contest_id) REFERENCES contests(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     // Extra Columns Migrations
     await addColumnIfNotExists(connection, 'offers', 'daily_completion_cap', 'INT DEFAULT 0');
     await addColumnIfNotExists(connection, 'offers', 'country_targeting', 'VARCHAR(255) DEFAULT \'IN\'');

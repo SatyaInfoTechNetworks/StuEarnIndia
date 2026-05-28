@@ -122,6 +122,21 @@ import {
   deleteTransactionAdmin
 } from './controllers/adminController.js';
 
+import {
+  listAdminContests,
+  createContest,
+  updateContest,
+  deleteContest,
+  getContestEntries,
+  drawContestWinners,
+  getContestWinnersAdmin,
+  giveContestRewardAdmin,
+  getActiveContestsUser,
+  getContestDetailUser,
+  enterContestUser,
+  getContestWinnersUser
+} from './controllers/contestController.js';
+
 // Middleware Imports
 import { authenticateUser, authenticateAdmin, verifyAppCheck } from './middlewares/auth.js';
 
@@ -362,6 +377,25 @@ app.get('/api/admin/visit-earn', authenticateAdmin, adminListVisitTasks);
 app.post('/api/admin/visit-earn', authenticateAdmin, adminCreateVisitTask);
 app.put('/api/admin/visit-earn/:id', authenticateAdmin, adminUpdateVisitTask);
 app.delete('/api/admin/visit-earn/:id', authenticateAdmin, adminDeleteVisitTask);
+
+// ==========================================
+// 12. CONTESTS & GIVEAWAYS ROUTES
+// ==========================================
+// Admin Contest Management
+app.get('/api/admin/contests', authenticateAdmin, listAdminContests);
+app.post('/api/admin/contests', authenticateAdmin, createContest);
+app.put('/api/admin/contests/:id', authenticateAdmin, updateContest);
+app.delete('/api/admin/contests/:id', authenticateAdmin, deleteContest);
+app.get('/api/admin/contests/:id/entries', authenticateAdmin, getContestEntries);
+app.post('/api/admin/contests/:id/draw', authenticateAdmin, drawContestWinners);
+app.get('/api/admin/contests/:id/winners', authenticateAdmin, getContestWinnersAdmin);
+app.post('/api/admin/contests/winners/:winnerId/give-reward', authenticateAdmin, giveContestRewardAdmin);
+
+// User / Mobile App Contests
+app.get('/api/contests/active', authenticateUser, getActiveContestsUser);
+app.get('/api/contests/winners', getContestWinnersUser);
+app.get('/api/contests/:id', authenticateUser, getContestDetailUser);
+app.post('/api/contests/:id/enter', authenticateUser, enterContestUser);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

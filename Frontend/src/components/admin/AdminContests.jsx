@@ -23,7 +23,16 @@ export default function AdminContests({ getHeaders, showNotice, API_BASE }) {
     total_winners: 1,
     rewards: [
       { reward_position: 1, reward_type: 'COINS', reward_value: 500 }
-    ]
+    ],
+    slug: '',
+    banner_image: '',
+    prize_text: '',
+    allow_free_entry: true,
+    allow_ad_entry: true,
+    max_ad_entries_per_day: 3,
+    allow_coins_entry: false,
+    ticket_coins_cost: 0,
+    max_tickets_per_user: 10
   });
 
   const fetchContests = async () => {
@@ -196,7 +205,16 @@ export default function AdminContests({ getHeaders, showNotice, API_BASE }) {
       total_winners: 1,
       rewards: [
         { reward_position: 1, reward_type: 'COINS', reward_value: 500 }
-      ]
+      ],
+      slug: '',
+      banner_image: '',
+      prize_text: '',
+      allow_free_entry: true,
+      allow_ad_entry: true,
+      max_ad_entries_per_day: 3,
+      allow_coins_entry: false,
+      ticket_coins_cost: 0,
+      max_tickets_per_user: 10
     });
     setSelectedContest(null);
   };
@@ -220,7 +238,16 @@ export default function AdminContests({ getHeaders, showNotice, API_BASE }) {
         reward_position: r.reward_position,
         reward_type: r.reward_type,
         reward_value: r.reward_value
-      })) : [{ reward_position: 1, reward_type: 'COINS', reward_value: 500 }]
+      })) : [{ reward_position: 1, reward_type: 'COINS', reward_value: 500 }],
+      slug: contest.slug || '',
+      banner_image: contest.banner_image || '',
+      prize_text: contest.prize_text || '',
+      allow_free_entry: contest.allow_free_entry !== undefined ? Boolean(contest.allow_free_entry) : true,
+      allow_ad_entry: contest.allow_ad_entry !== undefined ? Boolean(contest.allow_ad_entry) : true,
+      max_ad_entries_per_day: contest.max_ad_entries_per_day !== undefined ? contest.max_ad_entries_per_day : 3,
+      allow_coins_entry: contest.allow_coins_entry !== undefined ? Boolean(contest.allow_coins_entry) : false,
+      ticket_coins_cost: contest.ticket_coins_cost !== undefined ? contest.ticket_coins_cost : 0,
+      max_tickets_per_user: contest.max_tickets_per_user !== undefined ? contest.max_tickets_per_user : 10
     });
     setActiveView('edit');
   };
@@ -365,21 +392,22 @@ export default function AdminContests({ getHeaders, showNotice, API_BASE }) {
             {/* Left Configuration Card */}
             <div className="col-lg-7">
               <div className="card card-white shadow-none border rounded-lg">
-                <div className="card-header border-bottom-0 bg-transparent"><h3 className="card-title font-weight-bold text-dark">Contest Metadata Details</h3></div>
+                <div className="card-header border-bottom-0 bg-transparent"><h3 className="card-title font-weight-bold text-dark">Contest Configuration Details</h3></div>
                 <div className="card-body">
-                  <div className="form-group mb-3">
-                    <label className="text-muted text-xs font-weight-bold mb-1">Contest Event Title</label>
-                    <input type="text" className="form-control" placeholder="e.g. Weekend Mega Lucky Draw" value={contestForm.title} onChange={e => setContestForm({ ...contestForm, title: e.target.value })} required />
-                  </div>
-                  
-                  <div className="form-group mb-3">
-                    <label className="text-muted text-xs font-weight-bold mb-1">Rules Description</label>
-                    <textarea rows={3} className="form-control" placeholder="Explain the entry criteria, reward distributions, and anti-abuse policies clearly..." value={contestForm.description} onChange={e => setContestForm({ ...contestForm, description: e.target.value })} />
+                  <div className="row">
+                    <div className="col-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Sweepstakes Campaign Title</label>
+                      <input type="text" className="form-control" placeholder="e.g. 🎁 Daily Free Draw" value={contestForm.title} onChange={e => setContestForm({ ...contestForm, title: e.target.value })} required />
+                    </div>
+                    <div className="col-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">URL Slug Parameter</label>
+                      <input type="text" className="form-control" placeholder="e.g. daily-free-draw" value={contestForm.slug} onChange={e => setContestForm({ ...contestForm, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })} required />
+                    </div>
                   </div>
 
                   <div className="row">
                     <div className="col-6 form-group mb-3">
-                      <label className="text-muted text-xs font-weight-bold mb-1">Giveaway Category Type</label>
+                      <label className="text-muted text-xs font-weight-bold mb-1">Sweepstakes Event Type</label>
                       <select className="form-control" value={contestForm.type} onChange={e => setContestForm({ ...contestForm, type: e.target.value })} required>
                         <option value="LUCKY_DRAW">🎟️ Lucky Ticket Draw</option>
                         <option value="REFERRAL">👥 Referral Contest</option>
@@ -387,7 +415,34 @@ export default function AdminContests({ getHeaders, showNotice, API_BASE }) {
                       </select>
                     </div>
                     <div className="col-6 form-group mb-3">
-                      <label className="text-muted text-xs font-weight-bold mb-1">Daily Entry Limit (Tickets)</label>
+                      <label className="text-muted text-xs font-weight-bold mb-1">Banner Display Image URL</label>
+                      <input type="text" className="form-control" placeholder="https://images.unsplash.com/..." value={contestForm.banner_image} onChange={e => setContestForm({ ...contestForm, banner_image: e.target.value })} />
+                    </div>
+                  </div>
+                  
+                  <div className="form-group mb-3">
+                    <label className="text-muted text-xs font-weight-bold mb-1">Event Short Description & Rules</label>
+                    <textarea rows={3} className="form-control" placeholder="Rules, requirements, or terms for this draw..." value={contestForm.description} onChange={e => setContestForm({ ...contestForm, description: e.target.value })} />
+                  </div>
+
+                  <div className="row">
+                    <div className="col-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Prize Text Label</label>
+                      <input type="text" className="form-control" placeholder="e.g. ₹500 Paytm Cash" value={contestForm.prize_text} onChange={e => setContestForm({ ...contestForm, prize_text: e.target.value })} />
+                    </div>
+                    <div className="col-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Max Tickets Allowed Per User (Total)</label>
+                      <input type="number" className="form-control" value={contestForm.max_tickets_per_user} onChange={e => setContestForm({ ...contestForm, max_tickets_per_user: parseInt(e.target.value || 10) })} required />
+                    </div>
+                  </div>
+
+                  <div className="row">
+                    <div className="col-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Winners Slot Count</label>
+                      <input type="number" className="form-control" value={contestForm.total_winners} onChange={e => setContestForm({ ...contestForm, total_winners: parseInt(e.target.value || 1) })} required />
+                    </div>
+                    <div className="col-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Daily Limit (Total Tickets)</label>
                       <input type="number" className="form-control" value={contestForm.max_entries_per_day} onChange={e => setContestForm({ ...contestForm, max_entries_per_day: parseInt(e.target.value || 3) })} required />
                     </div>
                   </div>
@@ -405,13 +460,56 @@ export default function AdminContests({ getHeaders, showNotice, API_BASE }) {
 
                   {activeView === 'edit' && (
                     <div className="form-group mb-3">
-                      <label className="text-muted text-xs font-weight-bold mb-1">Event Standing (Status)</label>
+                      <label className="text-muted text-xs font-weight-bold mb-1">Draw Status Mode</label>
                       <select className="form-control" value={contestForm.status} onChange={e => setContestForm({ ...contestForm, status: e.target.value })}>
-                        <option value="ACTIVE">ACTIVE (Running / Accepting entries)</option>
-                        <option value="CANCELLED">CANCELLED (Suspended / Deactivated)</option>
+                        <option value="ACTIVE">Active (Running / Accepting entries)</option>
+                        <option value="COMPLETED">Completed (Drawn / Concluded)</option>
+                        <option value="CANCELLED">Cancelled (Suspended / Deactivated)</option>
                       </select>
                     </div>
                   )}
+
+                  {/* ENTRY METHODS CONFIGURATION SECTION */}
+                  <div className="mt-4 border-top pt-3">
+                    <h5 className="font-weight-bold text-dark text-sm mb-3">Entry Methods Configuration</h5>
+                    
+                    <div className="row mb-2">
+                      <div className="col-6 d-flex align-items-center mb-3">
+                        <div className="custom-control custom-checkbox d-flex align-items-center">
+                          <input type="checkbox" className="custom-control-input" id="allow_free_entry" checked={contestForm.allow_free_entry} onChange={e => setContestForm({ ...contestForm, allow_free_entry: e.target.checked })} />
+                          <label className="custom-control-label text-muted text-xs font-weight-bold ml-2 cursor-pointer mb-0" htmlFor="allow_free_entry">Allow Daily Free Ticket Entry</label>
+                        </div>
+                      </div>
+                      <div className="col-6 d-flex align-items-center mb-3">
+                        <div className="custom-control custom-checkbox d-flex align-items-center">
+                          <input type="checkbox" className="custom-control-input" id="allow_ad_entry" checked={contestForm.allow_ad_entry} onChange={e => setContestForm({ ...contestForm, allow_ad_entry: e.target.checked })} />
+                          <label className="custom-control-label text-muted text-xs font-weight-bold ml-2 cursor-pointer mb-0" htmlFor="allow_ad_entry">Enable Ad Ticket Entries</label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="row">
+                      {contestForm.allow_ad_entry && (
+                        <div className="col-6 form-group mb-3">
+                          <label className="text-muted text-xs font-weight-bold mb-1">Maximum Ad Tickets Allowed Per Day</label>
+                          <input type="number" className="form-control" value={contestForm.max_ad_entries_per_day} onChange={e => setContestForm({ ...contestForm, max_ad_entries_per_day: parseInt(e.target.value || 3) })} />
+                        </div>
+                      )}
+                      
+                      <div className="col-6 d-flex flex-column mb-3">
+                        <div className="custom-control custom-checkbox d-flex align-items-center mt-2">
+                          <input type="checkbox" className="custom-control-input" id="allow_coins_entry" checked={contestForm.allow_coins_entry} onChange={e => setContestForm({ ...contestForm, allow_coins_entry: e.target.checked })} />
+                          <label className="custom-control-label text-muted text-xs font-weight-bold ml-2 cursor-pointer mb-0" htmlFor="allow_coins_entry">Enable Coins Purchased Tickets</label>
+                        </div>
+                        {contestForm.allow_coins_entry && (
+                          <div className="mt-2">
+                            <label className="text-muted text-xs font-weight-bold mb-1">Ticket Cost in Coins</label>
+                            <input type="number" className="form-control form-control-sm" placeholder="e.g. 50" value={contestForm.ticket_coins_cost} onChange={e => setContestForm({ ...contestForm, ticket_coins_cost: parseFloat(e.target.value || 0) })} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
                   <button type="submit" className="btn btn-primary btn-block py-3 font-weight-bold rounded-lg mt-4 shadow-sm">
                     {activeView === 'create' ? "PUBLISH CONTEST" : "SAVE CONTEST UPDATES"}

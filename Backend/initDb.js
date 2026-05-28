@@ -512,6 +512,17 @@ export async function initializeDatabase() {
     await addColumnIfNotExists(connection, 'offers', 'daily_completion_cap', 'INT DEFAULT 0');
     await addColumnIfNotExists(connection, 'offers', 'country_targeting', 'VARCHAR(255) DEFAULT \'IN\'');
 
+    // Sweepstakes / Contests Configuration Migrations
+    await addColumnIfNotExists(connection, 'contests', 'slug', 'VARCHAR(255) NULL');
+    await addColumnIfNotExists(connection, 'contests', 'banner_image', 'TEXT NULL');
+    await addColumnIfNotExists(connection, 'contests', 'prize_text', 'VARCHAR(255) NULL');
+    await addColumnIfNotExists(connection, 'contests', 'allow_free_entry', 'BOOLEAN DEFAULT TRUE');
+    await addColumnIfNotExists(connection, 'contests', 'allow_ad_entry', 'BOOLEAN DEFAULT TRUE');
+    await addColumnIfNotExists(connection, 'contests', 'max_ad_entries_per_day', 'INT DEFAULT 3');
+    await addColumnIfNotExists(connection, 'contests', 'allow_coins_entry', 'BOOLEAN DEFAULT FALSE');
+    await addColumnIfNotExists(connection, 'contests', 'ticket_coins_cost', 'DECIMAL(10, 2) DEFAULT 0.00');
+    await addColumnIfNotExists(connection, 'contests', 'max_tickets_per_user', 'INT DEFAULT 10');
+
     await addColumnIfNotExists(connection, 'transactions', 'opening_balance', 'DECIMAL(10, 2) DEFAULT NULL');
     await addColumnIfNotExists(connection, 'transactions', 'closing_balance', 'DECIMAL(10, 2) DEFAULT NULL');
     await addColumnIfNotExists(connection, 'transactions', 'tamper_signature', 'VARCHAR(64) DEFAULT NULL');

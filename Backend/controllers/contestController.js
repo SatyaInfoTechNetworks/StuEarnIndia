@@ -49,7 +49,11 @@ export const createContest = async (req, res) => {
   try {
     const { 
       title, description, type, start_time, end_time, 
-      max_entries_per_day = 3, total_winners = 1, rewards 
+      max_entries_per_day = 3, total_winners = 1, rewards,
+      slug = '', banner_image = '', prize_text = '',
+      allow_free_entry = true, allow_ad_entry = true,
+      max_ad_entries_per_day = 3, allow_coins_entry = false,
+      ticket_coins_cost = 0, max_tickets_per_user = 10
     } = req.body;
 
     if (!title || !type || !start_time || !end_time) {
@@ -60,9 +64,18 @@ export const createContest = async (req, res) => {
 
     const contestId = uuidv4();
     await connection.query(
-      `INSERT INTO contests (id, title, description, type, start_time, end_time, max_entries_per_day, total_winners, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', NOW())`,
-      [contestId, title, description || '', type, start_time, end_time, parseInt(max_entries_per_day), parseInt(total_winners)]
+      `INSERT INTO contests (id, title, description, type, start_time, end_time, max_entries_per_day, total_winners, status, created_at, slug, banner_image, prize_text, allow_free_entry, allow_ad_entry, max_ad_entries_per_day, allow_coins_entry, ticket_coins_cost, max_tickets_per_user)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        contestId, title, description || '', type, start_time, end_time, parseInt(max_entries_per_day), parseInt(total_winners),
+        slug || '', banner_image || '', prize_text || '',
+        allow_free_entry !== undefined ? Boolean(allow_free_entry) : true,
+        allow_ad_entry !== undefined ? Boolean(allow_ad_entry) : true,
+        parseInt(max_ad_entries_per_day !== undefined ? max_ad_entries_per_day : 3),
+        allow_coins_entry !== undefined ? Boolean(allow_coins_entry) : false,
+        parseFloat(ticket_coins_cost !== undefined ? ticket_coins_cost : 0),
+        parseInt(max_tickets_per_user !== undefined ? max_tickets_per_user : 10)
+      ]
     );
 
     // Sync rewards
@@ -95,7 +108,11 @@ export const updateContest = async (req, res) => {
     const contestId = req.params.id;
     const { 
       title, description, start_time, end_time, 
-      max_entries_per_day, total_winners, status, rewards 
+      max_entries_per_day, total_winners, status, rewards,
+      slug = '', banner_image = '', prize_text = '',
+      allow_free_entry = true, allow_ad_entry = true,
+      max_ad_entries_per_day = 3, allow_coins_entry = false,
+      ticket_coins_cost = 0, max_tickets_per_user = 10
     } = req.body;
 
     await connection.beginTransaction();
@@ -108,9 +125,20 @@ export const updateContest = async (req, res) => {
 
     await connection.query(
       `UPDATE contests 
-       SET title=?, description=?, start_time=?, end_time=?, max_entries_per_day=?, total_winners=?, status=?
+       SET title=?, description=?, start_time=?, end_time=?, max_entries_per_day=?, total_winners=?, status=?,
+           slug=?, banner_image=?, prize_text=?, allow_free_entry=?, allow_ad_entry=?, max_ad_entries_per_day=?, allow_coins_entry=?, ticket_coins_cost=?, max_tickets_per_user=?
        WHERE id=?`,
-      [title, description || '', start_time, end_time, parseInt(max_entries_per_day), parseInt(total_winners), status || 'ACTIVE', contestId]
+      [
+        title, description || '', start_time, end_time, parseInt(max_entries_per_day), parseInt(total_winners), status || 'ACTIVE',
+        slug || '', banner_image || '', prize_text || '',
+        allow_free_entry !== undefined ? Boolean(allow_free_entry) : true,
+        allow_ad_entry !== undefined ? Boolean(allow_ad_entry) : true,
+        parseInt(max_ad_entries_per_day !== undefined ? max_ad_entries_per_day : 3),
+        allow_coins_entry !== undefined ? Boolean(allow_coins_entry) : false,
+        parseFloat(ticket_coins_cost !== undefined ? ticket_coins_cost : 0),
+        parseInt(max_tickets_per_user !== undefined ? max_tickets_per_user : 10),
+        contestId
+      ]
     );
 
     // Sync rewards
@@ -399,6 +427,15 @@ export const getActiveContestsUser = async (req, res) => {
         totalWinners: c.total_winners,
         globalEntriesCount: parseInt(c.global_entries_count),
         myTickets,
+        slug: c.slug || '',
+        bannerImage: c.banner_image || '',
+        prizeText: c.prize_text || '',
+        allowFreeEntry: Boolean(c.allow_free_entry),
+        allowAdEntry: Boolean(c.allow_ad_entry),
+        maxAdEntriesPerDay: parseInt(c.max_ad_entries_per_day || 3),
+        allowCoinsEntry: Boolean(c.allow_coins_entry),
+        ticketCoinsCost: parseFloat(c.ticket_coins_cost || 0),
+        maxTicketsPerUser: parseInt(c.max_tickets_per_user || 10),
         rewards: rewards.map(r => ({
           position: r.reward_position,
           type: r.reward_type,
@@ -441,6 +478,9 @@ export const getContestDetailUser = async (req, res) => {
     // Get my tickets details
     let myTickets = 0;
     let entriesLeftToday = c.max_entries_per_day;
+    let freeEntriesLeftToday = c.allow_free_entry ? 1 : 0;
+    let adEntriesLeftToday = c.allow_ad_entry ? c.max_ad_entries_per_day : 0;
+    let overallEntriesLeft = c.max_tickets_per_user;
 
     if (userId) {
       const [entryRows] = await pool.query(
@@ -449,7 +489,7 @@ export const getContestDetailUser = async (req, res) => {
       );
       myTickets = parseInt(entryRows[0]?.tickets || 0);
 
-      // Daily limit remaining checker
+      // Daily limit remaining checker (overall limit backward compatibility)
       const today = new Date().toISOString().split('T')[0];
       const [todayRows] = await pool.query(
         'SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND DATE(created_at) = ?',
@@ -457,6 +497,25 @@ export const getContestDetailUser = async (req, res) => {
       );
       const todayEntries = parseInt(todayRows[0]?.tickets || 0);
       entriesLeftToday = Math.max(0, c.max_entries_per_day - todayEntries);
+
+      // Free entry limit check today
+      const [freeRows] = await pool.query(
+        "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'FREE' AND DATE(created_at) = ?",
+        [contestId, userId, today]
+      );
+      const todayFree = parseInt(freeRows[0]?.tickets || 0);
+      freeEntriesLeftToday = c.allow_free_entry ? Math.max(0, 1 - todayFree) : 0;
+
+      // Ad entry limit check today
+      const [adRows] = await pool.query(
+        "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'AD' AND DATE(created_at) = ?",
+        [contestId, userId, today]
+      );
+      const todayAds = parseInt(adRows[0]?.tickets || 0);
+      adEntriesLeftToday = c.allow_ad_entry ? Math.max(0, c.max_ad_entries_per_day - todayAds) : 0;
+
+      // Total sweepstakes ticket limit per user
+      overallEntriesLeft = Math.max(0, c.max_tickets_per_user - myTickets);
     }
 
     res.json({
@@ -471,9 +530,21 @@ export const getContestDetailUser = async (req, res) => {
         maxEntriesPerDay: c.max_entries_per_day,
         totalWinners: c.total_winners,
         status: c.status,
+        slug: c.slug || '',
+        bannerImage: c.banner_image || '',
+        prizeText: c.prize_text || '',
+        allowFreeEntry: Boolean(c.allow_free_entry),
+        allowAdEntry: Boolean(c.allow_ad_entry),
+        maxAdEntriesPerDay: parseInt(c.max_ad_entries_per_day || 3),
+        allowCoinsEntry: Boolean(c.allow_coins_entry),
+        ticketCoinsCost: parseFloat(c.ticket_coins_cost || 0),
+        maxTicketsPerUser: parseInt(c.max_tickets_per_user || 10),
         totalEntries,
         myTickets,
         entriesLeftToday,
+        freeEntriesLeftToday,
+        adEntriesLeftToday,
+        overallEntriesLeft,
         rewards: rewards.map(r => ({
           position: r.reward_position,
           type: r.reward_type,
@@ -487,13 +558,13 @@ export const getContestDetailUser = async (req, res) => {
   }
 };
 
-// 3. User watches ad/rewarded action to earn 1 ticket
+// 3. User claims ticket (Free, Ad, or Coins purchased)
 export const enterContestUser = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const contestId = req.params.id;
     const userId = req.user.id;
-    const { source = 'AD' } = req.body; // AD, FREE
+    const { source = 'AD' } = req.body; // AD, FREE, COINS
 
     await connection.beginTransaction();
 
@@ -514,20 +585,90 @@ export const enterContestUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Direct ticket claiming is only allowed for Lucky Draws.' });
     }
 
-    // Check daily limit
-    const today = new Date().toISOString().split('T')[0];
-    const [todayRows] = await connection.query(
-      'SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND DATE(created_at) = ?',
-      [contestId, userId, today]
+    // Check overall max ticket limit
+    const [userEntriesRows] = await connection.query(
+      'SELECT SUM(entries_count) as total FROM contest_entries WHERE contest_id = ? AND user_id = ?',
+      [contestId, userId]
     );
-    const todayEntries = parseInt(todayRows[0]?.tickets || 0);
-
-    if (todayEntries >= contest.max_entries_per_day) {
+    const userTotalTickets = parseInt(userEntriesRows[0]?.total || 0);
+    if (userTotalTickets >= contest.max_tickets_per_user) {
       await connection.rollback();
-      return res.status(400).json({ 
-        success: false, 
-        message: `Daily entry limit reached. You can only earn up to ${contest.max_entries_per_day} tickets per day.` 
+      return res.status(400).json({
+        success: false,
+        message: `Sweepstakes limit reached! You can hold a maximum of ${contest.max_tickets_per_user} tickets for this draw.`
       });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    if (source === 'FREE') {
+      if (!contest.allow_free_entry) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: 'Free ticket entry is not enabled for this draw.' });
+      }
+
+      const [todayFreeRows] = await connection.query(
+        "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'FREE' AND DATE(created_at) = ?",
+        [contestId, userId, today]
+      );
+      const todayFreeCount = parseInt(todayFreeRows[0]?.tickets || 0);
+      if (todayFreeCount >= 1) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: 'You have already claimed your daily free ticket.' });
+      }
+    } 
+    else if (source === 'AD') {
+      if (!contest.allow_ad_entry) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: 'Ad ticket entry is not enabled for this draw.' });
+      }
+
+      const [todayAdRows] = await connection.query(
+        "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'AD' AND DATE(created_at) = ?",
+        [contestId, userId, today]
+      );
+      const todayAdCount = parseInt(todayAdRows[0]?.tickets || 0);
+      if (todayAdCount >= contest.max_ad_entries_per_day) {
+        await connection.rollback();
+        return res.status(400).json({ 
+          success: false, 
+          message: `Daily ad entry limit reached. You can only earn up to ${contest.max_ad_entries_per_day} ad tickets per day.` 
+        });
+      }
+    } 
+    else if (source === 'COINS') {
+      if (!contest.allow_coins_entry) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: 'Coins purchased tickets are not enabled for this draw.' });
+      }
+
+      const [userRows] = await connection.query('SELECT balance FROM users WHERE id = ? FOR UPDATE', [userId]);
+      const userBalance = parseFloat(userRows[0]?.balance || 0);
+      const ticketCost = parseFloat(contest.ticket_coins_cost || 0);
+
+      if (userBalance < ticketCost) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient coins. Each ticket costs ${ticketCost.toFixed(0)} coins, but your balance is ${userBalance.toFixed(0)} coins.`
+        });
+      }
+
+      // Deduct coins from user balance
+      await connection.query('UPDATE users SET balance = balance - ? WHERE id = ?', [ticketCost, userId]);
+
+      // Write transaction ledger entry
+      const transId = uuidv4();
+      const description = `Purchased Raffle Ticket for Giveaway: ${contest.title}`;
+      await connection.query(
+        `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at)
+         VALUES (?, ?, ?, 'DEBIT', 'CONTEST_TICKET_PURCHASE', ?, ?, NOW())`,
+        [transId, userId, ticketCost, description, contestId]
+      );
+    } 
+    else {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'Invalid ticket entry source method.' });
     }
 
     // Insert or update entry
@@ -539,7 +680,12 @@ export const enterContestUser = async (req, res) => {
     );
 
     await connection.commit();
-    res.json({ success: true, message: 'Congratulations! You earned 1 raffle ticket.' });
+    res.json({ 
+      success: true, 
+      message: source === 'FREE' ? 'Daily free ticket claimed!' : 
+               source === 'COINS' ? 'Raffle ticket purchased successfully!' : 
+               'Congratulations! You earned 1 raffle ticket.'
+    });
   } catch (error) {
     await connection.rollback();
     console.error('User Enter Contest Error:', error);

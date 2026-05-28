@@ -282,29 +282,39 @@ export const drawContestWinners = async (req, res) => {
       let rankedQuery = '';
       let rankedParams = [];
 
-      if (contest.type === 'REFERRAL') {
+      if (contest.type === 'REFERRAL_CONTEST') {
         rankedQuery = `
-          SELECT u.id as user_id, u.name as userName, COUNT(r.id) as scoreValue
-          FROM users u
-          INNER JOIN contest_entries e ON e.user_id = u.id
-          LEFT JOIN referral_uses r ON r.referrer_id = u.id AND r.created_at BETWEEN ? AND ?
-          WHERE e.contest_id = ?
-          GROUP BY u.id
-          ORDER BY scoreValue DESC, e.created_at ASC
+          SELECT cp.user_id, u.name as userName, COUNT(ru.id) as scoreValue
+          FROM contest_participants cp
+          JOIN users u ON cp.user_id = u.id
+          LEFT JOIN referral_uses ru ON ru.referrer_id = cp.user_id AND ru.created_at > cp.joined_at AND ru.created_at BETWEEN ? AND ?
+          WHERE cp.contest_id = ?
+          GROUP BY cp.user_id, u.name
+          ORDER BY scoreValue DESC, cp.joined_at ASC
+        `;
+        rankedParams = [contest.start_time, contest.end_time, contestId];
+      } else if (contest.type === 'EARNINGS_CONTEST') {
+        rankedQuery = `
+          SELECT cp.user_id, u.name as userName, COALESCE(SUM(t.amount), 0) as scoreValue
+          FROM contest_participants cp
+          JOIN users u ON cp.user_id = u.id
+          LEFT JOIN transactions t ON t.user_id = cp.user_id AND t.type = 'CREDIT' AND t.source IN ('OFFER', 'TASK', 'WATCH_VIDEO', 'VIDEO_AD', 'OFFER_COMPLETION') AND t.created_at > cp.joined_at AND t.created_at BETWEEN ? AND ?
+          WHERE cp.contest_id = ?
+          GROUP BY cp.user_id, u.name
+          ORDER BY scoreValue DESC, cp.joined_at ASC
         `;
         rankedParams = [contest.start_time, contest.end_time, contestId];
       } else {
-        // EARNINGS Contest
+        // Fallback or event-based
         rankedQuery = `
-          SELECT u.id as user_id, u.name as userName, COALESCE(SUM(t.amount), 0) as scoreValue
-          FROM users u
-          INNER JOIN contest_entries e ON e.user_id = u.id
-          LEFT JOIN transactions t ON t.user_id = u.id AND t.type = 'CREDIT' AND t.created_at BETWEEN ? AND ?
-          WHERE e.contest_id = ?
-          GROUP BY u.id
-          ORDER BY scoreValue DESC, e.created_at ASC
+          SELECT cp.user_id, u.name as userName, 0 as scoreValue
+          FROM contest_participants cp
+          JOIN users u ON cp.user_id = u.id
+          WHERE cp.contest_id = ?
+          GROUP BY cp.user_id, u.name
+          ORDER BY cp.joined_at ASC
         `;
-        rankedParams = [contest.start_time, contest.end_time, contestId];
+        rankedParams = [contestId];
       }
 
       const [rankedParticipants] = await connection.query(rankedQuery, rankedParams);
@@ -328,25 +338,6 @@ export const drawContestWinners = async (req, res) => {
           value: parseFloat(reward.reward_value)
         });
       }
-    }
-    
-    // Sort rewards by position to select Rank 1 first
-    for (const reward of rewards) {
-      if (raffleBasket.length === 0) break;
-
-      // Select random index from the basket
-      const randIdx = Math.floor(Math.random() * raffleBasket.length);
-      const winnerUserId = raffleBasket[randIdx];
-
-      winnersDrawn.push({
-        userId: winnerUserId,
-        position: reward.reward_position,
-        type: reward.reward_type,
-        value: parseFloat(reward.reward_value)
-      });
-
-      // Remove this user completely from the raffle basket so they cannot win multiple positions
-      raffleBasket = raffleBasket.filter(uid => uid !== winnerUserId);
     }
 
     // E. ATOMIC REWARD CREDITING LEDGER
@@ -458,16 +449,13 @@ export const giveContestRewardAdmin = async (req, res) => {
 
 // ==========================================
 // USER / MOBILE APP CONTEST CONTROLLERS
-// ==========================================
-
-// 1. Get all active and upcoming contests with my ticket counts
+// ===================================// 1. Get all active and upcoming contests with my ticket counts
 export const getActiveContestsUser = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
 
     const query = `
-      SELECT c.*, 
-             (SELECT COUNT(*) FROM contest_entries WHERE contest_id = c.id) as global_entries_count
+      SELECT c.*
       FROM contests c
       WHERE c.status = 'ACTIVE' AND c.end_time > NOW()
       ORDER BY c.end_time ASC
@@ -482,14 +470,40 @@ export const getActiveContestsUser = async (req, res) => {
         [c.id]
       );
 
-      // Get my tickets
+      // Get registration or tickets
       let myTickets = 0;
-      if (userId) {
-        const [entryRows] = await pool.query(
-          'SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ?',
-          [c.id, userId]
+      let globalEntriesCount = 0;
+
+      const isRaffle = c.type === 'LUCKY_DRAW';
+
+      if (isRaffle) {
+        const [globalRows] = await pool.query(
+          'SELECT SUM(entries_count) as total FROM contest_entries WHERE contest_id = ?',
+          [c.id]
         );
-        myTickets = parseInt(entryRows[0]?.tickets || 0);
+        globalEntriesCount = parseInt(globalRows[0]?.total || 0);
+
+        if (userId) {
+          const [entryRows] = await pool.query(
+            'SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ?',
+            [c.id, userId]
+          );
+          myTickets = parseInt(entryRows[0]?.tickets || 0);
+        }
+      } else {
+        const [globalRows] = await pool.query(
+          'SELECT COUNT(*) as total FROM contest_participants WHERE contest_id = ?',
+          [c.id]
+        );
+        globalEntriesCount = parseInt(globalRows[0]?.total || 0);
+
+        if (userId) {
+          const [partRows] = await pool.query(
+            'SELECT COUNT(*) as registered FROM contest_participants WHERE contest_id = ? AND user_id = ?',
+            [c.id, userId]
+          );
+          myTickets = parseInt(partRows[0]?.registered || 0) > 0 ? 1 : 0;
+        }
       }
 
       formattedContests.push({
@@ -501,7 +515,7 @@ export const getActiveContestsUser = async (req, res) => {
         endTime: c.end_time,
         maxEntriesPerDay: c.max_entries_per_day,
         totalWinners: c.total_winners,
-        globalEntriesCount: parseInt(c.global_entries_count),
+        globalEntriesCount: globalEntriesCount,
         myTickets,
         slug: c.slug || '',
         bannerImage: c.banner_image || '',
@@ -544,12 +558,23 @@ export const getContestDetailUser = async (req, res) => {
       [contestId]
     );
 
-    // Get total tickets in contest
-    const [totalRows] = await pool.query(
-      'SELECT SUM(entries_count) as total FROM contest_entries WHERE contest_id = ?',
-      [contestId]
-    );
-    const totalEntries = parseInt(totalRows[0]?.total || 0);
+    const isRaffle = c.type === 'LUCKY_DRAW';
+
+    // Get total entries / participants
+    let totalEntries = 0;
+    if (isRaffle) {
+      const [totalRows] = await pool.query(
+        'SELECT SUM(entries_count) as total FROM contest_entries WHERE contest_id = ?',
+        [contestId]
+      );
+      totalEntries = parseInt(totalRows[0]?.total || 0);
+    } else {
+      const [totalRows] = await pool.query(
+        'SELECT COUNT(*) as total FROM contest_participants WHERE contest_id = ?',
+        [contestId]
+      );
+      totalEntries = parseInt(totalRows[0]?.total || 0);
+    }
 
     // Get my tickets details
     let myTickets = 0;
@@ -557,17 +582,16 @@ export const getContestDetailUser = async (req, res) => {
     let freeEntriesLeftToday = c.allow_free_entry ? 1 : 0;
     let adEntriesLeftToday = c.allow_ad_entry ? c.max_ad_entries_per_day : 0;
     let overallEntriesLeft = c.max_tickets_per_user;
-
-    const isRaffle = c.type === 'LUCKY_DRAW';
+    let myScore = 0;
 
     if (userId) {
-      const [entryRows] = await pool.query(
-        'SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ?',
-        [contestId, userId]
-      );
-      myTickets = parseInt(entryRows[0]?.tickets || 0);
-
       if (isRaffle) {
+        const [entryRows] = await pool.query(
+          'SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ?',
+          [contestId, userId]
+        );
+        myTickets = parseInt(entryRows[0]?.tickets || 0);
+
         // Daily limit remaining checker (overall limit backward compatibility)
         const today = new Date().toISOString().split('T')[0];
         const [todayRows] = await pool.query(
@@ -597,10 +621,35 @@ export const getContestDetailUser = async (req, res) => {
         overallEntriesLeft = Math.max(0, c.max_tickets_per_user - myTickets);
       } else {
         // For referral & earnings contests: user joins ONCE (acts as registration flag)
+        const [partRows] = await pool.query(
+          'SELECT joined_at FROM contest_participants WHERE contest_id = ? AND user_id = ?',
+          [contestId, userId]
+        );
+        
+        const hasJoined = partRows.length > 0;
+        myTickets = hasJoined ? 1 : 0;
+        
         freeEntriesLeftToday = 0;
         adEntriesLeftToday = 0;
         entriesLeftToday = 0;
-        overallEntriesLeft = myTickets > 0 ? 0 : 1;
+        overallEntriesLeft = hasJoined ? 0 : 1;
+
+        if (hasJoined) {
+          const joinedAt = partRows[0].joined_at;
+          if (c.type === 'REFERRAL_CONTEST') {
+            const [scoreRows] = await pool.query(
+              'SELECT COUNT(*) as count FROM referral_uses WHERE referrer_id = ? AND created_at > ? AND created_at BETWEEN ? AND ?',
+              [userId, joinedAt, c.start_time, c.end_time]
+            );
+            myScore = parseInt(scoreRows[0]?.count || 0);
+          } else if (c.type === 'EARNINGS_CONTEST') {
+            const [scoreRows] = await pool.query(
+              "SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = 'CREDIT' AND source IN ('OFFER', 'TASK', 'WATCH_VIDEO', 'VIDEO_AD', 'OFFER_COMPLETION') AND created_at > ? AND created_at BETWEEN ? AND ?",
+              [userId, joinedAt, c.start_time, c.end_time]
+            );
+            myScore = parseFloat(scoreRows[0]?.total || 0);
+          }
+        }
       }
     } else {
       if (!isRaffle) {
@@ -638,6 +687,7 @@ export const getContestDetailUser = async (req, res) => {
         freeEntriesLeftToday,
         adEntriesLeftToday,
         overallEntriesLeft,
+        myScore, // dynamic live scoring
         rewards: rewards.map(r => ({
           position: r.reward_position,
           type: r.reward_type,
@@ -785,7 +835,7 @@ export const enterContestUser = async (req, res) => {
       // REFERRAL or EARNINGS (ONE-TIME REGISTRATION)
       // ------------------------------------------
       const [existing] = await connection.query(
-        'SELECT COUNT(*) as count FROM contest_entries WHERE contest_id = ? AND user_id = ?',
+        'SELECT COUNT(*) as count FROM contest_participants WHERE contest_id = ? AND user_id = ?',
         [contestId, userId]
       );
       const isRegistered = parseInt(existing[0]?.count || 0) > 0;
@@ -795,17 +845,17 @@ export const enterContestUser = async (req, res) => {
         return res.status(400).json({ success: false, message: 'You have already registered/joined this contest.' });
       }
 
-      // Insert a registration ticket
+      // Insert into contest_participants
       await connection.query(
-        `INSERT INTO contest_entries (id, user_id, contest_id, entry_source, entries_count, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 1, NOW(), NOW())`,
-        [uuidv4(), userId, contestId, contest.type]
+        `INSERT INTO contest_participants (id, user_id, contest_id, joined_at)
+         VALUES (?, ?, ?, NOW())`,
+        [uuidv4(), userId, contestId]
       );
 
       await connection.commit();
       res.json({
         success: true,
-        message: contest.type === 'REFERRAL' 
+        message: contest.type === 'REFERRAL_CONTEST' 
           ? 'Successfully registered! Your referrals are now being actively tracked.' 
           : 'Successfully joined the Earnings League! Your coins accumulated during the contest window will determine your rank.'
       });
@@ -839,7 +889,7 @@ export const getContestWinnersUser = async (req, res) => {
   }
 };
 
-// 5. Get leaderboard standings for a contest
+// 5. Get leaderboard standings for a contest (Separated Architecture v2.5)
 export const getContestLeaderboard = async (req, res) => {
   try {
     const contestId = req.params.id;
@@ -851,34 +901,43 @@ export const getContestLeaderboard = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Contest not found.' });
     }
     const contest = contestRows[0];
-    const isReferral = contest.type === 'REFERRAL';
-
+    
     let leaderboardQuery = '';
     let leaderboardParams = [];
 
-    if (isReferral) {
-      // referral contest: count signups referred by user during the contest timing window
+    if (contest.type === 'REFERRAL_CONTEST') {
       leaderboardQuery = `
-        SELECT u.id as user_id, u.name as userName, COUNT(r.id) as scoreValue
-        FROM users u
-        INNER JOIN referral_uses r ON r.referrer_id = u.id
-        INNER JOIN contest_entries e ON e.user_id = u.id
-        WHERE e.contest_id = ? 
-          AND r.created_at BETWEEN ? AND ?
-        GROUP BY u.id
-        ORDER BY scoreValue DESC
+        SELECT cp.user_id, u.name as userName, COUNT(ru.id) as scoreValue
+        FROM contest_participants cp
+        JOIN users u ON cp.user_id = u.id
+        LEFT JOIN referral_uses ru ON ru.referrer_id = cp.user_id AND ru.created_at > cp.joined_at AND ru.created_at BETWEEN ? AND ?
+        WHERE cp.contest_id = ?
+        GROUP BY cp.user_id, u.name
+        ORDER BY scoreValue DESC, cp.joined_at ASC
         LIMIT 10
       `;
-      leaderboardParams = [contestId, contest.start_time, contest.end_time];
-    } else {
-      // standard raffle: sum total tickets owned
+      leaderboardParams = [contest.start_time, contest.end_time, contestId];
+    } else if (contest.type === 'EARNINGS_CONTEST') {
       leaderboardQuery = `
-        SELECT u.id as user_id, u.name as userName, COUNT(e.id) as scoreValue
-        FROM users u
-        INNER JOIN contest_entries e ON e.user_id = u.id
+        SELECT cp.user_id, u.name as userName, COALESCE(SUM(t.amount), 0) as scoreValue
+        FROM contest_participants cp
+        JOIN users u ON cp.user_id = u.id
+        LEFT JOIN transactions t ON t.user_id = cp.user_id AND t.type = 'CREDIT' AND t.source IN ('OFFER', 'TASK', 'WATCH_VIDEO', 'VIDEO_AD', 'OFFER_COMPLETION') AND t.created_at > cp.joined_at AND t.created_at BETWEEN ? AND ?
+        WHERE cp.contest_id = ?
+        GROUP BY cp.user_id, u.name
+        ORDER BY scoreValue DESC, cp.joined_at ASC
+        LIMIT 10
+      `;
+      leaderboardParams = [contest.start_time, contest.end_time, contestId];
+    } else {
+      // standard lucky draw tickets
+      leaderboardQuery = `
+        SELECT e.user_id, u.name as userName, COALESCE(SUM(e.entries_count), 0) as scoreValue
+        FROM contest_entries e
+        JOIN users u ON e.user_id = u.id
         WHERE e.contest_id = ?
-        GROUP BY u.id
-        ORDER BY scoreValue DESC
+        GROUP BY e.user_id, u.name
+        ORDER BY scoreValue DESC, e.created_at ASC
         LIMIT 10
       `;
       leaderboardParams = [contestId];
@@ -890,63 +949,106 @@ export const getContestLeaderboard = async (req, res) => {
     const leaderboard = topRows.map((r, index) => ({
       rank: index + 1,
       userName: r.userName,
-      score: isReferral ? `${r.scoreValue} Referrals` : `${r.scoreValue} Tickets`
+      score: contest.type === 'REFERRAL_CONTEST' ? `${r.scoreValue} Referrals` :
+             contest.type === 'EARNINGS_CONTEST' ? `${parseFloat(r.scoreValue).toFixed(0)} Coins` :
+             `${r.scoreValue} Tickets`
     }));
 
     // 2. Fetch Calling User's standing and rank position
     let myRank = 0;
     let myScore = 0;
 
-    if (isReferral) {
-      const [[userScoreRow]] = await pool.query(
-        `SELECT COUNT(id) as score FROM referral_uses WHERE referrer_id = ? AND created_at BETWEEN ? AND ?`,
-        [userId, contest.start_time, contest.end_time]
-      );
-      myScore = userScoreRow ? userScoreRow.score : 0;
+    // Resolve user join time if joined
+    const [partRows] = await pool.query(
+      'SELECT joined_at FROM contest_participants WHERE contest_id = ? AND user_id = ?',
+      [contestId, userId]
+    );
 
-      const [[rankRow]] = await pool.query(
-        `SELECT COUNT(DISTINCT referrer_id) + 1 as rankPosition
-         FROM (
-           SELECT referrer_id, COUNT(id) as cnt
-           FROM referral_uses
-           WHERE created_at BETWEEN ? AND ?
-           GROUP BY referrer_id
-         ) as ranks
-         WHERE cnt > ?`,
-        [contest.start_time, contest.end_time, myScore]
-      );
-      myRank = rankRow ? rankRow.rankPosition : 1;
+    const hasJoined = partRows.length > 0;
+    const joinedAt = hasJoined ? partRows[0].joined_at : contest.start_time;
+
+    if (contest.type === 'REFERRAL_CONTEST') {
+      if (hasJoined) {
+        const [[userScoreRow]] = await pool.query(
+          `SELECT COUNT(*) as score FROM referral_uses WHERE referrer_id = ? AND created_at > ? AND created_at BETWEEN ? AND ?`,
+          [userId, joinedAt, contest.start_time, contest.end_time]
+        );
+        myScore = userScoreRow ? parseInt(userScoreRow.score || 0) : 0;
+
+        const [[rankRow]] = await pool.query(
+          `SELECT COUNT(*) + 1 as rankPosition
+           FROM (
+             SELECT cp.user_id, COUNT(ru.id) as scoreVal
+             FROM contest_participants cp
+             LEFT JOIN referral_uses ru ON ru.referrer_id = cp.user_id AND ru.created_at > cp.joined_at AND ru.created_at BETWEEN ? AND ?
+             WHERE cp.contest_id = ?
+             GROUP BY cp.user_id
+           ) as standings
+           WHERE scoreVal > ?`,
+          [contest.start_time, contest.end_time, contestId, myScore]
+        );
+        myRank = rankRow ? parseInt(rankRow.rankPosition || 1) : 1;
+      }
+    } else if (contest.type === 'EARNINGS_CONTEST') {
+      if (hasJoined) {
+        const [[userScoreRow]] = await pool.query(
+          `SELECT COALESCE(SUM(amount), 0) as score FROM transactions 
+           WHERE user_id = ? AND type = 'CREDIT' AND source IN ('OFFER', 'TASK', 'WATCH_VIDEO', 'VIDEO_AD', 'OFFER_COMPLETION') 
+             AND created_at > ? AND created_at BETWEEN ? AND ?`,
+          [userId, joinedAt, contest.start_time, contest.end_time]
+        );
+        myScore = userScoreRow ? parseFloat(userScoreRow.score || 0) : 0;
+
+        const [[rankRow]] = await pool.query(
+          `SELECT COUNT(*) + 1 as rankPosition
+           FROM (
+             SELECT cp.user_id, COALESCE(SUM(t.amount), 0) as scoreVal
+             FROM contest_participants cp
+             LEFT JOIN transactions t ON t.user_id = cp.user_id AND t.type = 'CREDIT' AND t.source IN ('OFFER', 'TASK', 'WATCH_VIDEO', 'VIDEO_AD', 'OFFER_COMPLETION') AND t.created_at > cp.joined_at AND t.created_at BETWEEN ? AND ?
+             WHERE cp.contest_id = ?
+             GROUP BY cp.user_id
+           ) as standings
+           WHERE scoreVal > ?`,
+          [contest.start_time, contest.end_time, contestId, myScore]
+        );
+        myRank = rankRow ? parseInt(rankRow.rankPosition || 1) : 1;
+      }
     } else {
+      // standard lucky draw tickets
       const [[ticketCountRow]] = await pool.query(
-        'SELECT COUNT(*) as score FROM contest_entries WHERE user_id = ? AND contest_id = ?',
+        'SELECT SUM(entries_count) as score FROM contest_entries WHERE user_id = ? AND contest_id = ?',
         [userId, contestId]
       );
-      myScore = ticketCountRow ? ticketCountRow.score : 0;
+      myScore = ticketCountRow ? parseInt(ticketCountRow.score || 0) : 0;
 
       const [[rankRow]] = await pool.query(
-        `SELECT COUNT(DISTINCT user_id) + 1 as rankPosition
+        `SELECT COUNT(*) + 1 as rankPosition
          FROM (
-           SELECT user_id, COUNT(id) as cnt
+           SELECT user_id, SUM(entries_count) as scoreVal
            FROM contest_entries
            WHERE contest_id = ?
            GROUP BY user_id
-         ) as ranks
-         WHERE cnt > ?`,
+         ) as standings
+         WHERE scoreVal > ?`,
         [contestId, myScore]
       );
-      myRank = rankRow ? rankRow.rankPosition : 1;
+      myRank = rankRow ? parseInt(rankRow.rankPosition || 1) : 1;
     }
 
     return res.json({
       success: true,
       leaderboard: leaderboard,
       myStanding: {
-        rank: myRank,
-        score: isReferral ? `${myScore} Referrals` : `${myScore} Tickets`
+        rank: hasJoined || contest.type === 'LUCKY_DRAW' ? myRank : 0,
+        score: contest.type === 'REFERRAL_CONTEST' ? `${myScore} Referrals` :
+               contest.type === 'EARNINGS_CONTEST' ? `${myScore.toFixed(0)} Coins` :
+               `${myScore} Tickets`
       }
     });
-
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    console.error('User Get Leaderboard Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+

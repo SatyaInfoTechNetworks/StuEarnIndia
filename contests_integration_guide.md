@@ -1,27 +1,33 @@
-# StuEarn India — Android Contests & Giveaways Integration Guide
+# StuEarn India — Android Contests & Competitions Integration Guide
 
 > **Maintained By**: SatyaInfoTech Networks  
 > **Target Package**: `com.thinkforgeapps.stuearnindia`  
-> **API Version**: Express Contests v1 (Secured via JWT Bearer Token)
+> **API Version**: Express Contests v2.5 (Secured via JWT Bearer Token)  
+> **Status**: Production Blueprint  
 
-This document is the absolute blueprint for integrating the new **Contests & Giveaways** feature on the Android Kotlin app. It includes the complete technical specs of the endpoints, Kotlin serializable data classes, Retrofit services, Repository patterns, ViewModels, and fully designed modern **Jetpack Compose UI Screens** using the app's designated style variables (e.g. `PrimaryTeal`, `PastelMint`, `SurfaceWhite`, `TextPrimary`, and standard `Resource<T>` wrapping).
+This document is the absolute blueprint for integrating the new **Dynamic Contests & Giveaways** feature on the Android Kotlin app. It includes the complete technical specs of the endpoints, Kotlin serializable data classes, Retrofit services, Repository patterns, ViewModels, and fully designed modern **Jetpack Compose UI Screens** using the app's designated style variables (e.g. `PrimaryTeal`, `PastelMint`, `SurfaceWhite`, `TextPrimary`, and standard `Resource<T>` wrapping).
 
 ---
 
-## 🎯 1. Overview & AdMob Compliance Rules
+## 🎯 1. Overview & Architectural Rules
 
-To maintain strict Google AdMob compliance, the following nomenclature and architecture guidelines must be strictly enforced on the Android client:
-1. **No Gambling Terminology**: Never use words like *"Betting"*, *"Gambling"*, *"Casino"*, or *"Wager"*.
-2. **Promotional Loyalty Branding**: Label contests as **"Promotional Event"**, **"Community Giveaway"**, or **"Engagement Draw"**.
-3. **Raffle Tickets**: Users do not buy tickets with balance. They earn **"Raffle Tickets"** (max 3 per day per contest) by engaging with Rewarded Ads.
-4. **Automatic Ledger Settlement**: Balance/Coins are automatically deposited by the backend to their ledger wallet with safe transaction references.
+To maximize user experience, AdMob compliance, and virality, the Kotlin application dynamically segments its screens and behavioral logic based on the `type` returned in the `/api/contests` REST response:
+
+1. **Lucky Draw (`LUCKY_DRAW`)**:
+   - **Mechanism**: Weighted ticket raffle. Users watch rewarded ads, claim a daily free ticket, or purchase tickets using coins.
+   - **UI Requirement**: Shows ticket claims progress cards, remaining limits, AdMob video playbacks, and tickets purchase buttons.
+2. **Referral Contest (`REFERRAL_CONTEST`)**:
+   - **Mechanism**: Pure growth leaderboard. Users click a one-time "Join Contest" CTA, and referrals are counted strictly after joining.
+   - **UI Requirement**: Hides all ticket counters/ad buttons. Renders a standings card showing `"Your Standing: Rank #X - Y Referrals"`, a live leaderboard, and a prominent **Invite Friends** CTA invoking system share sheets.
+3. **Earnings Contest (`EARNINGS_CONTEST`)**:
+   - **Mechanism**: Performance leaderboard. Users register once, and performance coins earned strictly after joining determine rank.
+   - **UI Requirement**: Hides all ticket/ad elements. Renders a standings card showing `"Your Standing: Rank #X - Y Coins"`, next-rank progress meters, a live leaderboard, and an **"Earn More Now"** CTA block showing shortcuts to tasks and offerwalls.
 
 ---
 
 ## 🔑 2. API Endpoints Specification
 
 ### A. List Active & Upcoming Contests
-Fetch all currently active contests, along with details on how many raffle tickets the calling user has logged globally.
 * **Endpoint**: `GET /api/contests/active`
 * **Headers**: `Authorization: Bearer <jwt_token>`
 * **Response (Success)**:
@@ -30,30 +36,34 @@ Fetch all currently active contests, along with details on how many raffle ticke
   "success": true,
   "contests": [
     {
-      "id": "78a87612-4fb2-475f-b51c-a9a7c36ad2e1",
-      "title": "Daily Coins Lucky Raffle Draw",
-      "description": "Watch rewarding video ads, earn raffle tickets, and get added to our daily lucky draw!",
-      "type": "LUCKY_DRAW",
-      "startTime": "2026-05-28T07:00:00.000Z",
-      "endTime": "2026-05-28T23:59:00.000Z",
-      "maxEntriesPerDay": 3,
-      "totalWinners": 10,
-      "globalEntriesCount": 142,
+      "id": "c1f7a83d-e6fb-4081-9b16-aa971c26bdf1",
+      "title": "Weekend Mega Earnings League",
+      "description": "Compete with other users by completing tasks and offers this weekend. Top ranks win big!",
+      "type": "EARNINGS_CONTEST",
+      "startTime": "2026-05-29T00:00:00.000Z",
+      "endTime": "2026-05-31T23:59:59.000Z",
+      "maxEntriesPerDay": 0,
+      "totalWinners": 5,
+      "globalEntriesCount": 182,
       "myTickets": 1,
+      "slug": "weekend-mega-earnings-league",
+      "bannerImage": "",
+      "prizeText": "₹5000 Prize Pool",
+      "allowFreeEntry": false,
+      "allowAdEntry": false,
+      "maxAdEntriesPerDay": 0,
+      "allowCoinsEntry": false,
+      "ticketCoinsCost": 0,
+      "maxTicketsPerUser": 1,
       "rewards": [
-        { "position": 1, "type": "COINS", "value": 500.00 },
-        { "position": 2, "type": "COINS", "value": 250.00 },
-        { "position": 3, "type": "COINS", "value": 100.00 }
+        { "position": 1, "type": "CASH", "value": 2500 }
       ]
     }
   ]
 }
 ```
 
----
-
-### B. Fetch Contest Detail & Daily Limits
-Fetch details of a specific contest, including the number of remaining daily entries permitted for the user.
+### B. Fetch Contest Detail & User Limits
 * **Endpoint**: `GET /api/contests/:id`
 * **Headers**: `Authorization: Bearer <jwt_token>`
 * **Response (Success)**:
@@ -61,74 +71,73 @@ Fetch details of a specific contest, including the number of remaining daily ent
 {
   "success": true,
   "contest": {
-    "id": "78a87612-4fb2-475f-b51c-a9a7c36ad2e1",
-    "title": "Daily Coins Lucky Raffle Draw",
-    "description": "Watch rewarding video ads, earn raffle tickets, and get added to our daily lucky draw!",
-    "type": "LUCKY_DRAW",
-    "startTime": "2026-05-28T07:00:00.000Z",
-    "endTime": "2026-05-28T23:59:00.000Z",
-    "maxEntriesPerDay": 3,
-    "totalWinners": 10,
+    "id": "c1f7a83d-e6fb-4081-9b16-aa971c26bdf1",
+    "title": "Weekend Mega Earnings League",
+    "description": "Compete with other users by completing tasks and offers this weekend. Top ranks win big!",
+    "type": "EARNINGS_CONTEST",
+    "startTime": "2026-05-29T00:00:00.000Z",
+    "endTime": "2026-05-31T23:59:59.000Z",
     "status": "ACTIVE",
-    "totalEntries": 142,
+    "slug": "weekend-mega-earnings-league",
+    "bannerImage": "",
+    "prizeText": "₹5000 Prize Pool",
+    "allowFreeEntry": false,
+    "allowAdEntry": false,
+    "maxAdEntriesPerDay": 0,
+    "allowCoinsEntry": false,
+    "ticketCoinsCost": 0.00,
+    "maxTicketsPerUser": 1,
+    "totalEntries": 182,
     "myTickets": 1,
-    "entriesLeftToday": 2,
+    "entriesLeftToday": 0,
+    "freeEntriesLeftToday": 0,
+    "adEntriesLeftToday": 0,
+    "overallEntriesLeft": 0,
+    "myScore": 24500.00,
     "rewards": [
-      { "position": 1, "type": "COINS", "value": 500.00 },
-      { "position": 2, "type": "COINS", "value": 250.00 },
-      { "position": 3, "type": "COINS", "value": 100.00 }
+      { "position": 1, "type": "CASH", "value": 2500 }
     ]
   }
 }
 ```
 
----
-
-### C. Log/Earn Contest Raffle Ticket
-Register one ticket completion inside the contest. Safe-locks on the server to prevent duplicates.
+### C. Join/Enter Contest
 * **Endpoint**: `POST /api/contests/:id/enter`
 * **Headers**: `Authorization: Bearer <jwt_token>`
-* **Request Body**:
+* **Request Body (LUCKY_DRAW tickets)**:
 ```json
 {
   "source": "AD"
 }
 ```
+* **Request Body (Competitive Join)**:
+```json
+{}
+```
 * **Response (Success)**:
 ```json
 {
   "success": true,
-  "message": "Congratulations! You earned 1 raffle ticket."
-}
-```
-* **Response (Error — Limit Reached or Inactive)**:
-```json
-{
-  "success": false,
-  "message": "Daily entry limit reached. You can only earn up to 3 tickets per day."
+  "message": "Successfully registered! Your referrals are now being actively tracked."
 }
 ```
 
----
-
-### D. Get Historical Global Contest Winners Feed
-Get a list of completed contest winners to display as a scoreboard feed in the app.
-* **Endpoint**: `GET /api/contests/winners`
-* **Headers**: None required (public feed)
+### D. Get Live Leaderboard Standings
+* **Endpoint**: `GET /api/contests/:id/leaderboard`
+* **Headers**: `Authorization: Bearer <jwt_token>`
 * **Response (Success)**:
 ```json
 {
   "success": true,
-  "winners": [
-    {
-      "reward_position": 1,
-      "reward_type": "COINS",
-      "reward_value": 500.00,
-      "selected_at": "2026-05-27T23:59:59.000Z",
-      "contest_title": "Daily Coins Lucky Raffle Draw",
-      "user_name": "Devraj Devraj"
-    }
-  ]
+  "leaderboard": [
+    { "rank": 1, "userName": "Rahul Sharma", "score": "125 Referrals" },
+    { "rank": 2, "userName": "Aryan Patel", "score": "101 Referrals" },
+    { "rank": 3, "userName": "Devraj Devraj", "score": "89 Referrals" }
+  ],
+  "myStanding": {
+    "rank": 12,
+    "score": "23 Referrals"
+  }
 }
 ```
 
@@ -143,29 +152,31 @@ package com.thinkforgeapps.stuearnindia.data.model
 
 import com.google.gson.annotations.SerializedName
 
-// 1. Contest Reward Structure
+// 1. Reward item DTO
 data class ContestReward(
     @SerializedName("position") val position: Int,
     @SerializedName("type") val type: String, // COINS, CASH, GIFTCARD
     @SerializedName("value") val value: Double
 )
 
-// 2. Main Contest Object
+// 2. Contest summarization DTO
 data class Contest(
     @SerializedName("id") val id: String,
     @SerializedName("title") val title: String,
     @SerializedName("description") val description: String,
-    @SerializedName("type") val type: String, // LUCKY_DRAW, REFERRAL, EARNINGS
+    @SerializedName("type") val type: String, // LUCKY_DRAW, REFERRAL_CONTEST, EARNINGS_CONTEST
     @SerializedName("startTime") val startTime: String,
     @SerializedName("endTime") val endTime: String,
     @SerializedName("maxEntriesPerDay") val maxEntriesPerDay: Int,
     @SerializedName("totalWinners") val totalWinners: Int,
     @SerializedName("globalEntriesCount") val globalEntriesCount: Int,
     @SerializedName("myTickets") val myTickets: Int,
-    @SerializedName("rewards") val rewards: List<ContestReward>
+    @SerializedName("rewards") val rewards: List<ContestReward>,
+    @SerializedName("prizeText") val prizeText: String?,
+    @SerializedName("bannerImage") val bannerImage: String?
 )
 
-// 3. Single Contest Detail (includes status and today's limit left)
+// 3. Detailed Contest details DTO
 data class ContestDetail(
     @SerializedName("id") val id: String,
     @SerializedName("title") val title: String,
@@ -179,10 +190,34 @@ data class ContestDetail(
     @SerializedName("totalEntries") val totalEntries: Int,
     @SerializedName("myTickets") val myTickets: Int,
     @SerializedName("entriesLeftToday") val entriesLeftToday: Int,
-    @SerializedName("rewards") val rewards: List<ContestReward>
+    @SerializedName("freeEntriesLeftToday") val freeEntriesLeftToday: Int,
+    @SerializedName("adEntriesLeftToday") val adEntriesLeftToday: Int,
+    @SerializedName("overallEntriesLeft") val overallEntriesLeft: Int,
+    @SerializedName("allowFreeEntry") val allowFreeEntry: Boolean,
+    @SerializedName("allowAdEntry") val allowAdEntry: Boolean,
+    @SerializedName("allowCoinsEntry") val allowCoinsEntry: Boolean,
+    @SerializedName("ticketCoinsCost") val ticketCoinsCost: Double,
+    @SerializedName("maxTicketsPerUser") val maxTicketsPerUser: Int,
+    @SerializedName("myScore") val myScore: Double,
+    @SerializedName("rewards") val rewards: List<ContestReward>,
+    @SerializedName("prizeText") val prizeText: String?,
+    @SerializedName("bannerImage") val bannerImage: String?
 )
 
-// 4. Historical Winner Object
+// 4. Leaderboard standing item
+data class LeaderboardItem(
+    @SerializedName("rank") val rank: Int,
+    @SerializedName("userName") val userName: String,
+    @SerializedName("score") val score: String
+)
+
+// 5. Calling user standings
+data class MyStanding(
+    @SerializedName("rank") val rank: Int,
+    @SerializedName("score") val score: String
+)
+
+// 6. Winner list items DTO
 data class ContestWinner(
     @SerializedName("reward_position") val rewardPosition: Int,
     @SerializedName("reward_type") val rewardType: String,
@@ -192,7 +227,7 @@ data class ContestWinner(
     @SerializedName("user_name") val userName: String
 )
 
-// 5. API Response Envelopes
+// 7. API Envelopes
 data class ActiveContestsResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("contests") val contests: List<Contest>
@@ -204,12 +239,18 @@ data class ContestDetailResponse(
 )
 
 data class EnterContestRequest(
-    @SerializedName("source") val source: String = "AD"
+    @SerializedName("source") val source: String? = null
 )
 
 data class BaseContestResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("message") val message: String
+)
+
+data class ContestLeaderboardResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("leaderboard") val leaderboard: List<LeaderboardItem>,
+    @SerializedName("myStanding") val myStanding: MyStanding
 )
 
 data class ContestWinnersResponse(
@@ -222,10 +263,10 @@ data class ContestWinnersResponse(
 
 ## 📡 4. Retrofit API Service Interface
 
-Create `com.thinkforgeapps.stuearnindia.data.api.ContestApiService.kt`:
+Create/Update `com.thinkforgeapps.stuearnindia.data.remote.ContestApiService.kt`:
 
 ```kotlin
-package com.thinkforgeapps.stuearnindia.data.api
+package com.thinkforgeapps.stuearnindia.data.remote
 
 import com.thinkforgeapps.stuearnindia.data.model.*
 import retrofit2.http.*
@@ -250,6 +291,12 @@ interface ContestApiService {
         @Body request: EnterContestRequest
     ): BaseContestResponse
 
+    @GET("api/contests/{id}/leaderboard")
+    suspend fun getContestLeaderboard(
+        @Header("Authorization") token: String,
+        @Path("id") contestId: String
+    ): ContestLeaderboardResponse
+
     @GET("api/contests/winners")
     suspend fun getContestWinners(): ContestWinnersResponse
 }
@@ -259,12 +306,12 @@ interface ContestApiService {
 
 ## 🗃️ 5. Contests Repository Implementation
 
-Create `com.thinkforgeapps.stuearnindia.data.repository.ContestRepository.kt`:
+Create/Update `com.thinkforgeapps.stuearnindia.data.repository.ContestRepository.kt`:
 
 ```kotlin
 package com.thinkforgeapps.stuearnindia.data.repository
 
-import com.thinkforgeapps.stuearnindia.data.api.ContestApiService
+import com.thinkforgeapps.stuearnindia.data.remote.ContestApiService
 import com.thinkforgeapps.stuearnindia.data.model.*
 import com.thinkforgeapps.stuearnindia.util.Resource
 import kotlinx.coroutines.flow.Flow
@@ -286,7 +333,7 @@ class ContestRepository(private val apiService: ContestApiService) {
         } catch (e: HttpException) {
             emit(Resource.Error(e.localizedMessage ?: "An unexpected HTTP error occurred"))
         } catch (e: IOException) {
-            emit(Resource.Error("Couldn't reach server. Check your internet connection."))
+            emit(Resource.Error("Couldn't reach server. Check your connection."))
         }
     }
 
@@ -306,7 +353,23 @@ class ContestRepository(private val apiService: ContestApiService) {
         }
     }
 
-    suspend fun enterContest(jwtToken: String, id: String, source: String): Resource<String> {
+    fun getContestLeaderboard(jwtToken: String, id: String): Flow<Resource<ContestLeaderboardResponse>> = flow {
+        emit(Resource.Loading())
+        try {
+            val response = apiService.getContestLeaderboard("Bearer $jwtToken", id)
+            if (response.success) {
+                emit(Resource.Success(response))
+            } else {
+                emit(Resource.Error("Failed to load leaderboard standings"))
+            }
+        } catch (e: HttpException) {
+            emit(Resource.Error(e.localizedMessage ?: "HTTP Error"))
+        } catch (e: IOException) {
+            emit(Resource.Error("No internet connection"))
+        }
+    }
+
+    suspend fun enterContest(jwtToken: String, id: String, source: String?): Resource<String> {
         return try {
             val response = apiService.enterContest(
                 "Bearer $jwtToken", 
@@ -319,7 +382,6 @@ class ContestRepository(private val apiService: ContestApiService) {
                 Resource.Error(response.message)
             }
         } catch (e: HttpException) {
-            // Retrieve actual server response validation error message if present
             val errorMsg = e.response()?.errorBody()?.string()?.let { body ->
                 try {
                     val json = com.google.gson.JsonParser.parseString(body).asJsonObject
@@ -354,13 +416,12 @@ class ContestRepository(private val apiService: ContestApiService) {
 
 ## 🧠 6. Stateful View ViewModel Implementation
 
-Create `com.thinkforgeapps.stuearnindia.ui.screens.home.ContestViewModel.kt`:
+Create/Update `com.thinkforgeapps.stuearnindia.ui.screens.home.ContestViewModel.kt`:
 
 ```kotlin
 package com.thinkforgeapps.stuearnindia.ui.screens.home
 
 import android.content.Context
-import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -380,6 +441,9 @@ class ContestViewModel(
 
     private val _detailState = MutableStateFlow<Resource<ContestDetail>>(Resource.Loading())
     val detailState: StateFlow<Resource<ContestDetail>> = _detailState.asStateFlow()
+
+    private val _leaderboardState = MutableStateFlow<Resource<ContestLeaderboardResponse>>(Resource.Loading())
+    val leaderboardState: StateFlow<Resource<ContestLeaderboardResponse>> = _leaderboardState.asStateFlow()
 
     private val _winnersState = MutableStateFlow<Resource<List<ContestWinner>>>(Resource.Loading())
     val winnersState: StateFlow<Resource<List<ContestWinner>>> = _winnersState.asStateFlow()
@@ -403,6 +467,14 @@ class ContestViewModel(
         }
     }
 
+    fun loadContestLeaderboard(contestId: String) {
+        viewModelScope.launch {
+            repository.getContestLeaderboard(jwtToken, contestId).collect {
+                _leaderboardState.value = it
+            }
+        }
+    }
+
     fun loadWinnersFeed() {
         viewModelScope.launch {
             repository.getContestWinners().collect {
@@ -411,17 +483,14 @@ class ContestViewModel(
         }
     }
 
-    fun earnRaffleTicket(context: Context, contestId: String) {
+    fun joinOrRegisterContest(context: Context, contestId: String, source: String? = null) {
         viewModelScope.launch {
             _entryStatus.emit(Resource.Loading())
-            
-            // Hit API
-            val result = repository.enterContest(jwtToken, contestId, "AD")
+            val result = repository.enterContest(jwtToken, contestId, source)
             _entryStatus.emit(result)
-            
             if (result is Resource.Success) {
-                // Refresh detail and lists
                 loadContestDetail(contestId)
+                loadContestLeaderboard(contestId)
                 loadActiveContests()
             }
         }
@@ -444,301 +513,12 @@ class ContestViewModel(
 
 ---
 
-## 🎨 7. Premium Jetpack Compose UIs
+## 🎨 7. Segregated Premium Jetpack Compose UIs
 
-Here are fully stylized modern Compose screens. Place them under `com.thinkforgeapps.stuearnindia.ui.screens.home/`:
+Renders dynamic interfaces based strictly on the contest `type`!
 
-### A. Active Contests List Screen (`ContestListScreen.kt`)
-This list screen shows active promotional draws, global participation counters, current user ticket counts, and a beautifully formatted reward tier.
-
-```kotlin
-package com.thinkforgeapps.stuearnindia.ui.screens.home
-
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ConfirmationNumber
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
-import com.thinkforgeapps.stuearnindia.data.model.Contest
-import com.thinkforgeapps.stuearnindia.ui.components.StuCoinIcon
-import com.thinkforgeapps.stuearnindia.ui.navigation.Screen
-import com.thinkforgeapps.stuearnindia.ui.theme.*
-import com.thinkforgeapps.stuearnindia.util.Resource
-import com.thinkforgeapps.stuearnindia.ui.components.shimmerEffect
-import java.text.SimpleDateFormat
-import java.util.*
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ContestListScreen(
-    navController: NavController,
-    viewModel: ContestViewModel
-) {
-    val contestsState by viewModel.contestsState.collectAsState()
-
-    LaunchedEffect(Unit) {
-        viewModel.loadActiveContests()
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Community Giveaways", fontWeight = FontWeight.Bold, color = TextPrimary) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceWhite)
-            )
-        },
-        containerColor = BackgroundLight
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            when (contestsState) {
-                is Resource.Loading -> {
-                    LazyColumn(modifier = Modifier.padding(16.dp)) {
-                        items(3) { ContestSkeletonItem() }
-                    }
-                }
-                is Resource.Error -> {
-                    Column(
-                        modifier = Modifier.fillMaxSize().padding(24.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("Unable to load contests", style = MaterialTheme.typography.titleMedium, color = TextSecondary)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(contestsState.message ?: "Server error", color = Color.Gray, fontSize = 14.sp)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = { viewModel.loadActiveContests() },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal)
-                        ) {
-                            Text("Retry")
-                        }
-                    }
-                }
-                is Resource.Success -> {
-                    val list = contestsState.data ?: emptyList()
-                    if (list.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No active promotional giveaways right now.\nCheck back shortly!", color = TextSecondary, style = MaterialTheme.typography.bodyLarge)
-                        }
-                    } else {
-                        LazyColumn(
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            // Leaderboard Entry Card
-                            item {
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .shadow(4.dp, RoundedCornerShape(24.dp))
-                                        .clickable { navController.navigate("contest_winners") },
-                                    colors = CardDefaults.cardColors(containerColor = PastelMint),
-                                    shape = RoundedCornerShape(24.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(20.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.EmojiEvents, contentDescription = "Winners", tint = PrimaryTeal, modifier = Modifier.size(36.dp))
-                                        Spacer(modifier = Modifier.width(16.dp))
-                                        Column {
-                                            Text("View Past Winners 🏆", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
-                                            Text("See who won coins and gift vouchers recently", color = TextSecondary, fontSize = 12.sp)
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Dynamic Feed List
-                            items(list) { contest ->
-                                ContestItem(contest = contest, onClick = {
-                                    navController.navigate("contest_detail/${contest.id}")
-                                })
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ContestItem(contest: Contest, onClick: () -> Unit) {
-    val topPrize = contest.rewards.firstOrNull()
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(2.dp, RoundedCornerShape(24.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-        border = BorderStroke(1.dp, DividerColor)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            // Badge & Timer
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(PastelMint)
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = contest.type.replace("_", " "),
-                        color = PrimaryTeal,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Text(
-                    text = "Ends: " + formatIsoDate(contest.endTime),
-                    color = ActionDeepOrange,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Title
-            Text(
-                text = contest.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Description
-            Text(
-                text = contest.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Divider(color = DividerColor)
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Stats footer
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Groups, contentDescription = "Participants", tint = TextSecondary, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("${contest.globalEntriesCount} tickets logged", fontSize = 12.sp, color = TextSecondary)
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.ConfirmationNumber, contentDescription = "My Tickets", tint = PrimaryTeal, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("${contest.myTickets} Mine", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryTeal)
-                }
-
-                // Primary Prize Target
-                if (topPrize != null) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(PastelMint)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        if (topPrize.type == "COINS") {
-                            StuCoinIcon(size = 14.dp)
-                        } else {
-                            Text("₹", fontWeight = FontWeight.Bold, color = PrimaryTeal, fontSize = 12.sp)
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = topPrize.value.toInt().toString() + " max",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Black,
-                            color = PrimaryTeal
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ContestSkeletonItem() {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp)
-            .height(180.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceWhite)
-    ) {
-        Box(modifier = Modifier.fillMaxSize().shimmerEffect())
-    }
-}
-
-fun formatIsoDate(isoString: String): String {
-    return try {
-        val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
-        parser.timeZone = TimeZone.getTimeZone("UTC")
-        val date = parser.parse(isoString) ?: return ""
-        val formatter = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        formatter.format(date)
-    } catch (e: Exception) {
-        isoString.take(16)
-    }
-}
-```
-
----
-
-### B. Contest Detail & Entry Screen (`ContestDetailScreen.kt`)
-This stateful details page is where the actual rewarded ad interactions take place. Users can tap the action CTA, trigger the AdMob loading wrapper, watch the video, and hit the backend endpoint to mint a ticket!
+### A. Dynamic Detail Screen Switcher (`ContestDetailScreen.kt`)
+This handles the routing and live updates for the specific user actions.
 
 ```kotlin
 package com.thinkforgeapps.stuearnindia.ui.screens.home
@@ -747,6 +527,7 @@ import android.app.Activity
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -755,6 +536,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Launch
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -768,8 +553,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.thinkforgeapps.stuearnindia.data.model.ContestDetail
-import com.thinkforgeapps.stuearnindia.ui.components.StuCoinIcon
+import com.thinkforgeapps.stuearnindia.data.model.*
 import com.thinkforgeapps.stuearnindia.ui.theme.*
 import com.thinkforgeapps.stuearnindia.util.AdMobManager
 import com.thinkforgeapps.stuearnindia.util.Resource
@@ -783,29 +567,28 @@ fun ContestDetailScreen(
     contestId: String
 ) {
     val detailState by viewModel.detailState.collectAsState()
+    val leaderboardState by viewModel.leaderboardState.collectAsState()
     val entryStatus by viewModel.entryStatus.collectAsState(initial = null)
     
     val context = LocalContext.current
-    val activity = context as? Activity
     var isSubmitting by remember { mutableStateOf(false) }
 
     LaunchedEffect(contestId) {
         viewModel.loadContestDetail(contestId)
-        // Pre-load the ad to keep user latency zero
-        AdMobManager.loadStreakRewardedAd(context) 
+        viewModel.loadContestLeaderboard(contestId)
+        AdMobManager.loadStreakRewardedAd(context)
     }
 
-    // Capture Toast Feedback
     LaunchedEffect(entryStatus) {
         if (entryStatus != null) {
             when (entryStatus) {
                 is Resource.Success -> {
                     isSubmitting = false
-                    Toast.makeText(context, entryStatus!!.data ?: "Ticket Earned!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, entryStatus!!.data ?: "Registration success!", Toast.LENGTH_LONG).show()
                 }
                 is Resource.Error -> {
                     isSubmitting = false
-                    Toast.makeText(context, entryStatus!!.message ?: "Failed to log entry", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, entryStatus!!.message ?: "Failed to enter", Toast.LENGTH_LONG).show()
                 }
                 is Resource.Loading -> {
                     isSubmitting = true
@@ -817,7 +600,7 @@ fun ContestDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Giveaway Details", fontWeight = FontWeight.Bold, color = TextPrimary) },
+                title = { Text("Contest Arena", fontWeight = FontWeight.Bold, color = TextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
@@ -846,255 +629,380 @@ fun ContestDetailScreen(
                 }
                 is Resource.Success -> {
                     val detail = detailState.data ?: return@Box
-                    ContestDetailContent(
-                        detail = detail,
-                        isSubmitting = isSubmitting,
-                        onEarnClick = {
-                            if (activity != null) {
-                                // 1. Check if ad is ready
-                                if (!AdMobManager.isStreakRewardedAdLoaded()) {
-                                    Toast.makeText(context, "Ad buffer loading... Try in a second!", Toast.LENGTH_SHORT).show()
-                                    AdMobManager.loadStreakRewardedAd(context)
-                                    return@ContestDetailContent
-                                }
-                                
-                                // 2. Launch Google Rewarded Ad
-                                AdMobManager.showStreakRewardedAd(
-                                    activity,
-                                    onUserEarnedReward = {
-                                        // 3. Register ad completion on database backend
-                                        viewModel.earnRaffleTicket(context, detail.id)
-                                    },
-                                    onFailed = {
-                                        Toast.makeText(context, "Failed to render video ad. Check internet connection.", Toast.LENGTH_SHORT).show()
-                                    }
-                                )
-                            } else {
-                                // Fallback
-                                viewModel.earnRaffleTicket(context, detail.id)
-                            }
+                    val leaderboard = (leaderboardState as? Resource.Success)?.data
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp)
+                    ) {
+                        // Switch layouts dynamically based on types
+                        when (detail.type) {
+                            "LUCKY_DRAW" -> LuckyDrawLayout(detail, isSubmitting, viewModel)
+                            "REFERRAL_CONTEST" -> ReferralContestLayout(detail, isSubmitting, leaderboard, viewModel)
+                            "EARNINGS_CONTEST" -> EarningsContestLayout(detail, isSubmitting, leaderboard, viewModel)
                         }
-                    )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+                        PrizesSection(detail.rewards)
+                    }
                 }
             }
         }
     }
 }
+```
 
+---
+
+### B. 🎟️ Segregated Lucky Draw Layout (Raffle Ticket Interface)
+```kotlin
 @Composable
-fun ContestDetailContent(
+fun LuckyDrawLayout(
     detail: ContestDetail,
     isSubmitting: Boolean,
-    onEarnClick: () -> Unit
+    viewModel: ContestViewModel
 ) {
-    Column(
+    val context = LocalContext.current
+    val activity = context as? Activity
+
+    // Hero Ticket Card
+    Card(
         modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp)
+            .fillMaxWidth()
+            .shadow(2.dp, RoundedCornerShape(24.dp)),
+        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+        shape = RoundedCornerShape(24.dp)
     ) {
-        // Visual Header Card
-        Card(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .shadow(2.dp, RoundedCornerShape(24.dp)),
-            colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-            shape = RoundedCornerShape(24.dp)
+                .background(Brush.verticalGradient(listOf(PastelMint, Color.White), startY = 0f, endY = 300f))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(PastelMint, Color.White),
-                            startY = 0f,
-                            endY = 300f
-                        )
-                    )
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    Icons.Default.ConfirmationNumber,
-                    contentDescription = "Tickets",
-                    tint = PrimaryTeal,
-                    modifier = Modifier.size(64.dp)
-                )
+            Icon(Icons.Default.ConfirmationNumber, contentDescription = "Tickets", tint = PrimaryTeal, modifier = Modifier.size(56.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("My Raffle Tickets", fontSize = 13.sp, color = TextSecondary)
+            Text("${detail.myTickets} Tickets", fontSize = 32.sp, fontWeight = FontWeight.Black, color = PrimaryTeal)
+            Spacer(modifier = Modifier.height(4.dp))
+            val percent = detail.myTickets.toFloat() / detail.maxTicketsPerUser.toFloat()
+            LinearProgressIndicator(progress = percent, modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)), color = PrimaryTeal, trackColor = DividerColor)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Tickets cap left today: ${detail.entriesLeftToday}", color = TextSecondary, fontSize = 11.sp)
+        }
+    }
 
-                Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(20.dp))
 
-                Text(
-                    text = "My Raffle Tickets",
-                    fontSize = 14.sp,
-                    color = TextSecondary,
-                    fontWeight = FontWeight.Medium
-                )
+    // Ticket Actions Block
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+        border = BorderStroke(1.dp, DividerColor),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Ticket Acquisition Options", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(12.dp))
 
-                Text(
-                    text = "${detail.myTickets} Tickets",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Black,
-                    color = PrimaryTeal
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Today's Limit Left: ${detail.entriesLeftToday} / ${detail.maxEntriesPerDay}",
-                    color = if (detail.entriesLeftToday == 0) ActionDeepOrange else TextSecondary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                )
+            // Option 1: Watch Rewarded Ads
+            if (detail.allowAdEntry) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text("Watch Video Ad", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("${detail.adEntriesLeftToday} remaining today", color = TextSecondary, fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = {
+                            if (activity != null && AdMobManager.isStreakRewardedAdLoaded()) {
+                                AdMobManager.showStreakRewardedAd(activity, onUserEarnedReward = {
+                                    viewModel.joinOrRegisterContest(context, detail.id, "AD")
+                                })
+                            } else {
+                                Toast.makeText(context, "Ad loading... try again!", Toast.LENGTH_SHORT).show()
+                                AdMobManager.loadStreakRewardedAd(context)
+                            }
+                        },
+                        enabled = !isSubmitting && detail.adEntriesLeftToday > 0,
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Watch Ad")
+                    }
+                }
+                Divider(modifier = Modifier.padding(vertical = 12.dp), color = DividerColor)
             }
+
+            // Option 2: Coins Purchase
+            if (detail.allowCoinsEntry) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text("Buy Ticket", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("Costs ${detail.ticketCoinsCost.toInt()} coins", color = TextSecondary, fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = { viewModel.joinOrRegisterContest(context, detail.id, "COINS") },
+                        enabled = !isSubmitting && detail.overallEntriesLeft > 0,
+                        colors = ButtonDefaults.buttonColors(containerColor = ActionDeepOrange)
+                    ) {
+                        Text("Buy Ticket")
+                    }
+                }
+                Divider(modifier = Modifier.padding(vertical = 12.dp), color = DividerColor)
+            }
+
+            // Option 3: Daily Free Ticket
+            if (detail.allowFreeEntry) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Daily Free Ticket Check-in", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Button(
+                        onClick = { viewModel.joinOrRegisterContest(context, detail.id, "FREE") },
+                        enabled = !isSubmitting && detail.freeEntriesLeftToday > 0,
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal)
+                    ) {
+                        Text(if (detail.freeEntriesLeftToday > 0) "Claim" else "Claimed")
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+---
+
+### C. 👥 Segregated Referral Contest Layout (Dashboard & Leaderboard)
+```kotlin
+@Composable
+fun ReferralContestLayout(
+    detail: ContestDetail,
+    isSubmitting: Boolean,
+    leaderboard: ContestLeaderboardResponse?,
+    viewModel: ContestViewModel
+) {
+    val context = LocalContext.current
+    val hasJoined = detail.myTickets > 0
+
+    // Standing Card
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(2.dp, RoundedCornerShape(24.dp)),
+        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(PastelMint, Color.White), startY = 0f, endY = 300f))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(Icons.Default.EmojiEvents, contentDescription = "Trophy", tint = PrimaryTeal, modifier = Modifier.size(56.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (hasJoined) {
+                Text("Your referral standings", fontSize = 13.sp, color = TextSecondary)
+                Text("#${leaderboard?.myStanding?.rank ?: "—"}", fontSize = 32.sp, fontWeight = FontWeight.Black, color = PrimaryTeal)
+                Text("${detail.myScore.toInt()} valid referrals after joining", color = TextSecondary, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.TrendingUp, contentDescription = "Standings", tint = PrimaryTeal, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Rank climbed +3 today", color = PrimaryTeal, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Text("Contest Live! Join to compete", fontSize = 13.sp, color = TextSecondary)
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { viewModel.joinOrRegisterContest(context, detail.id) },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Text("Join Referral Contest Now", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+
+    if (hasJoined) {
+        Spacer(modifier = Modifier.height(20.dp))
+        
+        // Share CTA Card
+        Button(
+            onClick = {
+                // Share Sheet Trigger
+                val shareIntent = android.content.Intent().apply {
+                    action = android.content.Intent.ACTION_SEND
+                    putExtra(android.content.Intent.EXTRA_TEXT, "Hey! Join StuEarn using my link and get bonuses: https://stuearn.in/share")
+                    type = "text/plain"
+                }
+                context.startActivity(android.content.Intent.createChooser(shareIntent, "Invite Friends"))
+            },
+            modifier = Modifier.fillMaxWidth().height(56.dp).shadow(4.dp, RoundedCornerShape(28.dp)),
+            colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
+            shape = RoundedCornerShape(28.dp)
+        ) {
+            Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Invite Friends Now", fontWeight = FontWeight.Bold, color = Color.White)
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+        LeaderboardView(leaderboard?.leaderboard ?: emptyList())
+    }
+}
+```
 
-        // Title and Description
-        Text("Description", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
-        Spacer(modifier = Modifier.height(8.dp))
+---
+
+### D. 💰 Segregated Earnings Contest Layout (Performance Arena)
+```kotlin
+@Composable
+fun EarningsContestLayout(
+    detail: ContestDetail,
+    isSubmitting: Boolean,
+    leaderboard: ContestLeaderboardResponse?,
+    viewModel: ContestViewModel
+) {
+    val context = LocalContext.current
+    val hasJoined = detail.myTickets > 0
+
+    // Standing Card
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(2.dp, RoundedCornerShape(24.dp)),
+        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(PastelMint, Color.White), startY = 0f, endY = 300f))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(Icons.Default.TrendingUp, contentDescription = "Earnings", tint = PrimaryTeal, modifier = Modifier.size(56.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (hasJoined) {
+                Text("Your Earnings standings", fontSize = 13.sp, color = TextSecondary)
+                Text("#${leaderboard?.myStanding?.rank ?: "—"}", fontSize = 32.sp, fontWeight = FontWeight.Black, color = PrimaryTeal)
+                Text("${detail.myScore.toInt()} Coins earned after joining", color = TextSecondary, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Progress bar indicating goal to reach next rank
+                val neededScore = (leaderboard?.leaderboard?.firstOrNull()?.score?.replace(" Coins", "")?.toDoubleOrNull() ?: 100000.0)
+                val percentProgress = if (neededScore > 0) (detail.myScore / neededScore).toFloat().coerceIn(0f, 1f) else 0f
+                LinearProgressIndicator(progress = percentProgress, modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)), color = PrimaryTeal, trackColor = DividerColor)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Climbing towards Rank #1!", color = TextSecondary, fontSize = 11.sp)
+            } else {
+                Text("Earnings League is Live! Join to win cash", fontSize = 13.sp, color = TextSecondary)
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { viewModel.joinOrRegisterContest(context, detail.id) },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Text("Join Earnings League Now", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+
+    if (hasJoined) {
+        Spacer(modifier = Modifier.height(20.dp))
+        
+        // Earn shortcuts CTA block
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
             border = BorderStroke(1.dp, DividerColor),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(20.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    detail.title,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = TextPrimary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    detail.description,
-                    fontSize = 13.sp,
-                    color = TextSecondary,
-                    lineHeight = 18.sp
-                )
+                Text("🚀 Earn More & Climb Rankings!", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(modifier = Modifier.fillMaxWidth().clickable { /* Route to Offerwall */ }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Open App Offerwall", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Icon(Icons.Default.Launch, contentDescription = "Open", tint = PrimaryTeal, modifier = Modifier.size(16.dp))
+                }
+                Divider(color = DividerColor)
+                Row(modifier = Modifier.fillMaxWidth().clickable { /* Route to Ads */ }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Watch Premium Video Ads", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Icon(Icons.Default.Launch, contentDescription = "Open", tint = PrimaryTeal, modifier = Modifier.size(16.dp))
+                }
+                Divider(color = DividerColor)
+                Row(modifier = Modifier.fillMaxWidth().clickable { /* Route to Tasks */ }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Complete Easy micro-tasks", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Icon(Icons.Default.Launch, contentDescription = "Open", tint = PrimaryTeal, modifier = Modifier.size(16.dp))
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+        LeaderboardView(leaderboard?.leaderboard ?: emptyList())
+    }
+}
+```
 
-        // Reward Tier Section
-        Text("Giveaway Prizes", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
-        Spacer(modifier = Modifier.height(12.dp))
+---
 
-        detail.rewards.forEach { reward ->
+### E. 🥇 Shareable Leaderboard Component
+```kotlin
+@Composable
+fun LeaderboardView(items: List<LeaderboardItem>) {
+    Text("🏆 Standings Leaderboard", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+    Spacer(modifier = Modifier.height(10.dp))
+    
+    if (items.isEmpty()) {
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = SurfaceWhite), shape = RoundedCornerShape(16.dp)) {
+            Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                Text("Rankings loading or empty. Be the first to secure a spot!", color = TextSecondary, fontSize = 12.sp)
+            }
+        }
+    } else {
+        items.forEach { item ->
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
                 border = BorderStroke(1.dp, DividerColor)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(PastelMint),
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (item.rank <= 3) PastelMint else DividerColor),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                "#${reward.position}",
-                                color = PrimaryTeal,
+                                text = when(item.rank) {
+                                    1 -> "🥇"
+                                    2 -> "🥈"
+                                    3 -> "🥉"
+                                    else -> "#${item.rank}"
+                                },
                                 fontWeight = FontWeight.Black,
-                                fontSize = 13.sp
+                                fontSize = 12.sp,
+                                color = PrimaryTeal
                             )
                         }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = when (reward.type) {
-                                "COINS" -> "StuEarn Coins"
-                                "CASH" -> "UPI Cash"
-                                else -> "Amazon Gift Voucher"
-                            },
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary
-                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(item.userName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
                     }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (reward.type == "COINS") {
-                            StuCoinIcon(size = 18.dp)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "${reward.value.toInt()}",
-                                fontWeight = FontWeight.Black,
-                                color = TextPrimary,
-                                fontSize = 16.sp
-                            )
-                        } else {
-                            Text(
-                                "₹${reward.value.toInt()}",
-                                fontWeight = FontWeight.Black,
-                                color = PrimaryTeal,
-                                fontSize = 16.sp
-                            )
-                        }
-                    }
+                    Text(item.score, fontWeight = FontWeight.Black, fontSize = 13.sp, color = PrimaryTeal)
                 }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(36.dp))
-
-        // Earn CTA
-        if (detail.status == "ACTIVE" && detail.entriesLeftToday > 0) {
-            Button(
-                onClick = onEarnClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .shadow(4.dp, RoundedCornerShape(28.dp)),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
-                shape = RoundedCornerShape(28.dp),
-                enabled = !isSubmitting
-            ) {
-                if (isSubmitting) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Watch", tint = Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Earn 1 Raffle Ticket (Watch Ad)", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
-                    }
-                }
-            }
-        } else if (detail.status == "ACTIVE") {
-            Button(
-                onClick = {},
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
-                shape = RoundedCornerShape(28.dp),
-                enabled = false
-            ) {
-                Text("Daily Limit Reached (Check back tomorrow!)", fontWeight = FontWeight.Bold, color = Color.DarkGray)
-            }
-        } else {
-            Button(
-                onClick = {},
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
-                shape = RoundedCornerShape(28.dp),
-                enabled = false
-            ) {
-                Text("Draw Completed / Closed", fontWeight = FontWeight.Bold, color = Color.DarkGray)
             }
         }
     }
@@ -1103,184 +1011,32 @@ fun ContestDetailContent(
 
 ---
 
-### C. Contest Winners Leaderboard (`ContestWinnersScreen.kt`)
-This lists all historical completions, positions, reward values, and provides immediate visual proof to users that payouts are real.
-
+### F. 🎁 Dynamic Prizes Section
 ```kotlin
-package com.thinkforgeapps.stuearnindia.ui.screens.home
-
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
-import com.thinkforgeapps.stuearnindia.data.model.ContestWinner
-import com.thinkforgeapps.stuearnindia.ui.components.StuCoinIcon
-import com.thinkforgeapps.stuearnindia.ui.theme.*
-import com.thinkforgeapps.stuearnindia.util.Resource
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ContestWinnersScreen(
-    navController: NavController,
-    viewModel: ContestViewModel
-) {
-    val winnersState by viewModel.winnersState.collectAsState()
-
-    LaunchedEffect(Unit) {
-        viewModel.loadWinnersFeed()
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Winners Scoreboard", fontWeight = FontWeight.Bold, color = TextPrimary) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceWhite)
-            )
-        },
-        containerColor = BackgroundLight
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+fun PrizesSection(rewards: List<ContestReward>) {
+    Text("🏆 Tiered Positions Prizes", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+    Spacer(modifier = Modifier.height(10.dp))
+    
+    rewards.forEach { reward ->
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+            border = BorderStroke(1.dp, DividerColor)
         ) {
-            when (winnersState) {
-                is Resource.Loading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = PrimaryTeal)
-                    }
-                }
-                is Resource.Error -> {
-                    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(winnersState.message ?: "Server connection failed")
-                    }
-                }
-                is Resource.Success -> {
-                    val list = winnersState.data ?: emptyList()
-                    if (list.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No winners drawn yet.", color = TextSecondary)
-                        }
-                    } else {
-                        LazyColumn(
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(list) { winner ->
-                                WinnerRowItem(winner = winner)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun WinnerRowItem(winner: ContestWinner) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(1.dp, RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-        border = BorderStroke(1.dp, DividerColor)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                // Rank Avatar
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when (winner.rewardPosition) {
-                                1 -> Color(0xFFFFD700) // Gold
-                                2 -> Color(0xFFC0C0C0) // Silver
-                                3 -> Color(0xFFCD7F32) // Bronze
-                                else -> PastelMint
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (winner.rewardPosition <= 3) {
-                        Icon(Icons.Default.EmojiEvents, contentDescription = "Trophy", tint = Color.White, modifier = Modifier.size(20.dp))
-                    } else {
-                        Text(
-                            text = "${winner.rewardPosition}",
-                            color = PrimaryTeal,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column {
-                    Text(
-                        text = winner.userName,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        fontSize = 15.sp
-                    )
-                    Text(
-                        text = winner.contestTitle,
-                        fontSize = 12.sp,
-                        color = TextSecondary,
-                        maxLines = 1
-                    )
-                }
-            }
-
-            // Reward
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (winner.rewardType == "COINS") {
-                    StuCoinIcon(size = 16.dp)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        "${winner.rewardValue.toInt()}",
-                        fontWeight = FontWeight.Black,
-                        color = TextPrimary,
-                        fontSize = 15.sp
-                    )
-                } else {
-                    Text(
-                        "₹${winner.rewardValue.toInt()}",
-                        fontWeight = FontWeight.Black,
-                        color = PrimaryTeal,
-                        fontSize = 15.sp
-                    )
-                }
+            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Position #${reward.position}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
+                Text(
+                    text = when (reward.type) {
+                        "COINS" -> "${reward.value.toInt()} Coins"
+                        "CASH" -> "₹${reward.value.toInt()} UPI"
+                        else -> "₹${reward.value.toInt()} Gift Card"
+                    },
+                    fontWeight = FontWeight.Black,
+                    color = PrimaryTeal,
+                    fontSize = 13.sp
+                )
             }
         }
     }
@@ -1289,9 +1045,9 @@ fun WinnerRowItem(winner: ContestWinner) {
 
 ---
 
-## 🚀 8. Assembly & Integration Checklist
+## 🚀 8. Assembly & Deep Linking Guidelines
 
-1. **Retrofit Config**:
+1. **Retrofit Configuration**:
    Register `ContestApiService` inside your main injection module or Retrofit client initializer, e.g. `retrofit.create(ContestApiService::class.java)`.
 2. **ViewModel Creation**:
    Initialize your `ContestViewModel` inside `HomeScreen.kt` or when navigating to the contests stack. Pass in the logged-in user's JWT token fetched during authentication.

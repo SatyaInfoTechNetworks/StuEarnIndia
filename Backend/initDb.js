@@ -508,6 +508,19 @@ export async function initializeDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // 31. contest_participants Table (New: v2.5 Architecture)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS contest_participants (
+        id CHAR(36) PRIMARY KEY,
+        user_id CHAR(36) NOT NULL,
+        contest_id CHAR(36) NOT NULL,
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_user_contest_participation (user_id, contest_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (contest_id) REFERENCES contests(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     // Extra Columns Migrations
     await addColumnIfNotExists(connection, 'offers', 'daily_completion_cap', 'INT DEFAULT 0');
     await addColumnIfNotExists(connection, 'offers', 'country_targeting', 'VARCHAR(255) DEFAULT \'IN\'');
@@ -535,6 +548,7 @@ export async function initializeDatabase() {
       await connection.query('ALTER TABLE withdrawals MODIFY COLUMN method VARCHAR(50) NOT NULL');
       await connection.query('ALTER TABLE withdrawals MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT \'PENDING\'');
       await connection.query('ALTER TABLE contest_entries MODIFY COLUMN entry_source VARCHAR(50) NOT NULL');
+      await connection.query('ALTER TABLE contests MODIFY COLUMN type VARCHAR(50) NOT NULL');
       console.log('✅ Column type flexibility optimized successfully.');
     } catch (alterErr) {
       console.warn('⚠️ Warning during column type alterations:', alterErr.message);

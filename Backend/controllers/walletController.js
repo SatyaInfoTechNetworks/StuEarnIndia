@@ -175,7 +175,8 @@ export const getEarnings = async (req, res) => {
       };
       const resolvedKey = iconKeyAlias[sourceKey] || sourceKey;
 
-      let iconUrl = r.offer_icon || earningIcons[resolvedKey] || '';
+      // Prioritize exact match in app config first (e.g. "WITHDRAWAL"), then fallback to resolved alias config
+      let iconUrl = r.offer_icon || earningIcons[sourceKey] || earningIcons[resolvedKey] || '';
 
       if (!iconUrl) {
         switch (sourceKey) {
@@ -333,8 +334,8 @@ export const getRedeems = async (req, res) => {
         amountCurrency: parseFloat(r.amount_currency || 0),
         method: r.method_name || r.method_id || 'Unknown',
         methodId: r.method_id,
-        // Fall back to a generic wallet icon when the payout method has no logo configured
-        methodLogo: r.method_logo || 'https://img.icons8.com/color/96/wallet--v1.png',
+        // Return empty string if no method logo is configured to let frontend trigger premium CDN/Vector fallback
+        methodLogo: r.method_logo || '',
         details: details,
         status: r.status,
         statusText: r.status ? (r.status.charAt(0) + r.status.slice(1).toLowerCase()) : 'Pending',
@@ -564,24 +565,154 @@ export const getTransactions = async (req, res) => {
   try {
     const userId = req.user.id;
     const [rows] = await pool.query(
-      `SELECT id, user_id, amount, type, source, reference_id, description, created_at 
-       FROM transactions 
-       WHERE user_id = ? 
-       ORDER BY created_at DESC`,
+      `SELECT t.id, t.user_id, t.amount, t.type, t.source, t.reference_id, t.description, t.created_at,
+              o.icon_url as offer_icon
+       FROM transactions t
+       LEFT JOIN user_offer_progress uop ON t.reference_id = uop.click_id AND t.source = 'OFFER'
+       LEFT JOIN offers o ON uop.offer_id = o.id
+       WHERE t.user_id = ? 
+       ORDER BY t.created_at DESC`,
       [userId]
     );
 
-    res.json({
-      success: true,
-      transactions: rows.map(r => ({
+    // Fetch dynamic icons config from DB
+    const [configRows] = await pool.query("SELECT config_value FROM app_configs WHERE config_key = 'earning_icons' LIMIT 1").catch(() => [[]]);
+    let earningIcons = {};
+    if (configRows && configRows.length > 0) {
+      try {
+        const parsed = JSON.parse(configRows[0].config_value);
+        if (parsed && typeof parsed === 'object') {
+          // Normalize all config keys to uppercase to prevent casing mismatches
+          Object.keys(parsed).forEach(k => {
+            earningIcons[k.trim().toUpperCase()] = parsed[k];
+          });
+        }
+      } catch (e) {
+        console.error('Failed to parse earning_icons config:', e);
+      }
+    }
+
+    const transactions = rows.map(r => {
+      const sourceKey = (r.source || '').toUpperCase();
+
+      // Full alias map: maps every DB source name to its canonical earning_icons config key.
+      const iconKeyAlias = {
+        'STREAK_REWARD':          'DAILY_BONUS',
+        'PUBSCALE_REVERSAL':      'PUBSCALE',
+        'CPX_RESEARCH_REVERSAL':  'CPX_RESEARCH',
+        'POCKETSFULL_REVERSAL':   'POCKETSFULL',
+        'REFERRAL_BONUS':         'REFERRAL',
+        'COMMISSION':             'REFERRAL',
+        'OFFER':                  'OFFLINE_OFFER',
+        'VISIT_EARN':             'OFFLINE_OFFER',
+        'TELEGRAM_JOIN':          'REFERRAL',
+        'MANUAL_ADJUSTMENT':      'ADMIN_CREDIT',
+        'WITHDRAWAL':             'DEBIT_WITHDRAWAL'
+      };
+      const resolvedKey = iconKeyAlias[sourceKey] || sourceKey;
+
+      // Prioritize exact match in app config first (e.g. "WITHDRAWAL"), then fallback to resolved alias config
+      let iconUrl = r.offer_icon || earningIcons[sourceKey] || earningIcons[resolvedKey] || '';
+
+      if (!iconUrl) {
+        switch (sourceKey) {
+          // ---- Ad Networks ----
+          case 'PUBSCALE':
+          case 'PUBSCALE_REVERSAL':
+            iconUrl = 'https://i.ibb.co/68gPz3Y/pubscale.png';
+            break;
+          case 'OFFERMARU':
+            iconUrl = 'https://i.ibb.co/1fWfN9k/offermaru.png';
+            break;
+          case 'OPINION_UNIVERSE':
+            iconUrl = 'https://i.ibb.co/zXgYqKB/opinionuniverse.png';
+            break;
+          case 'CPX_RESEARCH':
+          case 'CPX_RESEARCH_REVERSAL':
+            iconUrl = 'https://i.ibb.co/LdQyJt8/cpx.png';
+            break;
+          case 'GROWDECK':
+            iconUrl = 'https://i.ibb.co/YyYgX4C/growdeck.png';
+            break;
+          case 'ADJUMP':
+            iconUrl = 'https://i.ibb.co/v4SgYqK/adjump.png';
+            break;
+          case 'REAL_OPINION':
+            iconUrl = 'https://i.ibb.co/9pyqK8H/realopinion.png';
+            break;
+          case 'PLAYTIME':
+            iconUrl = 'https://i.ibb.co/RpyqK8H/playtime.png';
+            break;
+          case 'POCKETSFULL':
+          case 'POCKETSFULL_REVERSAL':
+            iconUrl = 'https://i.ibb.co/rpnYqKB/pocketsfull.png';
+            break;
+          case 'TIMEWALL':
+            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            break;
+          // ---- In-House / Manual Offers ----
+          case 'OFFER':
+          case 'OFFLINE_OFFER':
+            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            break;
+          // ---- Bonus / Gamification ----
+          case 'LIFAFA_BONUS':
+            iconUrl = 'https://i.ibb.co/vvHv7WTx/envelope.png';
+            break;
+          case 'STREAK_REWARD':
+          case 'DAILY_BONUS':
+            iconUrl = 'https://img.icons8.com/color/96/calendar.png';
+            break;
+          case 'LUCKY_SPIN':
+            iconUrl = 'https://www.vhv.rs/dpng/d/574-5746224_spin-the-wheel-png-png-download-spin-the.png';
+            break;
+          case 'SCRATCH_CARD':
+            iconUrl = 'https://i.ibb.co/5X03C8wq/scratchcard-1.png';
+            break;
+          case 'WATCH_VIDEO':
+            iconUrl = 'https://img.icons8.com/color/96/youtube-play.png';
+            break;
+          case 'VISIT_EARN':
+            iconUrl = 'https://img.icons8.com/color/96/internet.png';
+            break;
+          // ---- Social / Referral ----
+          case 'REFERRAL':
+          case 'REFERRAL_BONUS':
+          case 'COMMISSION':
+            iconUrl = 'https://img.icons8.com/color/96/conference-call.png';
+            break;
+          case 'TELEGRAM_JOIN':
+            iconUrl = 'https://img.icons8.com/color/96/telegram-app.png';
+            break;
+          // ---- Admin & System ----
+          case 'MANUAL_ADJUSTMENT':
+            iconUrl = 'https://img.icons8.com/color/96/admin-settings-male.png';
+            break;
+          case 'WITHDRAWAL':
+          case 'DEBIT_WITHDRAWAL':
+            iconUrl = 'https://img.icons8.com/color/96/wallet--v1.png';
+            break;
+          default:
+            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            break;
+        }
+      }
+
+      return {
         id: String(r.id),
         amount: parseFloat(r.amount),
         type: r.type,
         source: r.source,
-        reference_id: r.reference_id || '',
         description: r.description || r.source,
-        created_at: r.created_at
-      }))
+        iconUrl: iconUrl,
+        created_at: r.created_at,
+        reference_id: r.reference_id || ''
+      };
+    });
+
+    res.json({
+      success: true,
+      transactions
     });
   } catch (error) {
     console.error('Get Transactions Error:', error);

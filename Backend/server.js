@@ -134,7 +134,8 @@ import {
   getActiveContestsUser,
   getContestDetailUser,
   enterContestUser,
-  getContestWinnersUser
+  getContestWinnersUser,
+  getContestLeaderboard
 } from './controllers/contestController.js';
 
 // Middleware Imports
@@ -396,6 +397,7 @@ app.get('/api/contests/active', authenticateUser, getActiveContestsUser);
 app.get('/api/contests/winners', getContestWinnersUser);
 app.get('/api/contests/:id', authenticateUser, getContestDetailUser);
 app.post('/api/contests/:id/enter', authenticateUser, enterContestUser);
+app.get('/api/contests/:id/leaderboard', authenticateUser, getContestLeaderboard);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

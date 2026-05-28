@@ -534,6 +534,7 @@ export async function initializeDatabase() {
       await connection.query('ALTER TABLE transactions MODIFY COLUMN source VARCHAR(50) NOT NULL');
       await connection.query('ALTER TABLE withdrawals MODIFY COLUMN method VARCHAR(50) NOT NULL');
       await connection.query('ALTER TABLE withdrawals MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT \'PENDING\'');
+      await connection.query('ALTER TABLE contest_entries MODIFY COLUMN entry_source VARCHAR(50) NOT NULL');
       console.log('✅ Column type flexibility optimized successfully.');
     } catch (alterErr) {
       console.warn('⚠️ Warning during column type alterations:', alterErr.message);

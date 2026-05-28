@@ -202,7 +202,7 @@ export const getContestEntries = async (req, res) => {
   }
 };
 
-// 6. Draw winners using weighted random selection raffle
+// 6. Draw winners using weighted random selection raffle or Competition Standings
 export const drawContestWinners = async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -229,30 +229,106 @@ export const drawContestWinners = async (req, res) => {
       [contestId]
     );
 
-    // C. FETCH ALL ENTRIES GROUPED BY USER
-    const [entries] = await connection.query(
-      'SELECT user_id, SUM(entries_count) as total_tickets FROM contest_entries WHERE contest_id = ? GROUP BY user_id',
-      [contestId]
-    );
-
-    if (entries.length === 0) {
-      // No participants - mark completed and return
-      await connection.query("UPDATE contests SET status = 'COMPLETED' WHERE id = ?", [contestId]);
-      await connection.commit();
-      return res.json({ success: true, message: 'No entries found. Contest closed with zero winners.' });
-    }
-
-    // D. BUILD WEIGHTED RAFFLE BASKET
-    // 1 ticket = 1 index chance, 3 tickets = 3 indices
-    let raffleBasket = [];
-    entries.forEach(e => {
-      const count = parseInt(e.total_tickets || 0);
-      for (let i = 0; i < count; i++) {
-        raffleBasket.push(e.user_id);
-      }
-    });
-
     const winnersDrawn = [];
+    const isRaffle = contest.type === 'LUCKY_DRAW';
+
+    if (isRaffle) {
+      // -----------------------------------------------------------------
+      // LUCKY_DRAW DRAWING (Weighted Raffle Basket)
+      // -----------------------------------------------------------------
+      // FETCH ALL ENTRIES GROUPED BY USER
+      const [entries] = await connection.query(
+        'SELECT user_id, SUM(entries_count) as total_tickets FROM contest_entries WHERE contest_id = ? GROUP BY user_id',
+        [contestId]
+      );
+
+      if (entries.length === 0) {
+        // No participants - mark completed and return
+        await connection.query("UPDATE contests SET status = 'COMPLETED' WHERE id = ?", [contestId]);
+        await connection.commit();
+        return res.json({ success: true, message: 'No entries found. Contest closed with zero winners.' });
+      }
+
+      let raffleBasket = [];
+      entries.forEach(e => {
+        const count = parseInt(e.total_tickets || 0);
+        for (let i = 0; i < count; i++) {
+          raffleBasket.push(e.user_id);
+        }
+      });
+
+      // Sort rewards by position to select Rank 1 first
+      for (const reward of rewards) {
+        if (raffleBasket.length === 0) break;
+
+        // Select random index from the basket
+        const randIdx = Math.floor(Math.random() * raffleBasket.length);
+        const winnerUserId = raffleBasket[randIdx];
+
+        winnersDrawn.push({
+          userId: winnerUserId,
+          position: reward.reward_position,
+          type: reward.reward_type,
+          value: parseFloat(reward.reward_value)
+        });
+
+        // Remove this user completely from the raffle basket so they cannot win multiple positions
+        raffleBasket = raffleBasket.filter(uid => uid !== winnerUserId);
+      }
+    } else {
+      // -----------------------------------------------------------------
+      // REFERRAL or EARNINGS DRAWING (Ranked Leaderboard Competition)
+      // -----------------------------------------------------------------
+      let rankedQuery = '';
+      let rankedParams = [];
+
+      if (contest.type === 'REFERRAL') {
+        rankedQuery = `
+          SELECT u.id as user_id, u.name as userName, COUNT(r.id) as scoreValue
+          FROM users u
+          INNER JOIN contest_entries e ON e.user_id = u.id
+          LEFT JOIN referral_uses r ON r.referrer_id = u.id AND r.created_at BETWEEN ? AND ?
+          WHERE e.contest_id = ?
+          GROUP BY u.id
+          ORDER BY scoreValue DESC, e.created_at ASC
+        `;
+        rankedParams = [contest.start_time, contest.end_time, contestId];
+      } else {
+        // EARNINGS Contest
+        rankedQuery = `
+          SELECT u.id as user_id, u.name as userName, COALESCE(SUM(t.amount), 0) as scoreValue
+          FROM users u
+          INNER JOIN contest_entries e ON e.user_id = u.id
+          LEFT JOIN transactions t ON t.user_id = u.id AND t.type = 'CREDIT' AND t.created_at BETWEEN ? AND ?
+          WHERE e.contest_id = ?
+          GROUP BY u.id
+          ORDER BY scoreValue DESC, e.created_at ASC
+        `;
+        rankedParams = [contest.start_time, contest.end_time, contestId];
+      }
+
+      const [rankedParticipants] = await connection.query(rankedQuery, rankedParams);
+
+      if (rankedParticipants.length === 0) {
+        await connection.query("UPDATE contests SET status = 'COMPLETED' WHERE id = ?", [contestId]);
+        await connection.commit();
+        return res.json({ success: true, message: 'No registered participants found. Contest closed with zero winners.' });
+      }
+
+      // Map positions to the top ranked participants
+      for (let i = 0; i < rewards.length; i++) {
+        if (i >= rankedParticipants.length) break;
+        const reward = rewards[i];
+        const participant = rankedParticipants[i];
+
+        winnersDrawn.push({
+          userId: participant.user_id,
+          position: reward.reward_position,
+          type: reward.reward_type,
+          value: parseFloat(reward.reward_value)
+        });
+      }
+    }
     
     // Sort rewards by position to select Rank 1 first
     for (const reward of rewards) {
@@ -482,6 +558,8 @@ export const getContestDetailUser = async (req, res) => {
     let adEntriesLeftToday = c.allow_ad_entry ? c.max_ad_entries_per_day : 0;
     let overallEntriesLeft = c.max_tickets_per_user;
 
+    const isRaffle = c.type === 'LUCKY_DRAW';
+
     if (userId) {
       const [entryRows] = await pool.query(
         'SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ?',
@@ -489,33 +567,48 @@ export const getContestDetailUser = async (req, res) => {
       );
       myTickets = parseInt(entryRows[0]?.tickets || 0);
 
-      // Daily limit remaining checker (overall limit backward compatibility)
-      const today = new Date().toISOString().split('T')[0];
-      const [todayRows] = await pool.query(
-        'SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND DATE(created_at) = ?',
-        [contestId, userId, today]
-      );
-      const todayEntries = parseInt(todayRows[0]?.tickets || 0);
-      entriesLeftToday = Math.max(0, c.max_entries_per_day - todayEntries);
+      if (isRaffle) {
+        // Daily limit remaining checker (overall limit backward compatibility)
+        const today = new Date().toISOString().split('T')[0];
+        const [todayRows] = await pool.query(
+          'SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND DATE(created_at) = ?',
+          [contestId, userId, today]
+        );
+        const todayEntries = parseInt(todayRows[0]?.tickets || 0);
+        entriesLeftToday = Math.max(0, c.max_entries_per_day - todayEntries);
 
-      // Free entry limit check today
-      const [freeRows] = await pool.query(
-        "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'FREE' AND DATE(created_at) = ?",
-        [contestId, userId, today]
-      );
-      const todayFree = parseInt(freeRows[0]?.tickets || 0);
-      freeEntriesLeftToday = c.allow_free_entry ? Math.max(0, 1 - todayFree) : 0;
+        // Free entry limit check today
+        const [freeRows] = await pool.query(
+          "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'FREE' AND DATE(created_at) = ?",
+          [contestId, userId, today]
+        );
+        const todayFree = parseInt(freeRows[0]?.tickets || 0);
+        freeEntriesLeftToday = c.allow_free_entry ? Math.max(0, 1 - todayFree) : 0;
 
-      // Ad entry limit check today
-      const [adRows] = await pool.query(
-        "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'AD' AND DATE(created_at) = ?",
-        [contestId, userId, today]
-      );
-      const todayAds = parseInt(adRows[0]?.tickets || 0);
-      adEntriesLeftToday = c.allow_ad_entry ? Math.max(0, c.max_ad_entries_per_day - todayAds) : 0;
+        // Ad entry limit check today
+        const [adRows] = await pool.query(
+          "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'AD' AND DATE(created_at) = ?",
+          [contestId, userId, today]
+        );
+        const todayAds = parseInt(adRows[0]?.tickets || 0);
+        adEntriesLeftToday = c.allow_ad_entry ? Math.max(0, c.max_ad_entries_per_day - todayAds) : 0;
 
-      // Total sweepstakes ticket limit per user
-      overallEntriesLeft = Math.max(0, c.max_tickets_per_user - myTickets);
+        // Total sweepstakes ticket limit per user
+        overallEntriesLeft = Math.max(0, c.max_tickets_per_user - myTickets);
+      } else {
+        // For referral & earnings contests: user joins ONCE (acts as registration flag)
+        freeEntriesLeftToday = 0;
+        adEntriesLeftToday = 0;
+        entriesLeftToday = 0;
+        overallEntriesLeft = myTickets > 0 ? 0 : 1;
+      }
+    } else {
+      if (!isRaffle) {
+        freeEntriesLeftToday = 0;
+        adEntriesLeftToday = 0;
+        entriesLeftToday = 0;
+        overallEntriesLeft = 1;
+      }
     }
 
     res.json({
@@ -558,13 +651,13 @@ export const getContestDetailUser = async (req, res) => {
   }
 };
 
-// 3. User claims ticket (Free, Ad, or Coins purchased)
+// 3. User claims ticket (Free, Ad, or Coins purchased) or Registers for Competitions
 export const enterContestUser = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const contestId = req.params.id;
     const userId = req.user.id;
-    const { source = 'AD' } = req.body; // AD, FREE, COINS
+    const { source = 'FREE' } = req.body; // FREE, AD, COINS (used for LUCKY_DRAW)
 
     await connection.beginTransaction();
 
@@ -580,112 +673,143 @@ export const enterContestUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'This contest has already ended or is inactive.' });
     }
 
-    if (contest.type !== 'LUCKY_DRAW') {
-      await connection.rollback();
-      return res.status(400).json({ success: false, message: 'Direct ticket claiming is only allowed for Lucky Draws.' });
-    }
+    const isRaffle = contest.type === 'LUCKY_DRAW';
 
-    // Check overall max ticket limit
-    const [userEntriesRows] = await connection.query(
-      'SELECT SUM(entries_count) as total FROM contest_entries WHERE contest_id = ? AND user_id = ?',
-      [contestId, userId]
-    );
-    const userTotalTickets = parseInt(userEntriesRows[0]?.total || 0);
-    if (userTotalTickets >= contest.max_tickets_per_user) {
-      await connection.rollback();
-      return res.status(400).json({
-        success: false,
-        message: `Sweepstakes limit reached! You can hold a maximum of ${contest.max_tickets_per_user} tickets for this draw.`
-      });
-    }
-
-    const today = new Date().toISOString().split('T')[0];
-
-    if (source === 'FREE') {
-      if (!contest.allow_free_entry) {
-        await connection.rollback();
-        return res.status(400).json({ success: false, message: 'Free ticket entry is not enabled for this draw.' });
-      }
-
-      const [todayFreeRows] = await connection.query(
-        "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'FREE' AND DATE(created_at) = ?",
-        [contestId, userId, today]
+    if (isRaffle) {
+      // ------------------------------------------
+      // LUCKY_DRAW (RAFFLE TICKETS PROCESS)
+      // ------------------------------------------
+      // Check overall max ticket limit
+      const [userEntriesRows] = await connection.query(
+        'SELECT SUM(entries_count) as total FROM contest_entries WHERE contest_id = ? AND user_id = ?',
+        [contestId, userId]
       );
-      const todayFreeCount = parseInt(todayFreeRows[0]?.tickets || 0);
-      if (todayFreeCount >= 1) {
-        await connection.rollback();
-        return res.status(400).json({ success: false, message: 'You have already claimed your daily free ticket.' });
-      }
-    } 
-    else if (source === 'AD') {
-      if (!contest.allow_ad_entry) {
-        await connection.rollback();
-        return res.status(400).json({ success: false, message: 'Ad ticket entry is not enabled for this draw.' });
-      }
-
-      const [todayAdRows] = await connection.query(
-        "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'AD' AND DATE(created_at) = ?",
-        [contestId, userId, today]
-      );
-      const todayAdCount = parseInt(todayAdRows[0]?.tickets || 0);
-      if (todayAdCount >= contest.max_ad_entries_per_day) {
-        await connection.rollback();
-        return res.status(400).json({ 
-          success: false, 
-          message: `Daily ad entry limit reached. You can only earn up to ${contest.max_ad_entries_per_day} ad tickets per day.` 
-        });
-      }
-    } 
-    else if (source === 'COINS') {
-      if (!contest.allow_coins_entry) {
-        await connection.rollback();
-        return res.status(400).json({ success: false, message: 'Coins purchased tickets are not enabled for this draw.' });
-      }
-
-      const [userRows] = await connection.query('SELECT balance FROM users WHERE id = ? FOR UPDATE', [userId]);
-      const userBalance = parseFloat(userRows[0]?.balance || 0);
-      const ticketCost = parseFloat(contest.ticket_coins_cost || 0);
-
-      if (userBalance < ticketCost) {
+      const userTotalTickets = parseInt(userEntriesRows[0]?.total || 0);
+      if (userTotalTickets >= contest.max_tickets_per_user) {
         await connection.rollback();
         return res.status(400).json({
           success: false,
-          message: `Insufficient coins. Each ticket costs ${ticketCost.toFixed(0)} coins, but your balance is ${userBalance.toFixed(0)} coins.`
+          message: `Sweepstakes limit reached! You can hold a maximum of ${contest.max_tickets_per_user} tickets for this draw.`
         });
       }
 
-      // Deduct coins from user balance
-      await connection.query('UPDATE users SET balance = balance - ? WHERE id = ?', [ticketCost, userId]);
+      const today = new Date().toISOString().split('T')[0];
 
-      // Write transaction ledger entry
-      const transId = uuidv4();
-      const description = `Purchased Raffle Ticket for Giveaway: ${contest.title}`;
+      if (source === 'FREE') {
+        if (!contest.allow_free_entry) {
+          await connection.rollback();
+          return res.status(400).json({ success: false, message: 'Free ticket entry is not enabled for this draw.' });
+        }
+
+        const [todayFreeRows] = await connection.query(
+          "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'FREE' AND DATE(created_at) = ?",
+          [contestId, userId, today]
+        );
+        const todayFreeCount = parseInt(todayFreeRows[0]?.tickets || 0);
+        if (todayFreeCount >= 1) {
+          await connection.rollback();
+          return res.status(400).json({ success: false, message: 'You have already claimed your daily free ticket.' });
+        }
+      } 
+      else if (source === 'AD') {
+        if (!contest.allow_ad_entry) {
+          await connection.rollback();
+          return res.status(400).json({ success: false, message: 'Ad ticket entry is not enabled for this draw.' });
+        }
+
+        const [todayAdRows] = await connection.query(
+          "SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND entry_source = 'AD' AND DATE(created_at) = ?",
+          [contestId, userId, today]
+        );
+        const todayAdCount = parseInt(todayAdRows[0]?.tickets || 0);
+        if (todayAdCount >= contest.max_ad_entries_per_day) {
+          await connection.rollback();
+          return res.status(400).json({ 
+            success: false, 
+            message: `Daily ad entry limit reached. You can only earn up to ${contest.max_ad_entries_per_day} ad tickets per day.` 
+          });
+        }
+      } 
+      else if (source === 'COINS') {
+        if (!contest.allow_coins_entry) {
+          await connection.rollback();
+          return res.status(400).json({ success: false, message: 'Coins purchased tickets are not enabled for this draw.' });
+        }
+
+        const [userRows] = await connection.query('SELECT balance FROM users WHERE id = ? FOR UPDATE', [userId]);
+        const userBalance = parseFloat(userRows[0]?.balance || 0);
+        const ticketCost = parseFloat(contest.ticket_coins_cost || 0);
+
+        if (userBalance < ticketCost) {
+          await connection.rollback();
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient coins. Each ticket costs ${ticketCost.toFixed(0)} coins, but your balance is ${userBalance.toFixed(0)} coins.`
+          });
+        }
+
+        // Deduct coins from user balance
+        await connection.query('UPDATE users SET balance = balance - ? WHERE id = ?', [ticketCost, userId]);
+
+        // Write transaction ledger entry
+        const transId = uuidv4();
+        const description = `Purchased Raffle Ticket for Giveaway: ${contest.title}`;
+        await connection.query(
+          `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at)
+           VALUES (?, ?, ?, 'DEBIT', 'CONTEST_TICKET_PURCHASE', ?, ?, NOW())`,
+          [transId, userId, ticketCost, description, contestId]
+        );
+      } 
+      else {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: 'Invalid ticket entry source method.' });
+      }
+
+      // Insert or increment entry count
       await connection.query(
-        `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at)
-         VALUES (?, ?, ?, 'DEBIT', 'CONTEST_TICKET_PURCHASE', ?, ?, NOW())`,
-        [transId, userId, ticketCost, description, contestId]
+        `INSERT INTO contest_entries (id, user_id, contest_id, entry_source, entries_count, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE entries_count = entries_count + 1, updated_at = NOW()`,
+        [uuidv4(), userId, contestId, source]
       );
-    } 
-    else {
-      await connection.rollback();
-      return res.status(400).json({ success: false, message: 'Invalid ticket entry source method.' });
+
+      await connection.commit();
+      res.json({ 
+        success: true, 
+        message: source === 'FREE' ? 'Daily free ticket claimed!' : 
+                 source === 'COINS' ? 'Raffle ticket purchased successfully!' : 
+                 'Congratulations! You earned 1 raffle ticket.'
+      });
+    } else {
+      // ------------------------------------------
+      // REFERRAL or EARNINGS (ONE-TIME REGISTRATION)
+      // ------------------------------------------
+      const [existing] = await connection.query(
+        'SELECT COUNT(*) as count FROM contest_entries WHERE contest_id = ? AND user_id = ?',
+        [contestId, userId]
+      );
+      const isRegistered = parseInt(existing[0]?.count || 0) > 0;
+
+      if (isRegistered) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: 'You have already registered/joined this contest.' });
+      }
+
+      // Insert a registration ticket
+      await connection.query(
+        `INSERT INTO contest_entries (id, user_id, contest_id, entry_source, entries_count, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, NOW(), NOW())`,
+        [uuidv4(), userId, contestId, contest.type]
+      );
+
+      await connection.commit();
+      res.json({
+        success: true,
+        message: contest.type === 'REFERRAL' 
+          ? 'Successfully registered! Your referrals are now being actively tracked.' 
+          : 'Successfully joined the Earnings League! Your coins accumulated during the contest window will determine your rank.'
+      });
     }
-
-    // Insert or update entry
-    await connection.query(
-      `INSERT INTO contest_entries (id, user_id, contest_id, entry_source, entries_count, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, NOW(), NOW())
-       ON DUPLICATE KEY UPDATE entries_count = entries_count + 1, updated_at = NOW()`,
-      [uuidv4(), userId, contestId, source]
-    );
-
-    await connection.commit();
-    res.json({ 
-      success: true, 
-      message: source === 'FREE' ? 'Daily free ticket claimed!' : 
-               source === 'COINS' ? 'Raffle ticket purchased successfully!' : 
-               'Congratulations! You earned 1 raffle ticket.'
-    });
   } catch (error) {
     await connection.rollback();
     console.error('User Enter Contest Error:', error);
@@ -712,5 +836,117 @@ export const getContestWinnersUser = async (req, res) => {
   } catch (error) {
     console.error('User Get Winners Feed Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// 5. Get leaderboard standings for a contest
+export const getContestLeaderboard = async (req, res) => {
+  try {
+    const contestId = req.params.id;
+    const userId = req.user.id;
+
+    // 1. Fetch contest configuration
+    const [contestRows] = await pool.query('SELECT * FROM contests WHERE id = ?', [contestId]);
+    if (contestRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Contest not found.' });
+    }
+    const contest = contestRows[0];
+    const isReferral = contest.type === 'REFERRAL';
+
+    let leaderboardQuery = '';
+    let leaderboardParams = [];
+
+    if (isReferral) {
+      // referral contest: count signups referred by user during the contest timing window
+      leaderboardQuery = `
+        SELECT u.id as user_id, u.name as userName, COUNT(r.id) as scoreValue
+        FROM users u
+        INNER JOIN referral_uses r ON r.referrer_id = u.id
+        INNER JOIN contest_entries e ON e.user_id = u.id
+        WHERE e.contest_id = ? 
+          AND r.created_at BETWEEN ? AND ?
+        GROUP BY u.id
+        ORDER BY scoreValue DESC
+        LIMIT 10
+      `;
+      leaderboardParams = [contestId, contest.start_time, contest.end_time];
+    } else {
+      // standard raffle: sum total tickets owned
+      leaderboardQuery = `
+        SELECT u.id as user_id, u.name as userName, COUNT(e.id) as scoreValue
+        FROM users u
+        INNER JOIN contest_entries e ON e.user_id = u.id
+        WHERE e.contest_id = ?
+        GROUP BY u.id
+        ORDER BY scoreValue DESC
+        LIMIT 10
+      `;
+      leaderboardParams = [contestId];
+    }
+
+    const [topRows] = await pool.query(leaderboardQuery, leaderboardParams);
+
+    // Format top list with rank numbers
+    const leaderboard = topRows.map((r, index) => ({
+      rank: index + 1,
+      userName: r.userName,
+      score: isReferral ? `${r.scoreValue} Referrals` : `${r.scoreValue} Tickets`
+    }));
+
+    // 2. Fetch Calling User's standing and rank position
+    let myRank = 0;
+    let myScore = 0;
+
+    if (isReferral) {
+      const [[userScoreRow]] = await pool.query(
+        `SELECT COUNT(id) as score FROM referral_uses WHERE referrer_id = ? AND created_at BETWEEN ? AND ?`,
+        [userId, contest.start_time, contest.end_time]
+      );
+      myScore = userScoreRow ? userScoreRow.score : 0;
+
+      const [[rankRow]] = await pool.query(
+        `SELECT COUNT(DISTINCT referrer_id) + 1 as rankPosition
+         FROM (
+           SELECT referrer_id, COUNT(id) as cnt
+           FROM referral_uses
+           WHERE created_at BETWEEN ? AND ?
+           GROUP BY referrer_id
+         ) as ranks
+         WHERE cnt > ?`,
+        [contest.start_time, contest.end_time, myScore]
+      );
+      myRank = rankRow ? rankRow.rankPosition : 1;
+    } else {
+      const [[ticketCountRow]] = await pool.query(
+        'SELECT COUNT(*) as score FROM contest_entries WHERE user_id = ? AND contest_id = ?',
+        [userId, contestId]
+      );
+      myScore = ticketCountRow ? ticketCountRow.score : 0;
+
+      const [[rankRow]] = await pool.query(
+        `SELECT COUNT(DISTINCT user_id) + 1 as rankPosition
+         FROM (
+           SELECT user_id, COUNT(id) as cnt
+           FROM contest_entries
+           WHERE contest_id = ?
+           GROUP BY user_id
+         ) as ranks
+         WHERE cnt > ?`,
+        [contestId, myScore]
+      );
+      myRank = rankRow ? rankRow.rankPosition : 1;
+    }
+
+    return res.json({
+      success: true,
+      leaderboard: leaderboard,
+      myStanding: {
+        rank: myRank,
+        score: isReferral ? `${myScore} Referrals` : `${myScore} Tickets`
+      }
+    });
+
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };

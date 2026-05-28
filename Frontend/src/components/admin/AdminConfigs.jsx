@@ -114,7 +114,12 @@ export default function AdminConfigs({ getHeaders, showNotice, API_BASE }) {
               setDailyWithdrawLimit(cfg.config_value);
             } else if (cfg.config_key === 'earning_icons') {
               const parsed = JSON.parse(cfg.config_value);
-              if (parsed && typeof parsed === 'object') setEarningIcons(parsed);
+              if (parsed && typeof parsed === 'object') {
+                setEarningIcons(prev => ({
+                  ...prev,
+                  ...parsed
+                }));
+              }
             }
           } catch (e) {
             console.error(`Error parsing key ${cfg.config_key}:`, e);

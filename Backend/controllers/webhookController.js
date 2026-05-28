@@ -1436,14 +1436,24 @@ export const handleTimewall = async (req, res) => {
       offer_name = 'Timewall Withdrawal' 
     } = params;
 
-    console.log('📝 [TIMEWALL] Incoming webhook request:', {
-      ip: req.ip,
-      params: params
+    const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.ip || ip || 'unknown';
+
+    console.log('🔍 [TIMEWALL POSTBACK] Incoming Webhook Details:', {
+      timestamp: new Date().toISOString(),
+      method: req.method,
+      resolvedIp: clientIp,
+      headers: req.headers,
+      queryParams: req.query,
+      bodyParams: req.body,
+      mergedParams: params
     });
 
     if (!user_id_param || !transaction_id) {
-      console.error('❌ [TIMEWALL] Validation failed: missing user_id or transaction_id');
-      return res.status(400).json({ status: 'error', message: 'Missing required parameters' });
+      console.error('❌ [TIMEWALL] Validation failed: missing user_id_param or transaction_id in request params', {
+        user_id_param,
+        transaction_id
+      });
+      return res.status(400).json({ status: 'error', message: 'Missing required parameters (user_id / transaction_id)' });
     }
 
     // Verify Hash/Signature: sha256(userID . revenue . SecretKey)
@@ -1453,15 +1463,25 @@ export const handleTimewall = async (req, res) => {
       const payload = `${rawUserId}${rawRevenue}${TIMEWALL_SECRET}`;
       const calculatedHash = crypto.createHash('sha256').update(payload).digest('hex');
 
-      console.log(`🔒 [TIMEWALL] Verifying signature. Received: ${hash}, Expected: ${calculatedHash}`);
+      console.log('🔒 [TIMEWALL] Verifying signature inputs:', {
+        rawUserId,
+        rawRevenue,
+        secretLength: TIMEWALL_SECRET.length,
+        payloadString: payload,
+        hashReceived: hash,
+        hashCalculated: calculatedHash
+      });
 
       if (!safeCompare(hash.toLowerCase(), calculatedHash.toLowerCase())) {
-        console.warn('❌ [TIMEWALL] Signature Mismatch! Rejecting.');
-        return res.status(403).json({ status: 'error', message: 'Invalid signature' });
+        console.warn('❌ [TIMEWALL] Signature Mismatch! Rejecting postback request.', {
+          received: hash.toLowerCase(),
+          expected: calculatedHash.toLowerCase()
+        });
+        return res.status(403).json({ status: 'error', message: 'Invalid signature hash' });
       }
       console.log('✅ [TIMEWALL] Signature verified successfully.');
     } else {
-      console.log('ℹ️ [TIMEWALL] No signature hash provided. Skipping verification.');
+      console.log('ℹ️ [TIMEWALL] No signature hash provided by provider. Skipping security hash verification.');
     }
 
     const user = await resolveUser(connection, user_id_param);

@@ -731,4 +731,114 @@ When an FCM push alert contains a banner image URL in the `image` parameter (bot
 
 ---
 
+## 🏆 15. Contests & Giveaways APIs
+
+Promotional loyalty contests are created in the admin panel and verified automatically on draw completion. Users watch rewarded ads to claim "Raffle Tickets" (max 3/day per contest). Decoupled ledger crediting processes execute instantly on draw matrix calculation for Coins or Cash, while Gift Cards wait in pending admin queues.
+
+### A. List Active Contests & Global/Personal Tickets
+* **Endpoint**: `GET /api/contests/active`
+* **Headers**: `Authorization: Bearer <jwt_token>`
+* **Response**:
+```json
+{
+  "success": true,
+  "contests": [
+    {
+      "id": "78a87612-4fb2-475f-b51c-a9a7c36ad2e1",
+      "title": "Daily Coins Lucky Raffle Draw",
+      "description": "Watch rewarding video ads, earn raffle tickets, and get added to our daily lucky draw!",
+      "type": "LUCKY_DRAW",
+      "startTime": "2026-05-28T07:00:00.000Z",
+      "endTime": "2026-05-28T23:59:00.000Z",
+      "maxEntriesPerDay": 3,
+      "totalWinners": 10,
+      "globalEntriesCount": 142,
+      "myTickets": 1,
+      "rewards": [
+        { "position": 1, "type": "COINS", "value": 500.00 },
+        { "position": 2, "type": "COINS", "value": 250.00 }
+      ]
+    }
+  ]
+}
+```
+
+### B. Get Contest Details & Daily Limits Left
+* **Endpoint**: `GET /api/contests/:id`
+* **Headers**: `Authorization: Bearer <jwt_token>`
+* **Response**:
+```json
+{
+  "success": true,
+  "contest": {
+    "id": "78a87612-4fb2-475f-b51c-a9a7c36ad2e1",
+    "title": "Daily Coins Lucky Raffle Draw",
+    "description": "Watch rewarding video ads, earn raffle tickets, and get added to our daily lucky draw!",
+    "type": "LUCKY_DRAW",
+    "startTime": "2026-05-28T07:00:00.000Z",
+    "endTime": "2026-05-28T23:59:00.000Z",
+    "maxEntriesPerDay": 3,
+    "totalWinners": 10,
+    "status": "ACTIVE",
+    "totalEntries": 142,
+    "myTickets": 1,
+    "entriesLeftToday": 2,
+    "rewards": [
+      { "position": 1, "type": "COINS", "value": 500.00 },
+      { "position": 2, "type": "COINS", "value": 250.00 }
+    ]
+  }
+}
+```
+
+### C. Log Contest Entry (Watch Rewarded Ad Callback)
+Submit 1 completed ad session to earn 1 raffle ticket. Double-entry validators on the server prevent daily limit overrides.
+* **Endpoint**: `POST /api/contests/:id/enter`
+* **Headers**: `Authorization: Bearer <jwt_token>`
+* **Request Body**:
+```json
+{
+  "source": "AD"
+}
+```
+* **Response**:
+```json
+{
+  "success": true,
+  "message": "Congratulations! You earned 1 raffle ticket."
+}
+```
+
+### D. Get Past Completed Contest Winners Scoreboard
+* **Endpoint**: `GET /api/contests/winners`
+* **Response**:
+```json
+{
+  "success": true,
+  "winners": [
+    {
+      "reward_position": 1,
+      "reward_type": "COINS",
+      "reward_value": 500.00,
+      "selected_at": "2026-05-27T23:59:59.000Z",
+      "contest_title": "Daily Coins Lucky Raffle Draw",
+      "user_name": "Devraj Devraj"
+    }
+  ]
+}
+```
+
+---
+
+## 📲 16. Contest Navigation Protocols
+The Android client must register the following deep-link protocols inside its manifest navigation controller for contests:
+
+| Target Action | Deep Link Schema |
+| :--- | :--- |
+| **Contests Active Feed** | `stuearn://contests` |
+| **Contest Details Screen** | `stuearn://contests/:id` |
+| **Winners Scoreboard Screen** | `stuearn://contests/winners` |
+
+---
+
 *This specification represents the production API implementation of StuEarn India backend.*

@@ -286,11 +286,11 @@ export const getOfferById = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
-// Start Offer (Click logging & Tracking URL resolution)
+// Start Offer (Click logging)
 export const startOffer = async (req, res) => {
   try {
     const userId = req.body.user_id || (req.user ? req.user.id : null);
-    const { offer_id, gaid, device_model } = req.body || {};
+    const { offer_id } = req.body || req.params;
 
     if (!userId) {
       return res.status(400).json({ success: false, message: 'User ID is required' });
@@ -310,16 +310,12 @@ export const startOffer = async (req, res) => {
     const resolvedUserId = uRows[0].id;
     const userLocation = uRows[0].location;
 
-    // 1. Fetch the offer to verify caps, targeting and get tracking_url
-    const [offerRows] = await pool.query(
-      'SELECT daily_completion_cap, country_targeting, tracking_url FROM offers WHERE id = ? LIMIT 1', 
-      [offer_id]
-    );
+    // 1. Fetch the offer to verify caps and targeting
+    const [offerRows] = await pool.query('SELECT daily_completion_cap, country_targeting FROM offers WHERE id = ? LIMIT 1', [offer_id]);
     if (offerRows.length === 0) {
       return res.status(404).json({ success: false, message: 'Offer not found' });
     }
     const offer = offerRows[0];
-    const trackingUrl = offer.tracking_url || '';
 
     // Check completion cap
     const cap = parseInt(offer.daily_completion_cap || 0);
@@ -349,56 +345,6 @@ export const startOffer = async (req, res) => {
       }
     }
 
-    // Helper: Substitute all tracking placeholders
-    const resolveTrackingUrl = (rawUrl, clickId) => {
-      if (!rawUrl) return '';
-      let url = rawUrl;
-      
-      // Click ID replacements
-      url = url.replace(/{click_id}/g, clickId)
-               .replace(/{clickId}/g, clickId)
-               .replace(/{TRANS_ID}/g, clickId)
-               .replace(/{trans_id}/g, clickId);
-
-      // User ID / GUID replacements
-      url = url.replace(/{guid}/g, userId)
-               .replace(/{user_id}/g, userId)
-               .replace(/{userId}/g, userId)
-               .replace(/{USER_ID}/g, userId)
-               .replace(/{UID}/g, userId)
-               .replace(/{uid}/g, userId);
-
-      // GAID replacements
-      if (gaid) {
-        url = url.replace(/{gaid}/g, gaid)
-                 .replace(/{GAID}/g, gaid)
-                 .replace(/{ad_id}/g, gaid)
-                 .replace(/{AD_ID}/g, gaid);
-      } else {
-        url = url.replace(/{gaid}/g, '')
-                 .replace(/{GAID}/g, '')
-                 .replace(/{ad_id}/g, '')
-                 .replace(/{AD_ID}/g, '');
-      }
-
-      // Device Model replacements
-      if (device_model) {
-        try {
-          const encodedModel = encodeURIComponent(device_model);
-          url = url.replace(/{device_model}/g, encodedModel)
-                   .replace(/{DEVICE_MODEL}/g, encodedModel);
-        } catch (e) {
-          url = url.replace(/{device_model}/g, device_model)
-                   .replace(/{DEVICE_MODEL}/g, device_model);
-        }
-      } else {
-        url = url.replace(/{device_model}/g, '')
-                 .replace(/{DEVICE_MODEL}/g, '');
-      }
-
-      return url;
-    };
-
     // 2. Check if already started
     const [progressRows] = await pool.query(
       'SELECT click_id FROM user_offer_progress WHERE user_id = ? AND offer_id = ? LIMIT 1',
@@ -406,14 +352,7 @@ export const startOffer = async (req, res) => {
     );
 
     if (progressRows.length > 0) {
-      const clickId = progressRows[0].click_id;
-      const finalUrl = resolveTrackingUrl(trackingUrl, clickId);
-      return res.json({ 
-        success: true, 
-        message: 'Offer already started', 
-        click_id: clickId, 
-        url: finalUrl 
-      });
+      return res.json({ success: true, click_id: progressRows[0].click_id });
     }
 
     // 3. Generate new UUID for click_id
@@ -426,13 +365,7 @@ export const startOffer = async (req, res) => {
       [uuidv4(), clickId, resolvedUserId, offer_id]
     );
 
-    const finalUrl = resolveTrackingUrl(trackingUrl, clickId);
-    res.json({ 
-      success: true, 
-      message: 'Offer started successfully', 
-      click_id: clickId, 
-      url: finalUrl 
-    });
+    res.json({ success: true, click_id: clickId });
   } catch (error) {
     console.error('Start Offer Error:', error);
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });

@@ -186,16 +186,55 @@ export const deleteContest = async (req, res) => {
 export const getContestEntries = async (req, res) => {
   try {
     const contestId = req.params.id;
-    const query = `
-      SELECT ce.id, ce.entries_count, ce.entry_source, ce.created_at,
-             u.name as user_name, u.email as user_email, u.user_id as user_public_id, u.id as user_internal_id
-      FROM contest_entries ce
-      JOIN users u ON ce.user_id = u.id
-      WHERE ce.contest_id = ?
-      ORDER BY ce.entries_count DESC, ce.created_at DESC
-    `;
-    const [entries] = await pool.query(query, [contestId]);
-    res.json({ success: true, entries });
+    const [contestRows] = await pool.query('SELECT * FROM contests WHERE id = ?', [contestId]);
+    if (contestRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Contest not found' });
+    }
+    const contest = contestRows[0];
+
+    if (contest.type === 'LUCKY_DRAW') {
+      const query = `
+        SELECT ce.id, ce.entries_count, ce.entry_source, ce.created_at,
+               u.name as user_name, u.email as user_email, u.user_id as user_public_id, u.id as user_internal_id
+        FROM contest_entries ce
+        JOIN users u ON ce.user_id = u.id
+        WHERE ce.contest_id = ?
+        ORDER BY ce.entries_count DESC, ce.created_at DESC
+      `;
+      const [entries] = await pool.query(query, [contestId]);
+      res.json({ success: true, entries });
+    } else {
+      let scoreSubquery = '';
+      let subQueryParams = [];
+      if (contest.type === 'REFERRAL_CONTEST') {
+        scoreSubquery = `
+          SELECT COUNT(*) 
+          FROM referral_uses 
+          WHERE referrer_id = cp.user_id AND created_at > cp.joined_at AND created_at BETWEEN ? AND ?
+        `;
+        subQueryParams = [contest.start_time, contest.end_time];
+      } else {
+        scoreSubquery = `
+          SELECT COALESCE(SUM(amount), 0) 
+          FROM transactions 
+          WHERE user_id = cp.user_id AND type = 'CREDIT' AND source IN ('OFFER', 'TASK', 'WATCH_VIDEO', 'VIDEO_AD', 'OFFER_COMPLETION') AND created_at > cp.joined_at AND created_at BETWEEN ? AND ?
+        `;
+        subQueryParams = [contest.start_time, contest.end_time];
+      }
+
+      const query = `
+        SELECT cp.id, cp.joined_at as created_at,
+               (${scoreSubquery}) as entries_count,
+               'LEADERBOARD' as entry_source,
+               u.name as user_name, u.email as user_email, u.user_id as user_public_id, u.id as user_internal_id
+        FROM contest_participants cp
+        JOIN users u ON cp.user_id = u.id
+        WHERE cp.contest_id = ?
+        ORDER BY entries_count DESC, cp.joined_at ASC
+      `;
+      const [entries] = await pool.query(query, [...subQueryParams, contestId]);
+      res.json({ success: true, entries });
+    }
   } catch (error) {
     console.error('Admin Get Entries Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });

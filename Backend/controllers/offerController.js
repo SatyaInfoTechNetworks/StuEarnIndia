@@ -139,11 +139,14 @@ export const listOffers = async (req, res) => {
 // Get offer details by ID (including user progress)
 export const getOfferById = async (req, res) => {
   try {
-    const offerId = req.params.id;
+    const offerId = req.params.id || req.query.id;
     const userId = req.query.user_id || (req.user ? req.user.id : null);
+
+    console.log(`[getOfferById] params.id=${req.params.id} query.id=${req.query.id} → resolved offerId=${offerId}`);
 
     const [offerRows] = await pool.query('SELECT * FROM offers WHERE id = ? LIMIT 1', [offerId]);
     if (offerRows.length === 0) {
+      console.warn(`[getOfferById] Offer not found in DB for id=${offerId}`);
       return res.status(404).json({ success: false, message: 'Offer not found' });
     }
     const o = offerRows[0];

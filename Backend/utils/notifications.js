@@ -92,6 +92,24 @@ export async function sendNotification(userId, title, body, imageUrl = null) {
           body,
           image: imageUrl || '',
           type: 'general'
+        },
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'default_channel',
+            sound: 'default',
+            priority: 'high',
+            defaultVibrateTimings: true,
+            defaultSound: true
+          }
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1
+            }
+          }
         }
       };
 
@@ -159,6 +177,24 @@ export async function broadcastNotification(title, body, imageUrl = null) {
             body,
             image: imageUrl || '',
             type: 'general'
+          },
+          android: {
+            priority: 'high',
+            notification: {
+              channelId: 'default_channel',
+              sound: 'default',
+              priority: 'high',
+              defaultVibrateTimings: true,
+              defaultSound: true
+            }
+          },
+          apns: {
+            payload: {
+              aps: {
+                sound: 'default',
+                badge: 1
+              }
+            }
           }
         };
 
@@ -227,6 +263,24 @@ export async function sendTopicNotification(topic, title, body, imageUrl = null)
           body,
           image: imageUrl || '',
           type: 'topic'
+        },
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'default_channel',
+            sound: 'default',
+            priority: 'high',
+            defaultVibrateTimings: true,
+            defaultSound: true
+          }
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1
+            }
+          }
         }
       };
 

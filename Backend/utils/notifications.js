@@ -159,6 +159,29 @@ export async function broadcastNotification(title, body, imageUrl = null) {
         const response = await admin.messaging().sendEachForMulticast(message);
         successCount += response.successCount;
         failureCount += response.failureCount;
+
+        if (response.failureCount > 0) {
+          for (let i = 0; i < response.responses.length; i++) {
+            const resp = response.responses[i];
+            if (!resp.success) {
+              const failedToken = batch[i];
+              const errorCode = resp.error?.code;
+              const errorMessage = resp.error?.message;
+              console.error(`❌ FCM Token delivery failed for token [${failedToken.substring(0, 15)}...]: ${errorMessage} (Code: ${errorCode})`);
+
+              // Auto-cleanup stale/unregistered tokens
+              if (
+                errorCode === 'messaging/registration-token-not-registered' ||
+                errorCode === 'messaging/invalid-registration-token'
+              ) {
+                console.log(`🧹 Auto-cleaning stale FCM token: ${failedToken.substring(0, 15)}...`);
+                await pool.query('UPDATE users SET fcm_token = NULL WHERE fcm_token = ?', [failedToken]).catch(err => {
+                  console.error('❌ Failed to clean stale FCM token:', err.message);
+                });
+              }
+            }
+          }
+        }
       }
 
       console.log(`📢 Global push broadcast sent using multicast. Total tokens: ${sentCount}, Success: ${successCount}, Failure: ${failureCount}`);

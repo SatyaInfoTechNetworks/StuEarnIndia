@@ -158,6 +158,9 @@ GET /api/offers/550e8400-e29b-41d4-a716-446655440000?user_id=SE1A2B3C
 
 ### Sample Response `200 OK`
 
+> [!TIP]
+> **Multi-Casing Compatibility Support:** To support both standard client/mobile React Native codebases (which expect camelCase properties) and admin portal components (which expect snake_case properties), the endpoint maps and returns **both casing styles** simultaneously (e.g. `iconUrl` and `icon_url`, `totalReward` and `total_reward`). This eliminates translation overhead. It also includes the previously missing `actual_price` / `actualPrice` (Internal Budget Price) and `is_active` / `isActive` fields.
+
 ```json
 {
   "success": true,
@@ -168,24 +171,39 @@ GET /api/offers/550e8400-e29b-41d4-a716-446655440000?user_id=SE1A2B3C
     "description": "Download Ludo King, create an account and reach Level 10 to earn your reward.",
     "category": "Gaming",
     "iconUrl": "https://cdn.stuearnmedia.in/offers/ludo.png",
+    "icon_url": "https://cdn.stuearnmedia.in/offers/ludo.png",
     "trackingUrl": "https://tracking.stuearnmedia.in/go?offer_id=550e8400&user_id={USER_ID}",
+    "tracking_url": "https://tracking.stuearnmedia.in/go?offer_id=550e8400&user_id={USER_ID}",
     "totalReward": 150.0,
+    "total_reward": 150.0,
+    "actualPrice": 10.0,
+    "actual_price": 10.0,
+    "isActive": true,
+    "is_active": true,
     "type": "online",
     "inputType": null,
+    "input_type": null,
     "inputInstruction": null,
+    "input_instruction": null,
     "isCompleted": false,
     "rewardType": "Multi Reward",
+    "reward_type": "Multi Reward",
     "extraLabel": "🎮 Popular",
+    "extra_label": "🎮 Popular",
     "estimatedTime": "30 mins",
+    "estimated_time": "30 mins",
     "difficulty": "Easy",
     "likesCount": 342,
     "isHot": true,
+    "is_hot": true,
     "click_id": "3b1cd8e4-aa01-4f9e-b3a1-8d5f2a2b6c3d",
     "userInput": null,
     "adminStatus": null,
     "rejectionReason": null,
     "dailyCompletionCap": 500,
+    "daily_completion_cap": 500,
     "countryTargeting": "IN",
+    "country_targeting": "IN",
     "completionsToday": 127,
     "isCapped": false,
     "tiers": [

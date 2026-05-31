@@ -44,29 +44,7 @@ export const getUserProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    const user = rows[0];
-
-    // Query stats in parallel for high performance
-    const [
-      [earningsRow],
-      [withdrawnRow],
-      [completedRow],
-      [referralsRow]
-    ] = await Promise.all([
-      pool.query('SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE user_id = ? AND type = "CREDIT"', [userId]),
-      pool.query('SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE user_id = ? AND type = "DEBIT" AND source = "WITHDRAWAL"', [userId]),
-      pool.query('SELECT COUNT(*) as count FROM user_offer_progress WHERE user_id = ? AND status = "COMPLETED"', [userId]),
-      pool.query('SELECT COUNT(*) as count FROM referral_uses WHERE referrer_id = ?', [userId])
-    ]);
-
-    user.stats = {
-      totalEarnings: parseFloat(earningsRow[0].total || 0),
-      totalWithdrawn: parseFloat(withdrawnRow[0].total || 0),
-      completedOffers: parseInt(completedRow[0].count || 0),
-      totalReferrals: parseInt(referralsRow[0].count || 0)
-    };
-
-    res.json({ success: true, user });
+    res.json({ success: true, user: rows[0] });
   } catch (error) {
     console.error('Get Profile Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });

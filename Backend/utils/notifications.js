@@ -13,6 +13,9 @@ const serviceAccountPath = process.env.FCM_SERVICE_ACCOUNT_PATH || './config/ser
 try {
   if (process.env.FCM_SERVICE_ACCOUNT_JSON) {
     const serviceAccount = JSON.parse(process.env.FCM_SERVICE_ACCOUNT_JSON);
+    if (serviceAccount.private_key) {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
     firebaseApp = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
@@ -34,6 +37,9 @@ try {
 
     if (resolvedPath) {
       const serviceAccount = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+      if (serviceAccount.private_key) {
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+      }
       firebaseApp = admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
       });

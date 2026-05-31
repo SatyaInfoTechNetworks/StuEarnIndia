@@ -360,9 +360,13 @@ export const startOffer = async (req, res) => {
                .replace(/{TRANS_ID}/g, clickId)
                .replace(/{trans_id}/g, clickId);
 
-      // User ID / GUID replacements
-      url = url.replace(/{guid}/g, userId)
-               .replace(/{user_id}/g, userId)
+      // GUID/GAID replacements (Using Google Ads ID / gaid for guid placeholders)
+      const guidValue = gaid || '';
+      url = url.replace(/{guid}/g, guidValue)
+               .replace(/{GUID}/g, guidValue);
+
+      // User ID replacements
+      url = url.replace(/{user_id}/g, userId)
                .replace(/{userId}/g, userId)
                .replace(/{USER_ID}/g, userId)
                .replace(/{UID}/g, userId)

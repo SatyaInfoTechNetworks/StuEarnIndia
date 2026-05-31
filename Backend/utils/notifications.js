@@ -107,8 +107,12 @@ export async function sendNotification(userId, title, body, imageUrl = null) {
  */
 export async function broadcastNotification(title, body, imageUrl = null) {
   try {
-    const [cnt] = await pool.query('SELECT COUNT(*) as c FROM users WHERE fcm_token IS NOT NULL AND fcm_token != ""');
-    const sentCount = cnt[0].c;
+    // 1. Fetch all active FCM tokens
+    const [tokenRows] = await pool.query(
+      'SELECT fcm_token FROM users WHERE fcm_token IS NOT NULL AND fcm_token != ""'
+    );
+    const tokens = tokenRows.map(row => row.fcm_token).filter(Boolean);
+    const sentCount = tokens.length;
 
     // Log to notification history
     await pool.query(
@@ -117,27 +121,49 @@ export async function broadcastNotification(title, body, imageUrl = null) {
     );
 
     if (firebaseApp) {
-      // Broadcast via topic (e.g., 'all')
-      const message = {
-        topic: 'all',
-        notification: {
-          title,
-          body,
-          ...(imageUrl ? { image: imageUrl } : {})
-        },
-        data: {
-          click_action: 'FLUTTER_NOTIFICATION_CLICK',
-          title,
-          body,
-          image: imageUrl || '',
-          type: 'general'
+      if (sentCount === 0) {
+        console.log('ℹ️ No active FCM tokens found in database. Broadcast logged but not sent.');
+        return true;
+      }
+
+      // Helper function to split array into chunks of a given size
+      const chunkArray = (arr, size) => {
+        const chunks = [];
+        for (let i = 0; i < arr.length; i += size) {
+          chunks.push(arr.slice(i, i + size));
         }
+        return chunks;
       };
 
-      await admin.messaging().send(message);
-      console.log(`📢 Global push broadcast sent.`);
+      const tokenBatches = chunkArray(tokens, 500);
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (const batch of tokenBatches) {
+        const message = {
+          tokens: batch,
+          notification: {
+            title,
+            body,
+            ...(imageUrl ? { image: imageUrl } : {})
+          },
+          data: {
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+            title,
+            body,
+            image: imageUrl || '',
+            type: 'general'
+          }
+        };
+
+        const response = await admin.messaging().sendEachForMulticast(message);
+        successCount += response.successCount;
+        failureCount += response.failureCount;
+      }
+
+      console.log(`📢 Global push broadcast sent using multicast. Total tokens: ${sentCount}, Success: ${successCount}, Failure: ${failureCount}`);
     } else {
-      console.log(`📢 [Mock Global Broadcast] ${title}: ${body} (Banner: ${imageUrl || 'None'})`);
+      console.log(`📢 [Mock Global Broadcast] ${title}: ${body} (Tokens count: ${sentCount}, Banner: ${imageUrl || 'None'})`);
     }
 
     return true;

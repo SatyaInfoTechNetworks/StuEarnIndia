@@ -126,7 +126,16 @@ export const getUserTransactionsAdmin = async (req, res) => {
       'SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 200',
       [userId]
     );
-    res.json({ success: true, transactions: rows, user: user[0] || null });
+    const [fingerprints] = await pool.query(
+      'SELECT * FROM device_fingerprints WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+    res.json({ 
+      success: true, 
+      transactions: rows, 
+      user: user[0] || null,
+      device_fingerprint: fingerprints[0] || null
+    });
   } catch (error) {
     console.error('Admin Get User Ledger Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -193,7 +202,8 @@ export const updateUser = async (req, res) => {
     const { 
       name, email, phone_number, location, referral_code, balance,
       android_id, fcm_token, daily_spins_count, current_streak,
-      referred_by, user_id, uid
+      referred_by, user_id, uid,
+      device_model, os_version, app_version, ip_address, is_emulator
     } = req.body;
 
     await connection.beginTransaction();
@@ -276,13 +286,45 @@ export const updateUser = async (req, res) => {
       ]
     );
 
+    // Update/Insert Device Fingerprint in transaction
+    if (android_id !== undefined || device_model !== undefined || os_version !== undefined || app_version !== undefined || ip_address !== undefined || is_emulator !== undefined) {
+      const [existingDf] = await connection.query('SELECT * FROM device_fingerprints WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId]);
+      
+      const dfAndroidId = android_id !== undefined ? android_id : (existingDf[0] ? existingDf[0].android_id : (android_id || 'REDACTED'));
+      const dfModel = device_model !== undefined ? device_model : (existingDf[0] ? existingDf[0].device_model : null);
+      const dfOs = os_version !== undefined ? os_version : (existingDf[0] ? existingDf[0].os_version : null);
+      const dfApp = app_version !== undefined ? app_version : (existingDf[0] ? existingDf[0].app_version : null);
+      const dfIp = ip_address !== undefined ? ip_address : (existingDf[0] ? existingDf[0].ip_address : '127.0.0.1');
+      const dfEmulator = is_emulator !== undefined ? (is_emulator ? 1 : 0) : (existingDf[0] ? existingDf[0].is_emulator : 0);
+
+      if (existingDf.length > 0) {
+        await connection.query(
+          `UPDATE device_fingerprints SET 
+            android_id = ?, 
+            device_model = ?, 
+            os_version = ?, 
+            app_version = ?, 
+            ip_address = ?, 
+            is_emulator = ? 
+           WHERE id = ?`,
+          [dfAndroidId, dfModel, dfOs, dfApp, dfIp, dfEmulator, existingDf[0].id]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO device_fingerprints (id, user_id, android_id, device_model, os_version, app_version, ip_address, is_emulator, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [uuidv4(), userId, dfAndroidId, dfModel, dfOs, dfApp, dfIp, dfEmulator]
+        );
+      }
+    }
+
     // Audit Log admin action
     const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
     await logAdminAction(connection, {
       adminId,
       actionType: 'UPDATE_USER_INFO',
       targetId: userId,
-      payload: { name, email, phone_number, location, referral_code, balance, android_id, fcm_token, daily_spins_count, current_streak, referred_by, user_id, uid },
+      payload: { name, email, phone_number, location, referral_code, balance, android_id, fcm_token, daily_spins_count, current_streak, referred_by, user_id, uid, device_model, os_version, app_version, ip_address, is_emulator },
       req
     });
 

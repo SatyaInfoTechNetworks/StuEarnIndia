@@ -475,6 +475,17 @@ export default function AdminPortal() {
       const data = await res.json();
       if (data.success) {
         setUserTransactions(data.transactions || []);
+        if (data.user) {
+          setSelectedUser({
+            ...data.user,
+            device_fingerprint: data.device_fingerprint || null
+          });
+        } else {
+          setSelectedUser({
+            ...user,
+            device_fingerprint: data.device_fingerprint || null
+          });
+        }
       }
     } catch (err) {
       console.error(err);
@@ -602,7 +613,12 @@ export default function AdminPortal() {
       current_streak: user.current_streak || 0,
       referred_by: user.referred_by || '',
       user_id: user.user_id || '',
-      uid: user.uid || ''
+      uid: user.uid || '',
+      device_model: user.device_fingerprint?.device_model || '',
+      os_version: user.device_fingerprint?.os_version || '',
+      app_version: user.device_fingerprint?.app_version || '',
+      ip_address: user.device_fingerprint?.ip_address || '',
+      is_emulator: user.device_fingerprint?.is_emulator ? true : false
     });
     setEditUserModal(true);
   };
@@ -620,7 +636,19 @@ export default function AdminPortal() {
       if (data.success) {
         showNotice('success', 'User information updated successfully');
         setEditUserModal(false);
-        const updatedUser = { ...selectedUser, ...editUserForm, balance: parseFloat(editUserForm.balance) };
+        const updatedUser = { 
+          ...selectedUser, 
+          ...editUserForm, 
+          balance: parseFloat(editUserForm.balance),
+          device_fingerprint: {
+            ...selectedUser.device_fingerprint,
+            device_model: editUserForm.device_model,
+            os_version: editUserForm.os_version,
+            app_version: editUserForm.app_version,
+            ip_address: editUserForm.ip_address,
+            is_emulator: editUserForm.is_emulator ? 1 : 0
+          }
+        };
         setSelectedUser(updatedUser);
         fetchUsers();
         fetchDashboardData();
@@ -2256,25 +2284,51 @@ export default function AdminPortal() {
 
                     <h6 className="font-weight-bold mb-3"><i className="fas fa-microchip mr-2 text-warning"></i> Device & Compliance Metadata</h6>
                     <div className="p-3 bg-light rounded-lg border mb-4">
-                      <div className="mb-2">
-                        <span className="text-xs text-muted font-weight-bold">Android Device Identifier:</span><br />
-                        <code className="text-xs text-danger text-break">{selectedUser.android_id || 'REDACTED'}</code>
-                      </div>
-                      <div className="mb-2">
-                        <span className="text-xs text-muted font-weight-bold">FCM Push Token:</span><br />
-                        <code className="text-xs text-dark text-break" style={{ maxHeight: '60px', display: 'block', overflowY: 'auto' }}>{selectedUser.fcm_token || 'N/A'}</code>
-                      </div>
-                      {selectedUser.is_banned ? (
-                        <div className="mb-0">
-                          <span className="text-xs text-danger font-weight-bold">Compliance Status: Banned Member</span><br />
-                          <span className="text-xs text-muted font-weight-bold">Reason: </span>
-                          <span className="text-xs text-danger italic">{selectedUser.ban_reason || 'No violation log provided.'}</span>
+                      <div className="row">
+                        <div className="col-md-6 mb-2">
+                          <span className="text-xs text-muted font-weight-bold">Android Device Identifier:</span><br />
+                          <code className="text-xs text-danger text-break">{selectedUser.android_id || 'REDACTED'}</code>
                         </div>
-                      ) : (
-                        <div className="mb-0">
-                          <span className="text-xs text-success font-weight-bold">Compliance Status: Active / Good Standing</span>
+                        <div className="col-md-6 mb-2">
+                          <span className="text-xs text-muted font-weight-bold">Device Model:</span><br />
+                          <strong className="text-sm text-dark">{selectedUser.device_fingerprint?.device_model || 'N/A'}</strong>
                         </div>
-                      )}
+                        <div className="col-md-6 mb-2">
+                          <span className="text-xs text-muted font-weight-bold">OS Version:</span><br />
+                          <strong className="text-sm text-dark">{selectedUser.device_fingerprint?.os_version || 'N/A'}</strong>
+                        </div>
+                        <div className="col-md-6 mb-2">
+                          <span className="text-xs text-muted font-weight-bold">App Client Version:</span><br />
+                          <strong className="text-sm text-dark">{selectedUser.device_fingerprint?.app_version || 'N/A'}</strong>
+                        </div>
+                        <div className="col-md-6 mb-2">
+                          <span className="text-xs text-muted font-weight-bold">Last Known IP Address:</span><br />
+                          <code className="text-xs text-primary font-mono">{selectedUser.device_fingerprint?.ip_address || 'N/A'}</code>
+                        </div>
+                        <div className="col-md-6 mb-2">
+                          <span className="text-xs text-muted font-weight-bold">Environment Type:</span><br />
+                          <span className={`badge badge-${selectedUser.device_fingerprint?.is_emulator ? 'danger' : 'success'}`}>
+                            {selectedUser.device_fingerprint?.is_emulator ? '🚫 Emulator Detected' : '📱 Physical Device'}
+                          </span>
+                        </div>
+                        <div className="col-md-12 mb-2">
+                          <span className="text-xs text-muted font-weight-bold">FCM Push Token:</span><br />
+                          <code className="text-xs text-dark text-break" style={{ maxHeight: '60px', display: 'block', overflowY: 'auto' }}>{selectedUser.fcm_token || 'N/A'}</code>
+                        </div>
+                        <div className="col-md-12 mt-1">
+                          {selectedUser.is_banned ? (
+                            <div className="mb-0">
+                              <span className="text-xs text-danger font-weight-bold">Compliance Status: Banned Member</span><br />
+                              <span className="text-xs text-muted font-weight-bold">Reason: </span>
+                              <span className="text-xs text-danger italic">{selectedUser.ban_reason || 'No violation log provided.'}</span>
+                            </div>
+                          ) : (
+                            <div className="mb-0">
+                              <span className="text-xs text-success font-weight-bold">Compliance Status: Active / Good Standing</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     <h6 className="font-weight-bold mb-3"><i className="fas fa-history mr-2 text-primary"></i> Ledger History</h6>
@@ -2403,6 +2457,34 @@ export default function AdminPortal() {
                     <div className="col-md-6 form-group mb-3">
                       <label className="text-muted text-xs font-weight-bold mb-1">Lucky Spins Claimed (Today)</label>
                       <input type="number" className="form-control" value={editUserForm.daily_spins_count} onChange={e => setEditUserForm({ ...editUserForm, daily_spins_count: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Device Model</label>
+                      <input type="text" className="form-control" value={editUserForm.device_model} onChange={e => setEditUserForm({ ...editUserForm, device_model: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">OS Version</label>
+                      <input type="text" className="form-control" value={editUserForm.os_version} onChange={e => setEditUserForm({ ...editUserForm, os_version: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">App Client Version</label>
+                      <input type="text" className="form-control" value={editUserForm.app_version} onChange={e => setEditUserForm({ ...editUserForm, app_version: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 form-group mb-3">
+                      <label className="text-muted text-xs font-weight-bold mb-1">Last IP Address</label>
+                      <input type="text" className="form-control font-mono" value={editUserForm.ip_address} onChange={e => setEditUserForm({ ...editUserForm, ip_address: e.target.value })} />
+                    </div>
+                    <div className="col-md-12 form-group mb-3">
+                      <div className="custom-control custom-checkbox mt-2">
+                        <input 
+                          type="checkbox" 
+                          className="custom-control-input" 
+                          id="edit_is_emulator" 
+                          checked={editUserForm.is_emulator} 
+                          onChange={e => setEditUserForm({ ...editUserForm, is_emulator: e.target.checked })} 
+                        />
+                        <label className="custom-control-label text-xs font-weight-bold" htmlFor="edit_is_emulator">Mark Environment as Virtual/Emulator Environment (Compliance Flag)</label>
+                      </div>
                     </div>
                     <div className="col-md-12 form-group mb-3">
                       <label className="text-muted text-xs font-weight-bold mb-1">FCM Push Token</label>

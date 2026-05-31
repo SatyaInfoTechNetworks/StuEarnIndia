@@ -758,12 +758,13 @@ export default function AdminPortal() {
           })) : [];
 
           // Safe parsing of input_instruction
+          const inputInstructionVal = fetched.input_instruction || fetched.inputInstruction;
           let loadedInstructions = [];
-          if (fetched.input_instruction) {
+          if (inputInstructionVal) {
             try {
-              loadedInstructions = typeof fetched.input_instruction === 'string' 
-                ? JSON.parse(fetched.input_instruction) 
-                : fetched.input_instruction;
+              loadedInstructions = typeof inputInstructionVal === 'string' 
+                ? JSON.parse(inputInstructionVal) 
+                : inputInstructionVal;
               if (!Array.isArray(loadedInstructions)) loadedInstructions = [];
             } catch (e) {
               console.error("Error parsing input_instruction:", e);
@@ -775,22 +776,22 @@ export default function AdminPortal() {
             external_id: fetched.external_id || '',
             description: fetched.description || '',
             category: fetched.category || 'Top Offers',
-            icon_url: fetched.icon_url || '',
-            tracking_url: fetched.tracking_url || '',
-            total_reward: parseFloat(fetched.total_reward || 0),
-            actual_price: parseFloat(fetched.actual_price || 0),
-            is_active: fetched.is_active ? true : false,
+            icon_url: fetched.icon_url || fetched.iconUrl || '',
+            tracking_url: fetched.tracking_url || fetched.trackingUrl || '',
+            total_reward: parseFloat(fetched.total_reward !== undefined ? fetched.total_reward : (fetched.totalReward !== undefined ? fetched.totalReward : 0)),
+            actual_price: parseFloat(fetched.actual_price !== undefined ? fetched.actual_price : (fetched.actualPrice !== undefined ? fetched.actualPrice : 0)),
+            is_active: (fetched.is_active !== undefined ? fetched.is_active : (fetched.isActive !== undefined ? fetched.isActive : true)) ? true : false,
             type: fetched.type || 'online',
-            reward_type: fetched.reward_type || 'Multi Reward',
-            estimated_time: fetched.estimated_time || '5 mins',
+            reward_type: fetched.reward_type || fetched.rewardType || 'Multi Reward',
+            estimated_time: fetched.estimated_time || fetched.estimatedTime || '5 mins',
             difficulty: fetched.difficulty || 'Medium',
-            is_hot: fetched.is_hot ? true : false,
-            extra_label: fetched.extra_label || '',
-            input_type: fetched.input_type || '',
+            is_hot: (fetched.is_hot !== undefined ? fetched.is_hot : (fetched.isHot !== undefined ? fetched.isHot : false)) ? true : false,
+            extra_label: fetched.extra_label || fetched.extraLabel || '',
+            input_type: fetched.input_type || fetched.inputType || '',
             input_instruction: loadedInstructions,
             tiers: loadedTiers,
-            daily_completion_cap: fetched.daily_completion_cap || 0,
-            country_targeting: fetched.country_targeting || 'IN'
+            daily_completion_cap: parseInt(fetched.daily_completion_cap !== undefined ? fetched.daily_completion_cap : (fetched.dailyCompletionCap !== undefined ? fetched.dailyCompletionCap : 0)),
+            country_targeting: fetched.country_targeting || fetched.countryTargeting || 'IN'
           });
         }
       });

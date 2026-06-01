@@ -447,7 +447,11 @@ export const startOffer = async (req, res) => {
 export const likeOffer = async (req, res) => {
   try {
     const userId = req.user.id;
-    const offerId = req.params.id;
+    const offerId = req.params.id || req.body.offer_id;
+
+    if (!offerId) {
+      return res.status(400).json({ success: false, message: 'Offer ID is required' });
+    }
 
     // Ensure offer_likes table exists
     await pool.query(

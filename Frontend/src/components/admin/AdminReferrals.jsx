@@ -33,7 +33,8 @@ export default function AdminReferrals({ getHeaders, showNotice, API_BASE }) {
     description_text: '',
     reward_trigger: 'offers_completed',
     coin_threshold: '',
-    referrer_coins: ''
+    referrer_coins: '',
+    commission_enabled: true
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -51,7 +52,8 @@ export default function AdminReferrals({ getHeaders, showNotice, API_BASE }) {
           description_text: data.settings.description_text ?? '',
           reward_trigger: data.settings.reward_trigger || 'offers_completed',
           coin_threshold: data.settings.coin_threshold ?? '',
-          referrer_coins: data.settings.referrer_coins ?? ''
+          referrer_coins: data.settings.referrer_coins ?? '',
+          commission_enabled: data.settings.commission_enabled !== false && data.settings.commission_enabled !== 0
         });
       }
     } catch (err) {
@@ -73,6 +75,7 @@ export default function AdminReferrals({ getHeaders, showNotice, API_BASE }) {
         body: JSON.stringify({
           bonus_coins: parseFloat(settings.bonus_coins || 0),
           commission_percent: parseFloat(settings.commission_percent || 0),
+          commission_enabled: settings.commission_enabled ? 1 : 0,
           offers_required: parseInt(settings.offers_required || 0),
           description_text: settings.description_text,
           reward_trigger: settings.reward_trigger,
@@ -238,14 +241,54 @@ export default function AdminReferrals({ getHeaders, showNotice, API_BASE }) {
                   </p>
                 </div>
 
-                {/* Commission % */}
+                {/* Commission % with Enable/Disable Toggle */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Percent size={13} /> Referrer Commission (% per offer)
-                  </label>
-                  <input type="number" className="glass-input" placeholder="e.g. 10" step="0.01" min="0" max="100" {...field('commission_percent')} />
-                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-                    % of every offer reward earned by the referred friend, credited to referrer continuously.
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <label className="form-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Percent size={13} /> Referrer Commission (% per offer)
+                    </label>
+                    {/* Toggle switch */}
+                    <div
+                      onClick={() => setSettings({ ...settings, commission_enabled: !settings.commission_enabled })}
+                      style={{
+                        position: 'relative',
+                        width: '44px',
+                        height: '24px',
+                        borderRadius: '12px',
+                        background: settings.commission_enabled ? '#a855f7' : 'rgba(255,255,255,0.12)',
+                        cursor: 'pointer',
+                        transition: 'background 0.25s ease',
+                        flexShrink: 0
+                      }}
+                    >
+                      <div style={{
+                        position: 'absolute',
+                        top: '3px',
+                        left: settings.commission_enabled ? '23px' : '3px',
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        background: '#fff',
+                        transition: 'left 0.25s ease',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.3)'
+                      }} />
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    className="glass-input"
+                    placeholder="e.g. 10"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    disabled={!settings.commission_enabled}
+                    style={{ opacity: settings.commission_enabled ? 1 : 0.4, cursor: settings.commission_enabled ? 'text' : 'not-allowed' }}
+                    {...field('commission_percent')}
+                  />
+                  <p style={{ fontSize: '0.72rem', color: settings.commission_enabled ? 'var(--text-muted)' : 'var(--danger)', marginTop: '6px' }}>
+                    {settings.commission_enabled
+                      ? '% of every offer reward earned by the referred friend, credited to referrer continuously.'
+                      : '⛔ Commission is disabled — referrers will not earn % on friend\'s offers.'}
                   </p>
                 </div>
 

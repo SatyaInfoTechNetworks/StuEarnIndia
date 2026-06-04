@@ -371,6 +371,7 @@ export async function initializeDatabase() {
     await addColumnIfNotExists(connection, 'referral_settings', 'reward_trigger', "ENUM('offers_completed','first_withdrawal','coin_threshold') DEFAULT 'offers_completed'");
     await addColumnIfNotExists(connection, 'referral_settings', 'coin_threshold', 'DECIMAL(10,2) DEFAULT 500.00');
     await addColumnIfNotExists(connection, 'referral_settings', 'referrer_coins', 'DECIMAL(10,2) DEFAULT 100.00');
+    await addColumnIfNotExists(connection, 'referral_settings', 'commission_enabled', 'TINYINT(1) DEFAULT 1');
 
     // 25. visit_earn_tasks Table
     await connection.query(`

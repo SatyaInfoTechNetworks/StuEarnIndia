@@ -1338,12 +1338,13 @@ async function processReferralRewards(referredUserId, rewardAmount, offerId) {
       : { bonus_coins: 10.00, commission_percent: 10, offers_required: 2, reward_trigger: 'offers_completed', coin_threshold: 500, referrer_coins: 100 };
 
     const trigger = settings.reward_trigger || 'offers_completed';
+    const commissionEnabled = settings.commission_enabled !== 0 && settings.commission_enabled !== false;
 
     // If trigger is first_withdrawal, milestone bonus is handled in walletController — skip here
     if (trigger === 'first_withdrawal') {
-      // Still give commission % on every offer completion if configured
+      // Still give commission % on every offer completion if enabled
       const commPercent = parseInt(settings.commission_percent);
-      if (commPercent > 0 && rewardAmount > 0) {
+      if (commissionEnabled && commPercent > 0 && rewardAmount > 0) {
         const commissionAmount = rewardAmount * (commPercent / 100);
         if (commissionAmount > 0) {
           await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [commissionAmount, referrerId]);
@@ -1436,7 +1437,7 @@ async function processReferralRewards(referredUserId, rewardAmount, offerId) {
 
     // Commission % on every offer completion regardless of trigger type
     const commPercent = parseInt(settings.commission_percent);
-    if (commPercent > 0 && rewardAmount > 0) {
+    if (commissionEnabled && commPercent > 0 && rewardAmount > 0) {
       const commissionAmount = rewardAmount * (commPercent / 100);
       if (commissionAmount > 0) {
         await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [commissionAmount, referrerId]);

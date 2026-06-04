@@ -1059,6 +1059,7 @@ export const getReferralSettings = async (req, res) => {
     const defaults = {
       bonus_coins: 10,
       commission_percent: 10,
+      commission_enabled: 1,
       offers_required: 2,
       description_text: '',
       reward_trigger: 'offers_completed',
@@ -1077,6 +1078,7 @@ export const updateReferralSettings = async (req, res) => {
     const {
       bonus_coins,
       commission_percent,
+      commission_enabled,
       offers_required,
       description_text,
       reward_trigger,
@@ -1086,18 +1088,20 @@ export const updateReferralSettings = async (req, res) => {
 
     const validTriggers = ['offers_completed', 'first_withdrawal', 'coin_threshold'];
     const trigger = validTriggers.includes(reward_trigger) ? reward_trigger : 'offers_completed';
+    const commEnabled = commission_enabled === undefined ? 1 : (commission_enabled ? 1 : 0);
 
     const [existing] = await pool.query('SELECT id FROM referral_settings LIMIT 1');
 
     if (existing.length > 0) {
       await pool.query(
         `UPDATE referral_settings 
-         SET bonus_coins=?, commission_percent=?, offers_required=?, description_text=?,
+         SET bonus_coins=?, commission_percent=?, commission_enabled=?, offers_required=?, description_text=?,
              reward_trigger=?, coin_threshold=?, referrer_coins=?
          WHERE id=?`,
         [
           parseFloat(bonus_coins || 10),
           parseInt(commission_percent || 10),
+          commEnabled,
           parseInt(offers_required || 2),
           description_text || '',
           trigger,
@@ -1109,11 +1113,12 @@ export const updateReferralSettings = async (req, res) => {
     } else {
       await pool.query(
         `INSERT INTO referral_settings 
-         (bonus_coins, commission_percent, offers_required, description_text, reward_trigger, coin_threshold, referrer_coins) 
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (bonus_coins, commission_percent, commission_enabled, offers_required, description_text, reward_trigger, coin_threshold, referrer_coins) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           parseFloat(bonus_coins || 10),
           parseInt(commission_percent || 10),
+          commEnabled,
           parseInt(offers_required || 2),
           description_text || '',
           trigger,

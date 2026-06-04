@@ -569,7 +569,7 @@ export const getTransactions = async (req, res) => {
       `SELECT t.id, t.user_id, t.amount, t.type, t.source, t.reference_id, t.description, t.created_at,
               o.icon_url as offer_icon
        FROM transactions t
-       LEFT JOIN user_offer_progress uop ON t.reference_id = uop.click_id AND t.source = 'OFFER'
+       LEFT JOIN user_offer_progress uop ON t.reference_id = uop.click_id AND t.source IN ('OFFER', 'OFFLINE_OFFER')
        LEFT JOIN offers o ON uop.offer_id = o.id
        WHERE t.user_id = ? 
        ORDER BY t.created_at DESC`,
@@ -692,6 +692,9 @@ export const getTransactions = async (req, res) => {
           case 'WITHDRAWAL':
           case 'DEBIT_WITHDRAWAL':
             iconUrl = 'https://img.icons8.com/color/96/wallet--v1.png';
+            break;
+          case 'CONTEST_TICKET_PURCHASE':
+            iconUrl = 'https://img.icons8.com/color/96/two-tickets.png';
             break;
           default:
             iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';

@@ -18,8 +18,13 @@ export const listOffers = async (req, res) => {
 
     // Exclude completed offers if user_id is provided
     if (user_id) {
+      const [uRows] = await pool.query(
+        'SELECT id FROM users WHERE id = ? OR uid = ? OR user_id = ? LIMIT 1',
+        [user_id, user_id, user_id]
+      );
+      const resolvedUserId = uRows.length > 0 ? uRows[0].id : user_id;
       query += ` AND id NOT IN (SELECT offer_id FROM user_offer_progress WHERE user_id = ? AND status = 'COMPLETED')`;
-      params.push(user_id);
+      params.push(resolvedUserId);
     }
 
     if (category) {
@@ -532,8 +537,13 @@ export const getHotOffers = async (req, res) => {
     const params = [];
 
     if (user_id) {
+      const [uRows] = await pool.query(
+        'SELECT id FROM users WHERE id = ? OR uid = ? OR user_id = ? LIMIT 1',
+        [user_id, user_id, user_id]
+      );
+      const resolvedUserId = uRows.length > 0 ? uRows[0].id : user_id;
       query += " AND id NOT IN (SELECT offer_id FROM user_offer_progress WHERE user_id = ? AND status = 'COMPLETED')";
-      params.push(user_id);
+      params.push(resolvedUserId);
     }
 
     query += ' ORDER BY created_at DESC LIMIT 20';

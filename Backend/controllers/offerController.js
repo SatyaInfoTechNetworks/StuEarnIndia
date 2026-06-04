@@ -44,7 +44,7 @@ export const listOffers = async (req, res) => {
     // Fetch all tiers for these offers
     const offerIds = offers.map(o => o.id);
     const [tiers] = await pool.query(
-      'SELECT id, offer_id, tier_title, app_tier_title, reward, status, steps FROM offer_tiers WHERE offer_id IN (?) ORDER BY id ASC',
+      'SELECT id, offer_id, tier_title, app_tier_title, reward, status, steps, sequence FROM offer_tiers WHERE offer_id IN (?) ORDER BY sequence ASC, id ASC',
       [offerIds]
     );
 
@@ -153,7 +153,7 @@ export const getOfferById = async (req, res) => {
 
     // Fetch tiers
     const [tiers] = await pool.query(
-      'SELECT id, tier_title, app_tier_title, reward, status, steps FROM offer_tiers WHERE offer_id = ? ORDER BY id ASC',
+      'SELECT id, tier_title, app_tier_title, reward, status, steps, sequence FROM offer_tiers WHERE offer_id = ? ORDER BY sequence ASC, id ASC',
       [offerId]
     );
 
@@ -547,7 +547,7 @@ export const getHotOffers = async (req, res) => {
     // Fetch all tiers for these offers
     const offerIds = offers.map(o => o.id);
     const [tiers] = await pool.query(
-      'SELECT id, offer_id, tier_title, app_tier_title, reward, status, steps FROM offer_tiers WHERE offer_id IN (?) ORDER BY id ASC',
+      'SELECT id, offer_id, tier_title, app_tier_title, reward, status, steps, sequence FROM offer_tiers WHERE offer_id IN (?) ORDER BY sequence ASC, id ASC',
       [offerIds]
     );
 

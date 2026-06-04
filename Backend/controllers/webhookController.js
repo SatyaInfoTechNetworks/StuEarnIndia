@@ -160,6 +160,10 @@ export const handlePostback = async (req, res) => {
     }
     const resolvedUserId = uRows[0].id;
 
+    // Fetch offer title for the transaction ledger description
+    const [offerRows] = await connection.query('SELECT title FROM offers WHERE id = ? LIMIT 1', [offer_id]);
+    const offerTitle = offerRows.length > 0 ? offerRows[0].title : 'Offer';
+
     let completedTiers = [];
     if (progress.completed_tiers) {
       try {
@@ -220,10 +224,11 @@ export const handlePostback = async (req, res) => {
 
     const transId = uuidv4();
     const displayTitle = tier.app_tier_title || tier.tier_title;
+    const descriptionText = `${offerTitle} : ${displayTitle}`;
     await connection.query(
       `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
        VALUES (?, ?, ?, 'CREDIT', 'OFFER', ?, ?, NOW())`,
-      [transId, resolvedUserId, reward, `Completed: ${displayTitle}`, click_id]
+      [transId, resolvedUserId, reward, descriptionText, click_id]
     );
 
     await connection.commit();

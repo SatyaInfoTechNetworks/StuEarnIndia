@@ -80,6 +80,7 @@ import {
   getAllTransactionsAdmin,
   updateUserBalance,
   updateUser,
+  deleteUserFingerprints,
   banUser,
   unbanUser,
   createOffer,
@@ -310,6 +311,7 @@ app.get('/api/admin/transactions', authenticateAdmin, getAllTransactionsAdmin);
 app.delete('/api/admin/transactions/:id', authenticateAdmin, deleteTransactionAdmin);
 app.post('/api/admin/users/:id/balance', authenticateAdmin, updateUserBalance);
 app.put('/api/admin/users/:id', authenticateAdmin, updateUser);
+app.delete('/api/admin/users/:id/fingerprints', authenticateAdmin, deleteUserFingerprints);
 app.post('/api/admin/users/:id/ban', authenticateAdmin, banUser);
 app.post('/api/admin/users/:id/unban', authenticateAdmin, unbanUser);
 app.delete('/api/admin/users/:id', authenticateAdmin, deleteUser);

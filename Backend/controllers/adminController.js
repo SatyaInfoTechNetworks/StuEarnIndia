@@ -252,6 +252,30 @@ export const updateUser = async (req, res) => {
       });
     }
 
+    // Resolve referred_by from Referral Code, public Hex ID, or UUID to database UUID
+    let referredByUuid = null;
+    if (referred_by !== undefined) {
+      if (referred_by === '' || referred_by === null) {
+        referredByUuid = null;
+      } else {
+        const [lookupRows] = await connection.query(
+          `SELECT id FROM users WHERE id = ? OR referral_code = ? OR user_id = ? LIMIT 1`,
+          [referred_by, referred_by, referred_by]
+        );
+        if (lookupRows.length > 0) {
+          referredByUuid = lookupRows[0].id;
+        } else {
+          await connection.rollback();
+          return res.status(400).json({ 
+            success: false, 
+            message: `User "${referred_by}" not found. Please enter a valid Referral Code, Public Hex ID, or Database UUID.` 
+          });
+        }
+      }
+    } else {
+      referredByUuid = user.referred_by;
+    }
+
     // Update user row
     await connection.query(
       `UPDATE users SET 
@@ -280,7 +304,7 @@ export const updateUser = async (req, res) => {
         fcm_token !== undefined ? fcm_token : user.fcm_token,
         daily_spins_count !== undefined ? parseInt(daily_spins_count || 0) : user.daily_spins_count,
         current_streak !== undefined ? parseInt(current_streak || 0) : user.current_streak,
-        referred_by !== undefined ? referred_by : user.referred_by,
+        referredByUuid,
         user_id !== undefined ? user_id : user.user_id,
         uid !== undefined ? uid : user.uid,
         userId
@@ -1655,6 +1679,46 @@ export const deleteTransactionAdmin = async (req, res) => {
   } catch (error) {
     await connection.rollback();
     console.error('Admin Delete Transaction Error:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  } finally {
+    connection.release();
+  }
+};
+
+export const deleteUserFingerprints = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const userId = req.params.id;
+    await connection.beginTransaction();
+
+    // 1. Fetch user to verify they exist
+    const [userRows] = await connection.query('SELECT name FROM users WHERE id = ? FOR UPDATE', [userId]);
+    if (userRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // 2. Clear android_id on users table
+    await connection.query('UPDATE users SET android_id = NULL WHERE id = ?', [userId]);
+
+    // 3. Delete all device_fingerprints rows for this user
+    await connection.query('DELETE FROM device_fingerprints WHERE user_id = ?', [userId]);
+
+    // 4. Record admin audit log
+    const adminId = req.admin && req.admin.id ? req.admin.id : 'admin';
+    await logAdminAction(connection, {
+      adminId,
+      actionType: 'DELETE_USER_FINGERPRINTS',
+      targetId: userId,
+      payload: { userId },
+      req
+    });
+
+    await connection.commit();
+    res.json({ success: true, message: 'User device fingerprints deleted successfully' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Delete User Fingerprints Error:', error);
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });
   } finally {
     connection.release();

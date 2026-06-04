@@ -54,6 +54,7 @@ export default function AdminPortal() {
   const [adjustDesc, setAdjustDesc] = useState('');
   
   const [editUserModal, setEditUserModal] = useState(false);
+  const [isDeletingFingerprints, setIsDeletingFingerprints] = useState(false);
   const [editUserForm, setEditUserForm] = useState({
     name: '',
     email: '',
@@ -657,6 +658,36 @@ export default function AdminPortal() {
       }
     } catch (err) {
       showNotice('error', 'Failed to update user info');
+    }
+  };
+
+  const handleDeleteFingerprints = async () => {
+    if (!selectedUser) return;
+    if (!window.confirm(`Are you sure you want to completely clear the device fingerprints and Android ID for ${selectedUser.name}? This allows them to register or login on a new device.`)) {
+      return;
+    }
+    setIsDeletingFingerprints(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}/fingerprints`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotice('success', 'User device fingerprints cleared successfully');
+        setSelectedUser({
+          ...selectedUser,
+          android_id: null,
+          device_fingerprint: null
+        });
+        fetchUsers();
+      } else {
+        showNotice('error', data.message || 'Failed to clear fingerprints');
+      }
+    } catch (err) {
+      showNotice('error', 'Network error while clearing fingerprints');
+    } finally {
+      setIsDeletingFingerprints(false);
     }
   };
 
@@ -2308,7 +2339,16 @@ export default function AdminPortal() {
                       <button className="btn btn-xs btn-primary px-3 rounded-pill" onClick={() => setAdjustBalanceModal(true)}>Trigger adjustment</button>
                     </div>
 
-                    <h6 className="font-weight-bold mb-3"><i className="fas fa-microchip mr-2 text-warning"></i> Device & Compliance Metadata</h6>
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <h6 className="font-weight-bold mb-0"><i className="fas fa-microchip text-warning mr-1"></i> Device & Compliance Metadata</h6>
+                      <button 
+                        className="btn btn-xs btn-danger px-3 rounded-pill" 
+                        onClick={handleDeleteFingerprints}
+                        disabled={isDeletingFingerprints}
+                      >
+                        <i className="fas fa-trash-alt mr-1"></i> {isDeletingFingerprints ? 'Clearing...' : 'Clear Device Fingerprints'}
+                      </button>
+                    </div>
                     <div className="p-3 bg-light rounded-lg border mb-4">
                       <div className="row">
                         <div className="col-md-6 mb-2">

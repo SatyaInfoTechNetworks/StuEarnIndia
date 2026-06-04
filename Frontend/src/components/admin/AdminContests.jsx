@@ -32,7 +32,8 @@ export default function AdminContests({ getHeaders, showNotice, API_BASE }) {
     max_ad_entries_per_day: 3,
     allow_coins_entry: false,
     ticket_coins_cost: 0,
-    max_tickets_per_user: 10
+    max_tickets_per_user: 10,
+    ad_entry_cooldown: 0
   });
 
   const fetchContests = async () => {
@@ -214,7 +215,8 @@ export default function AdminContests({ getHeaders, showNotice, API_BASE }) {
       max_ad_entries_per_day: 3,
       allow_coins_entry: false,
       ticket_coins_cost: 0,
-      max_tickets_per_user: 10
+      max_tickets_per_user: 10,
+      ad_entry_cooldown: 0
     });
     setSelectedContest(null);
   };
@@ -247,7 +249,8 @@ export default function AdminContests({ getHeaders, showNotice, API_BASE }) {
       max_ad_entries_per_day: contest.max_ad_entries_per_day !== undefined ? contest.max_ad_entries_per_day : 3,
       allow_coins_entry: contest.allow_coins_entry !== undefined ? Boolean(contest.allow_coins_entry) : false,
       ticket_coins_cost: contest.ticket_coins_cost !== undefined ? contest.ticket_coins_cost : 0,
-      max_tickets_per_user: contest.max_tickets_per_user !== undefined ? contest.max_tickets_per_user : 10
+      max_tickets_per_user: contest.max_tickets_per_user !== undefined ? contest.max_tickets_per_user : 10,
+      ad_entry_cooldown: contest.ad_entry_cooldown !== undefined ? contest.ad_entry_cooldown : 0
     });
     setActiveView('edit');
   };
@@ -535,10 +538,16 @@ export default function AdminContests({ getHeaders, showNotice, API_BASE }) {
 
                       <div className="row">
                         {contestForm.allow_ad_entry && (
-                          <div className="col-6 form-group mb-3">
-                            <label className="text-muted text-xs font-weight-bold mb-1">Maximum Ad Tickets Allowed Per Day</label>
-                            <input type="number" className="form-control" value={contestForm.max_ad_entries_per_day} onChange={e => setContestForm({ ...contestForm, max_ad_entries_per_day: parseInt(e.target.value || 3) })} />
-                          </div>
+                          <>
+                            <div className="col-6 form-group mb-3">
+                              <label className="text-muted text-xs font-weight-bold mb-1">Maximum Ad Tickets Allowed Per Day</label>
+                              <input type="number" className="form-control" value={contestForm.max_ad_entries_per_day} onChange={e => setContestForm({ ...contestForm, max_ad_entries_per_day: parseInt(e.target.value || 3) })} />
+                            </div>
+                            <div className="col-6 form-group mb-3">
+                              <label className="text-muted text-xs font-weight-bold mb-1">Ad Entry Cooldown (seconds)</label>
+                              <input type="number" className="form-control" value={contestForm.ad_entry_cooldown || 0} onChange={e => setContestForm({ ...contestForm, ad_entry_cooldown: parseInt(e.target.value || 0) })} />
+                            </div>
+                          </>
                         )}
                         
                         <div className="col-6 d-flex flex-column mb-3">

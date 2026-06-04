@@ -535,6 +535,11 @@ export async function initializeDatabase() {
     await addColumnIfNotExists(connection, 'contests', 'allow_coins_entry', 'BOOLEAN DEFAULT FALSE');
     await addColumnIfNotExists(connection, 'contests', 'ticket_coins_cost', 'DECIMAL(10, 2) DEFAULT 0.00');
     await addColumnIfNotExists(connection, 'contests', 'max_tickets_per_user', 'INT DEFAULT 10');
+    await addColumnIfNotExists(connection, 'contests', 'ad_entry_cooldown', 'INT DEFAULT 0');
+
+    // Payout and Withdrawals Migrations
+    await addColumnIfNotExists(connection, 'payout_methods', 'requires_redeem_code', 'BOOLEAN DEFAULT FALSE');
+    await addColumnIfNotExists(connection, 'withdrawals', 'redeem_code', 'VARCHAR(255) NULL');
 
     await addColumnIfNotExists(connection, 'transactions', 'opening_balance', 'DECIMAL(10, 2) DEFAULT NULL');
     await addColumnIfNotExists(connection, 'transactions', 'closing_balance', 'DECIMAL(10, 2) DEFAULT NULL');

@@ -815,16 +815,31 @@ export default function AdminPortal() {
   };
 
   // Withdrawals approvals
-  const handleApproveWithdrawal = async (id) => {
+  const handleApproveWithdrawal = async (w) => {
+    let redeem_code = null;
+    if (w.requires_redeem_code) {
+      const enteredCode = window.prompt(`Enter the redeem voucher code for ${w.method}:`);
+      if (enteredCode === null) {
+        return; // User cancelled
+      }
+      if (!enteredCode.trim()) {
+        alert('A redeem code is required to approve this payout method.');
+        return;
+      }
+      redeem_code = enteredCode.trim();
+    }
     try {
-      const res = await fetch(`${API_BASE}/api/admin/withdrawals/${id}/approve`, {
+      const res = await fetch(`${API_BASE}/api/admin/withdrawals/${w.id}/approve`, {
         method: 'POST',
-        headers: getHeaders()
+        headers: getHeaders(),
+        body: JSON.stringify({ redeem_code })
       });
       const data = await res.json();
       if (data.success) {
         showNotice('success', 'Withdrawal payout marked settled');
         fetchDashboardData();
+      } else {
+        showNotice('error', data.message || 'Failed to approve withdrawal');
       }
     } catch (err) {
       showNotice('error', 'Failed to approve withdrawal');
@@ -1827,8 +1842,18 @@ export default function AdminPortal() {
                               <h5 className="mb-0 font-weight-bold text-primary">₹{parseFloat(w.amount_currency || (w.amount * 0.01)).toFixed(2)}</h5>
                             </td>
                             <td>
-                              <div className="font-weight-bold">{w.method}</div>
+                              <div className="font-weight-bold">
+                                {w.method}
+                                {w.requires_redeem_code === 1 || w.requires_redeem_code === true ? (
+                                  <span className="badge badge-success ml-2 text-xs" style={{ fontSize: '0.65rem' }}>VOUCHER</span>
+                                ) : null}
+                              </div>
                               <code className="text-xs text-danger">{w.details}</code>
+                              {w.redeem_code && (
+                                <div className="text-xs text-success font-weight-bold mt-1">
+                                  <i className="fas fa-key mr-1"></i> Code: <code>{w.redeem_code}</code>
+                                </div>
+                              )}
                             </td>
                             <td className="text-center text-xs text-info">
                               <i className="far fa-calendar-alt mr-1"></i> {new Date(w.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
@@ -1836,7 +1861,7 @@ export default function AdminPortal() {
                             <td className="text-right pr-4">
                               {w.status === 'PENDING' ? (
                                 <div className="btn-group shadow-sm">
-                                  <button className="btn btn-success btn-xs px-3 font-weight-bold py-1" onClick={() => handleApproveWithdrawal(w.id)}>Approve</button>
+                                  <button className="btn btn-success btn-xs px-3 font-weight-bold py-1" onClick={() => handleApproveWithdrawal(w)}>Approve</button>
                                   <button className="btn btn-danger btn-xs px-3 font-weight-bold py-1" onClick={() => triggerRejectWithdrawal(w)}>Reject</button>
                                 </div>
                               ) : <span className="text-xs text-muted">{w.status}</span>}

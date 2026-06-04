@@ -2,6 +2,7 @@ import pool from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { sendNotification, broadcastNotification, sendTopicNotification } from '../utils/notifications.js';
 import { recordLedgerTransaction } from '../utils/ledger.js';
+import { sendRedeemCodeEmail } from '../utils/email.js';
 
 // ==========================================
 // CORE AUDITING HELPER
@@ -609,12 +610,15 @@ export const listWithdrawals = async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      `SELECT w.id, w.user_id, w.amount, 
+      `SELECT w.id, w.user_id, w.amount, w.method_id, w.redeem_code,
               COALESCE(w.amount_coins, w.amount) as amount_coins, 
               COALESCE(w.amount_currency, w.amount * 0.01) as amount_currency, 
               w.method, w.details, w.status, w.created_at,
-              u.name as user_name, u.email as user_email, u.user_id as user_public_id
-       FROM withdrawals w JOIN users u ON w.user_id = u.id
+              u.name as user_name, u.email as user_email, u.user_id as user_public_id,
+              pm.requires_redeem_code
+       FROM withdrawals w 
+       JOIN users u ON w.user_id = u.id
+       LEFT JOIN payout_methods pm ON w.method_id = pm.id
        ${whereClause}
        ORDER BY w.created_at DESC LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), offset]
@@ -633,17 +637,76 @@ export const approveWithdrawal = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const withdrawalId = req.params.id;
+    const { redeem_code } = req.body;
     await connection.beginTransaction();
 
-    const [rows] = await connection.query('SELECT * FROM withdrawals WHERE id = ? FOR UPDATE', [withdrawalId]);
-    if (rows.length === 0) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Withdrawal not found' }); }
-    if (rows[0].status !== 'PENDING') { await connection.rollback(); return res.status(400).json({ success: false, message: 'Already processed' }); }
+    const [rows] = await connection.query(
+      `SELECT w.*, pm.requires_redeem_code, u.email as user_email, u.name as user_name
+       FROM withdrawals w 
+       JOIN users u ON w.user_id = u.id
+       LEFT JOIN payout_methods pm ON w.method_id = pm.id
+       WHERE w.id = ? FOR UPDATE`,
+      [withdrawalId]
+    );
 
-    await connection.query('UPDATE withdrawals SET status = "APPROVED" WHERE id = ?', [withdrawalId]);
+    if (rows.length === 0) { 
+      await connection.rollback(); 
+      return res.status(404).json({ success: false, message: 'Withdrawal not found' }); 
+    }
+    const withdrawal = rows[0];
+
+    if (withdrawal.status !== 'PENDING') { 
+      await connection.rollback(); 
+      return res.status(400).json({ success: false, message: 'Already processed' }); 
+    }
+
+    if (withdrawal.requires_redeem_code && (!redeem_code || !redeem_code.trim())) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'Redeem code is required to approve this payout method.' });
+    }
+
+    await connection.query('UPDATE withdrawals SET status = "APPROVED", redeem_code = ? WHERE id = ?', [redeem_code || null, withdrawalId]);
     await connection.commit();
 
-    const displayVal = parseFloat(rows[0].amount_currency || (rows[0].amount * 0.01)).toFixed(2);
-    await sendNotification(rows[0].user_id, 'Withdrawal Settled', `Your payout of ₹${displayVal} has been processed!`);
+    const displayVal = parseFloat(withdrawal.amount_currency || (withdrawal.amount * 0.01)).toFixed(2);
+    
+    // Send push notification containing redeem code if present
+    let pushMessage = `Your payout of ₹${displayVal} has been processed!`;
+    if (redeem_code) {
+      pushMessage = `Your redeem code for ${withdrawal.method} is: ${redeem_code}`;
+    }
+    await sendNotification(withdrawal.user_id, 'Withdrawal Settled', pushMessage);
+
+    // Send email containing the code if present
+    if (redeem_code) {
+      let targetEmail = withdrawal.user_email;
+      try {
+        const detailsObj = typeof withdrawal.details === 'string' && (withdrawal.details.startsWith('{') || withdrawal.details.startsWith('['))
+          ? JSON.parse(withdrawal.details)
+          : withdrawal.details;
+
+        if (detailsObj && typeof detailsObj === 'object') {
+          for (const key of Object.keys(detailsObj)) {
+            const val = String(detailsObj[key]).trim();
+            if (val.includes('@')) {
+              targetEmail = val;
+              break;
+            }
+          }
+        } else if (typeof detailsObj === 'string' && detailsObj.includes('@')) {
+          targetEmail = detailsObj.trim();
+        }
+      } catch (err) {
+        console.error('Failed to parse details for email extraction:', err);
+      }
+
+      try {
+        await sendRedeemCodeEmail(targetEmail, withdrawal.user_name, withdrawal.method, redeem_code, displayVal);
+      } catch (emailErr) {
+        console.error('Failed to send redeem code email:', emailErr.message);
+      }
+    }
+
     res.json({ success: true, message: 'Withdrawal approved' });
   } catch (error) {
     await connection.rollback();
@@ -892,7 +955,7 @@ export const listPayoutMethods = async (req, res) => {
 export const createPayoutMethod = async (req, res) => {
   const connection = await pool.getConnection();
   try {
-    const { id, name, description, icon_url, min_coins, conversion_rate, processing_time, is_active, input_type, input_label, input_placeholder, tiers } = req.body;
+    const { id, name, description, icon_url, min_coins, conversion_rate, processing_time, is_active, input_type, input_label, input_placeholder, tiers, requires_redeem_code } = req.body;
 
     if (!id || !name) {
       return res.status(400).json({ success: false, message: 'ID and Name are required' });
@@ -901,8 +964,8 @@ export const createPayoutMethod = async (req, res) => {
     await connection.beginTransaction();
 
     await connection.query(
-      `INSERT INTO payout_methods (id, name, description, icon_url, min_coins, conversion_rate, processing_time, is_active, input_type, input_label, input_placeholder)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO payout_methods (id, name, description, icon_url, min_coins, conversion_rate, processing_time, is_active, input_type, input_label, input_placeholder, requires_redeem_code)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id.toLowerCase().trim(),
         name,
@@ -914,7 +977,8 @@ export const createPayoutMethod = async (req, res) => {
         is_active ? 1 : 0,
         input_type || 'text',
         input_label || 'Details',
-        input_placeholder || 'Enter details'
+        input_placeholder || 'Enter details',
+        requires_redeem_code ? 1 : 0
       ]
     );
 
@@ -949,13 +1013,13 @@ export const updatePayoutMethod = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const methodId = req.params.id;
-    const { name, description, icon_url, min_coins, conversion_rate, processing_time, is_active, input_type, input_label, input_placeholder, tiers } = req.body;
+    const { name, description, icon_url, min_coins, conversion_rate, processing_time, is_active, input_type, input_label, input_placeholder, tiers, requires_redeem_code } = req.body;
     
     await connection.beginTransaction();
 
     await connection.query(
-      `UPDATE payout_methods SET name=?, description=?, icon_url=?, min_coins=?, conversion_rate=?, processing_time=?, is_active=?, input_type=?, input_label=?, input_placeholder=? WHERE id=?`,
-      [name, description, icon_url, parseInt(min_coins || 0), parseFloat(conversion_rate || 0), processing_time, is_active ? 1 : 0, input_type || 'text', input_label || 'Details', input_placeholder || 'Enter details', methodId]
+      `UPDATE payout_methods SET name=?, description=?, icon_url=?, min_coins=?, conversion_rate=?, processing_time=?, is_active=?, input_type=?, input_label=?, input_placeholder=?, requires_redeem_code=? WHERE id=?`,
+      [name, description, icon_url, parseInt(min_coins || 0), parseFloat(conversion_rate || 0), processing_time, is_active ? 1 : 0, input_type || 'text', input_label || 'Details', input_placeholder || 'Enter details', requires_redeem_code ? 1 : 0, methodId]
     );
 
     // Sync payout tiers atomically

@@ -307,7 +307,7 @@ export const getRedeems = async (req, res) => {
 
     // Fetch withdrawals with payout method details
     const [rows] = await pool.query(
-      `SELECT w.id, w.amount, w.amount_coins, w.amount_currency, w.details, w.status, w.created_at,
+      `SELECT w.id, w.amount, w.amount_coins, w.amount_currency, w.details, w.status, w.created_at, w.redeem_code,
               pm.name as method_name, pm.icon_url as method_logo, w.method_id
        FROM withdrawals w
        LEFT JOIN payout_methods pm ON w.method_id = pm.id
@@ -339,7 +339,8 @@ export const getRedeems = async (req, res) => {
         details: details,
         status: r.status,
         statusText: r.status ? (r.status.charAt(0) + r.status.slice(1).toLowerCase()) : 'Pending',
-        date: r.created_at
+        date: r.created_at,
+        redeemCode: r.redeem_code || null
       };
     });
 

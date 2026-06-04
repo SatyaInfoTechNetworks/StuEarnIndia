@@ -456,7 +456,7 @@ export const likeOffer = async (req, res) => {
     // Ensure offer_likes table exists
     await pool.query(
       `CREATE TABLE IF NOT EXISTS offer_likes (
-        id INT AUTO_INCREMENT PRIMARY KEY,
+        id CHAR(36) PRIMARY KEY,
         user_id CHAR(36) NOT NULL,
         offer_id CHAR(36) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -475,7 +475,8 @@ export const likeOffer = async (req, res) => {
     }
 
     // 2. Log like and increment count
-    await pool.query('INSERT INTO offer_likes (user_id, offer_id) VALUES (?, ?)', [userId, offerId]);
+    const likeId = uuidv4();
+    await pool.query('INSERT INTO offer_likes (id, user_id, offer_id) VALUES (?, ?, ?)', [likeId, userId, offerId]);
     await pool.query('UPDATE offers SET likes_count = likes_count + 1 WHERE id = ?', [offerId]);
 
     res.json({ success: true, message: 'Offer liked successfully' });

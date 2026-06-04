@@ -20,7 +20,7 @@ const TRIGGER_OPTIONS = [
     value: 'coin_threshold',
     label: 'Coin Threshold',
     icon: <TrendingUp size={16} />,
-    description: 'Referrer gets bonus when the referred friend's total earnings reach X coins.',
+    description: "Referrer gets bonus when the referred friend's total earnings reach X coins.",
     color: '#f59e0b'
   }
 ];

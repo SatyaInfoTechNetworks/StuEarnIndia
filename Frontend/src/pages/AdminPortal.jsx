@@ -64,6 +64,16 @@ export default function AdminPortal() {
     balance: ''
   });
 
+  const [editFingerprintModal, setEditFingerprintModal] = useState(false);
+  const [editFingerprintForm, setEditFingerprintForm] = useState({
+    android_id: '',
+    device_model: '',
+    os_version: '',
+    app_version: '',
+    ip_address: '',
+    is_emulator: false
+  });
+
   // Offer manager states
   const [offersList, setOffersList] = useState([]);
   const [editingOffer, setEditingOffer] = useState(null);
@@ -688,6 +698,40 @@ export default function AdminPortal() {
       showNotice('error', 'Network error while clearing fingerprints');
     } finally {
       setIsDeletingFingerprints(false);
+    }
+  };
+  const triggerEditFingerprint = (user) => {
+    setEditFingerprintForm({
+      android_id: user.android_id || '',
+      device_model: user.device_fingerprint?.device_model || '',
+      os_version: user.device_fingerprint?.os_version || '',
+      app_version: user.device_fingerprint?.app_version || '',
+      ip_address: user.device_fingerprint?.ip_address || '',
+      is_emulator: user.device_fingerprint?.is_emulator ? true : false
+    });
+    setEditFingerprintModal(true);
+  };
+
+  const handleEditFingerprintSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(editFingerprintForm)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotice('success', 'Device fingerprint updated successfully');
+        setEditFingerprintModal(false);
+        await viewUserLedger(selectedUser);
+        fetchUsers();
+      } else {
+        showNotice('error', data.message);
+      }
+    } catch (err) {
+      showNotice('error', 'Failed to update device fingerprint');
     }
   };
 
@@ -2341,13 +2385,21 @@ export default function AdminPortal() {
 
                     <div className="d-flex justify-content-between align-items-center mb-3">
                       <h6 className="font-weight-bold mb-0"><i className="fas fa-microchip text-warning mr-1"></i> Device & Compliance Metadata</h6>
-                      <button 
-                        className="btn btn-xs btn-danger px-3 rounded-pill" 
-                        onClick={handleDeleteFingerprints}
-                        disabled={isDeletingFingerprints}
-                      >
-                        <i className="fas fa-trash-alt mr-1"></i> {isDeletingFingerprints ? 'Clearing...' : 'Clear Device Fingerprints'}
-                      </button>
+                      <div>
+                        <button 
+                          className="btn btn-xs btn-outline-primary px-3 rounded-pill mr-2" 
+                          onClick={() => triggerEditFingerprint(selectedUser)}
+                        >
+                          <i className="fas fa-edit mr-1"></i> Edit Fingerprint
+                        </button>
+                        <button 
+                          className="btn btn-xs btn-danger px-3 rounded-pill" 
+                          onClick={handleDeleteFingerprints}
+                          disabled={isDeletingFingerprints}
+                        >
+                          <i className="fas fa-trash-alt mr-1"></i> {isDeletingFingerprints ? 'Clearing...' : 'Clear Device Fingerprints'}
+                        </button>
+                      </div>
                     </div>
                     <div className="p-3 bg-light rounded-lg border mb-4">
                       <div className="row">
@@ -2612,6 +2664,90 @@ export default function AdminPortal() {
                   <div className="d-flex mt-4">
                     <button type="submit" className="btn btn-danger flex-fill rounded-pill py-2 mr-2">Confirm Reject</button>
                     <button type="button" className="btn btn-outline-secondary flex-fill rounded-pill py-2" onClick={() => { setRejectProofModal(false); setRejectProofClickId(null); setRejectProofReason(''); }}>Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Device Fingerprint Modal */}
+      {editFingerprintModal && selectedUser && (
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)', zIndex: 10001 }} role="dialog">
+          <div className="modal-dialog modal-dialog-centered modal-md" role="document">
+            <div className="modal-content rounded-lg border-0 shadow">
+              <div className="modal-header border-bottom-0">
+                <h5 className="modal-title font-weight-bold">Edit Device Fingerprint</h5>
+                <button type="button" className="close" onClick={() => setEditFingerprintModal(false)}>&times;</button>
+              </div>
+              <div className="modal-body pt-0">
+                <form onSubmit={handleEditFingerprintSubmit}>
+                  <div className="form-group mb-3">
+                    <label className="text-muted text-xs font-weight-bold mb-1">Android Device ID</label>
+                    <input 
+                      type="text" 
+                      className="form-control font-mono" 
+                      value={editFingerprintForm.android_id} 
+                      onChange={e => setEditFingerprintForm({ ...editFingerprintForm, android_id: e.target.value })} 
+                      placeholder="e.g. 3bb9a18dd5"
+                    />
+                  </div>
+                  <div className="form-group mb-3">
+                    <label className="text-muted text-xs font-weight-bold mb-1">Device Model</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={editFingerprintForm.device_model} 
+                      onChange={e => setEditFingerprintForm({ ...editFingerprintForm, device_model: e.target.value })} 
+                      placeholder="e.g. Pixel 6 Pro"
+                    />
+                  </div>
+                  <div className="form-group mb-3">
+                    <label className="text-muted text-xs font-weight-bold mb-1">OS Version</label>
+                    <input 
+                      type="text" 
+                      className="form-control font-mono" 
+                      value={editFingerprintForm.os_version} 
+                      onChange={e => setEditFingerprintForm({ ...editFingerprintForm, os_version: e.target.value })} 
+                      placeholder="e.g. Android 13 (API 33)"
+                    />
+                  </div>
+                  <div className="form-group mb-3">
+                    <label className="text-muted text-xs font-weight-bold mb-1">App Client Version</label>
+                    <input 
+                      type="text" 
+                      className="form-control font-mono" 
+                      value={editFingerprintForm.app_version} 
+                      onChange={e => setEditFingerprintForm({ ...editFingerprintForm, app_version: e.target.value })} 
+                      placeholder="e.g. 1.0.4"
+                    />
+                  </div>
+                  <div className="form-group mb-3">
+                    <label className="text-muted text-xs font-weight-bold mb-1">Last IP Address</label>
+                    <input 
+                      type="text" 
+                      className="form-control font-mono" 
+                      value={editFingerprintForm.ip_address} 
+                      onChange={e => setEditFingerprintForm({ ...editFingerprintForm, ip_address: e.target.value })} 
+                      placeholder="e.g. 192.168.1.1"
+                    />
+                  </div>
+                  <div className="form-group mb-3">
+                    <div className="custom-control custom-checkbox mt-2">
+                      <input 
+                        type="checkbox" 
+                        className="custom-control-input" 
+                        id="edit_fp_is_emulator" 
+                        checked={editFingerprintForm.is_emulator} 
+                        onChange={e => setEditFingerprintForm({ ...editFingerprintForm, is_emulator: e.target.checked })} 
+                      />
+                      <label className="custom-control-label text-xs font-weight-bold" htmlFor="edit_fp_is_emulator">Mark Environment as Virtual/Emulator Environment</label>
+                    </div>
+                  </div>
+                  <div className="d-flex mt-4">
+                    <button type="submit" className="btn btn-primary flex-fill rounded-pill py-2 mr-2">Save Fingerprint</button>
+                    <button type="button" className="btn btn-outline-secondary flex-fill rounded-pill py-2" onClick={() => setEditFingerprintModal(false)}>Cancel</button>
                   </div>
                 </form>
               </div>

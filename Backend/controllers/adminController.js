@@ -274,9 +274,7 @@ export const updateUser = async (req, res) => {
       }
     } else {
       referredByUuid = user.referred_by;
-    }
-
-    // Update user row
+    }    // Update user row
     await connection.query(
       `UPDATE users SET 
         name = ?, 
@@ -296,12 +294,12 @@ export const updateUser = async (req, res) => {
       [
         name !== undefined ? name : user.name,
         email !== undefined ? email : user.email,
-        phone_number !== undefined ? phone_number : user.phone_number,
-        location !== undefined ? location : user.location,
+        phone_number !== undefined ? (phone_number === '' ? null : phone_number) : user.phone_number,
+        location !== undefined ? (location === '' ? null : location) : user.location,
         referral_code !== undefined ? referral_code : user.referral_code,
         balance !== undefined ? parseFloat(balance) : user.balance,
-        android_id !== undefined ? android_id : user.android_id,
-        fcm_token !== undefined ? fcm_token : user.fcm_token,
+        android_id !== undefined ? (android_id === '' ? null : android_id) : user.android_id,
+        fcm_token !== undefined ? (fcm_token === '' ? null : fcm_token) : user.fcm_token,
         daily_spins_count !== undefined ? parseInt(daily_spins_count || 0) : user.daily_spins_count,
         current_streak !== undefined ? parseInt(current_streak || 0) : user.current_streak,
         referredByUuid,
@@ -315,31 +313,37 @@ export const updateUser = async (req, res) => {
     if (android_id !== undefined || device_model !== undefined || os_version !== undefined || app_version !== undefined || ip_address !== undefined || is_emulator !== undefined) {
       const [existingDf] = await connection.query('SELECT * FROM device_fingerprints WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId]);
       
-      const dfAndroidId = android_id !== undefined ? android_id : (existingDf[0] ? existingDf[0].android_id : (android_id || 'REDACTED'));
-      const dfModel = device_model !== undefined ? device_model : (existingDf[0] ? existingDf[0].device_model : null);
-      const dfOs = os_version !== undefined ? os_version : (existingDf[0] ? existingDf[0].os_version : null);
-      const dfApp = app_version !== undefined ? app_version : (existingDf[0] ? existingDf[0].app_version : null);
-      const dfIp = ip_address !== undefined ? ip_address : (existingDf[0] ? existingDf[0].ip_address : '127.0.0.1');
-      const dfEmulator = is_emulator !== undefined ? (is_emulator ? 1 : 0) : (existingDf[0] ? existingDf[0].is_emulator : 0);
-
-      if (existingDf.length > 0) {
-        await connection.query(
-          `UPDATE device_fingerprints SET 
-            android_id = ?, 
-            device_model = ?, 
-            os_version = ?, 
-            app_version = ?, 
-            ip_address = ?, 
-            is_emulator = ? 
-           WHERE id = ?`,
-          [dfAndroidId, dfModel, dfOs, dfApp, dfIp, dfEmulator, existingDf[0].id]
-        );
+      const dfAndroidId = android_id !== undefined ? (android_id === '' ? null : android_id) : (existingDf[0] ? existingDf[0].android_id : null);
+      
+      if (!dfAndroidId) {
+        // If android_id is empty/null, delete device fingerprints for this user
+        await connection.query('DELETE FROM device_fingerprints WHERE user_id = ?', [userId]);
       } else {
-        await connection.query(
-          `INSERT INTO device_fingerprints (id, user_id, android_id, device_model, os_version, app_version, ip_address, is_emulator, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [uuidv4(), userId, dfAndroidId, dfModel, dfOs, dfApp, dfIp, dfEmulator]
-        );
+        const dfModel = device_model !== undefined ? device_model : (existingDf[0] ? existingDf[0].device_model : null);
+        const dfOs = os_version !== undefined ? os_version : (existingDf[0] ? existingDf[0].os_version : null);
+        const dfApp = app_version !== undefined ? app_version : (existingDf[0] ? existingDf[0].app_version : null);
+        const dfIp = ip_address !== undefined ? ip_address : (existingDf[0] ? existingDf[0].ip_address : '127.0.0.1');
+        const dfEmulator = is_emulator !== undefined ? (is_emulator ? 1 : 0) : (existingDf[0] ? existingDf[0].is_emulator : 0);
+
+        if (existingDf.length > 0) {
+          await connection.query(
+            `UPDATE device_fingerprints SET 
+              android_id = ?, 
+              device_model = ?, 
+              os_version = ?, 
+              app_version = ?, 
+              ip_address = ?, 
+              is_emulator = ? 
+             WHERE id = ?`,
+            [dfAndroidId, dfModel, dfOs, dfApp, dfIp, dfEmulator, existingDf[0].id]
+          );
+        } else {
+          await connection.query(
+            `INSERT INTO device_fingerprints (id, user_id, android_id, device_model, os_version, app_version, ip_address, is_emulator, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [uuidv4(), userId, dfAndroidId, dfModel, dfOs, dfApp, dfIp, dfEmulator]
+          );
+        }
       }
     }
 

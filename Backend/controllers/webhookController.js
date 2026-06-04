@@ -127,7 +127,8 @@ async function sendBeautifulTelegramAlert(emoji, title, user, amount, details = 
 export const handlePostback = async (req, res) => {
   const connection = await pool.getConnection();
   try {
-    const { click_id, tier_title } = req.body || req.query;
+    const click_id = req.query.click_id || req.body.click_id;
+    const tier_title = req.query.tier_title || req.body.tier_title;
 
     if (!click_id || !tier_title) {
       return res.status(400).json({ success: false, message: 'Missing click_id or tier_title' });

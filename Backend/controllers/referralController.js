@@ -219,7 +219,15 @@ export const getReferralSummary = async (req, res) => {
 export const getReferralConfig = async (req, res) => {
   try {
     const [settingsRows] = await pool.query('SELECT * FROM referral_settings LIMIT 1');
-    let settings = { bonus_coins: 1000, commission_percent: 10, offers_required: 2, description_text: "Refer friends to earn more!" };
+    let settings = {
+      bonus_coins: 1000,
+      commission_percent: 10,
+      offers_required: 2,
+      description_text: "Refer friends to earn more!",
+      reward_trigger: 'offers_completed',
+      coin_threshold: 500,
+      referrer_coins: 100
+    };
 
     if (settingsRows.length === 0) {
       await pool.query(
@@ -230,7 +238,10 @@ export const getReferralConfig = async (req, res) => {
         bonus_coins: Math.round(parseFloat(settingsRows[0].bonus_coins)),
         commission_percent: parseFloat(settingsRows[0].commission_percent),
         offers_required: parseInt(settingsRows[0].offers_required),
-        description_text: settingsRows[0].description_text || "Refer friends to earn more!"
+        description_text: settingsRows[0].description_text || "Refer friends to earn more!",
+        reward_trigger: settingsRows[0].reward_trigger || 'offers_completed',
+        coin_threshold: parseFloat(settingsRows[0].coin_threshold || 500),
+        referrer_coins: parseFloat(settingsRows[0].referrer_coins || 100)
       };
     }
 

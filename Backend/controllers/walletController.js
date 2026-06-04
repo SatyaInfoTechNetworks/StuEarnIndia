@@ -1,5 +1,6 @@
 import pool from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
+import { sendNotification } from '../utils/notifications.js';
 
 // 1. Get Wallet Balance and summary stats
 export const getWalletBalance = async (req, res) => {
@@ -547,6 +548,11 @@ export const requestWithdrawal = async (req, res) => {
 
     await connection.commit();
 
+    // H. FIRE FIRST_WITHDRAWAL REFERRAL TRIGGER (async, non-blocking)
+    processFirstWithdrawalReferral(userId).catch(err =>
+      console.error('First withdrawal referral error:', err.message)
+    );
+
     res.json({
       success: true,
       message: 'Withdrawal submitted successfully!',
@@ -723,3 +729,108 @@ export const getTransactions = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+// =========================================================================
+// HELPER: PROCESS FIRST_WITHDRAWAL REFERRAL TRIGGER
+// Called when a referred user submits their first withdrawal
+// =========================================================================
+async function processFirstWithdrawalReferral(referredUserId) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Check reward_trigger setting
+    const [settingsRows] = await connection.query('SELECT * FROM referral_settings LIMIT 1');
+    const settings = settingsRows.length > 0 ? settingsRows[0] : {};
+    const trigger = settings.reward_trigger || 'offers_completed';
+
+    if (trigger !== 'first_withdrawal') {
+      await connection.rollback();
+      return;
+    }
+
+    // Get referred_by from user
+    const [userRows] = await connection.query('SELECT referred_by FROM users WHERE id = ? LIMIT 1', [referredUserId]);
+    if (userRows.length === 0 || !userRows[0].referred_by) {
+      await connection.rollback();
+      return;
+    }
+    const referrerCode = userRows[0].referred_by;
+
+    // Find referrer
+    const [referrerRows] = await connection.query(
+      'SELECT id, name FROM users WHERE LOWER(referral_code) = LOWER(?) OR id = ? OR uid = ? LIMIT 1',
+      [referrerCode.trim(), referrerCode.trim(), referrerCode.trim()]
+    );
+    if (referrerRows.length === 0) {
+      await connection.rollback();
+      return;
+    }
+    const referrerId = referrerRows[0].id;
+
+    // Check if referred user has already made a withdrawal before (excluding this one)
+    const [prevWithdrawals] = await connection.query(
+      "SELECT COUNT(*) as count FROM withdrawals WHERE user_id = ? AND status != 'REJECTED'",
+      [referredUserId]
+    );
+    // If count > 1, this isn't their first — skip (count includes the one just submitted)
+    if (parseInt(prevWithdrawals[0].count) > 1) {
+      await connection.rollback();
+      return;
+    }
+
+    // Check referral_uses record — only reward if PENDING
+    const [useRows] = await connection.query(
+      'SELECT * FROM referral_uses WHERE referred_user_id = ? LIMIT 1 FOR UPDATE',
+      [referredUserId]
+    );
+
+    let refUse = null;
+    if (useRows.length === 0) {
+      const useId = uuidv4();
+      await connection.query(
+        `INSERT INTO referral_uses (id, referrer_id, referred_user_id, referral_code, status, offers_completed_count) 
+         VALUES (?, ?, ?, ?, 'PENDING', 0)`,
+        [useId, referrerId, referredUserId, referrerCode]
+      );
+      const [newUseRows] = await connection.query('SELECT * FROM referral_uses WHERE id = ? LIMIT 1', [useId]);
+      refUse = newUseRows[0];
+    } else {
+      refUse = useRows[0];
+    }
+
+    if (refUse.status !== 'PENDING') {
+      await connection.rollback();
+      return; // Already rewarded
+    }
+
+    // Mark as rewarded
+    await connection.query(
+      'UPDATE referral_uses SET status = "REWARDED", rewarded_at = NOW() WHERE id = ?',
+      [refUse.id]
+    );
+
+    const bonusCoins = parseFloat(settings.referrer_coins || settings.bonus_coins || 100);
+    await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [bonusCoins, referrerId]);
+
+    const transId = uuidv4();
+    await connection.query(
+      `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
+       VALUES (?, ?, ?, 'CREDIT', 'REFERRAL_BONUS', ?, ?, NOW())`,
+      [transId, referrerId, bonusCoins, 'Referral Bonus (Friend made their first withdrawal)', refUse.id]
+    );
+
+    await sendNotification(
+      referrerId,
+      'Referral Bonus Claimed! 🎉',
+      `You received ${bonusCoins.toFixed(0)} coins because your referred friend made their first withdrawal!`
+    );
+
+    await connection.commit();
+  } catch (err) {
+    await connection.rollback();
+    console.error('❌ Error in processFirstWithdrawalReferral:', err.message);
+  } finally {
+    connection.release();
+  }
+}

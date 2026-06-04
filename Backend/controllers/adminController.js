@@ -1056,7 +1056,16 @@ export const updatePayoutMethod = async (req, res) => {
 export const getReferralSettings = async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM referral_settings LIMIT 1');
-    res.json({ success: true, settings: rows[0] || { bonus_coins: 10, commission_percent: 10, offers_required: 2 } });
+    const defaults = {
+      bonus_coins: 10,
+      commission_percent: 10,
+      offers_required: 2,
+      description_text: '',
+      reward_trigger: 'offers_completed',
+      coin_threshold: 500,
+      referrer_coins: 100
+    };
+    res.json({ success: true, settings: rows[0] ? { ...defaults, ...rows[0] } : defaults });
   } catch (error) {
     console.error('Get Referral Settings Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -1065,18 +1074,52 @@ export const getReferralSettings = async (req, res) => {
 
 export const updateReferralSettings = async (req, res) => {
   try {
-    const { bonus_coins, commission_percent, offers_required, description_text } = req.body;
+    const {
+      bonus_coins,
+      commission_percent,
+      offers_required,
+      description_text,
+      reward_trigger,
+      coin_threshold,
+      referrer_coins
+    } = req.body;
+
+    const validTriggers = ['offers_completed', 'first_withdrawal', 'coin_threshold'];
+    const trigger = validTriggers.includes(reward_trigger) ? reward_trigger : 'offers_completed';
+
     const [existing] = await pool.query('SELECT id FROM referral_settings LIMIT 1');
 
     if (existing.length > 0) {
       await pool.query(
-        'UPDATE referral_settings SET bonus_coins=?, commission_percent=?, offers_required=?, description_text=? WHERE id=?',
-        [parseFloat(bonus_coins || 10), parseInt(commission_percent || 10), parseInt(offers_required || 2), description_text || '', existing[0].id]
+        `UPDATE referral_settings 
+         SET bonus_coins=?, commission_percent=?, offers_required=?, description_text=?,
+             reward_trigger=?, coin_threshold=?, referrer_coins=?
+         WHERE id=?`,
+        [
+          parseFloat(bonus_coins || 10),
+          parseInt(commission_percent || 10),
+          parseInt(offers_required || 2),
+          description_text || '',
+          trigger,
+          parseFloat(coin_threshold || 500),
+          parseFloat(referrer_coins || 100),
+          existing[0].id
+        ]
       );
     } else {
       await pool.query(
-        'INSERT INTO referral_settings (bonus_coins, commission_percent, offers_required, description_text) VALUES (?, ?, ?, ?)',
-        [parseFloat(bonus_coins || 10), parseInt(commission_percent || 10), parseInt(offers_required || 2), description_text || '']
+        `INSERT INTO referral_settings 
+         (bonus_coins, commission_percent, offers_required, description_text, reward_trigger, coin_threshold, referrer_coins) 
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          parseFloat(bonus_coins || 10),
+          parseInt(commission_percent || 10),
+          parseInt(offers_required || 2),
+          description_text || '',
+          trigger,
+          parseFloat(coin_threshold || 500),
+          parseFloat(referrer_coins || 100)
+        ]
       );
     }
     res.json({ success: true, message: 'Referral settings updated' });

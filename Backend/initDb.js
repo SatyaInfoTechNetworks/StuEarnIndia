@@ -366,8 +366,11 @@ export async function initializeDatabase() {
     await addColumnIfNotExists(connection, 'notifications', 'target_topic', 'VARCHAR(50) NULL');
     await addColumnIfNotExists(connection, 'notifications', 'status', 'VARCHAR(20) DEFAULT "sent"');
 
-    // 22. referral_settings: ensure description_text column exists
+    // 22. referral_settings: ensure all columns exist
     await addColumnIfNotExists(connection, 'referral_settings', 'description_text', 'TEXT NULL');
+    await addColumnIfNotExists(connection, 'referral_settings', 'reward_trigger', "ENUM('offers_completed','first_withdrawal','coin_threshold') DEFAULT 'offers_completed'");
+    await addColumnIfNotExists(connection, 'referral_settings', 'coin_threshold', 'DECIMAL(10,2) DEFAULT 500.00');
+    await addColumnIfNotExists(connection, 'referral_settings', 'referrer_coins', 'DECIMAL(10,2) DEFAULT 100.00');
 
     // 25. visit_earn_tasks Table
     await connection.query(`

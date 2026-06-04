@@ -1305,19 +1305,22 @@ export const handleOfferCompleted = async (req, res) => {
 };
 
 // =========================================================================
+// =========================================================================
 // HELPER: PROCESS REFERRAL REWARDS (Ledger Safe)
+// Called on every offer/task completion postback
 // =========================================================================
 async function processReferralRewards(referredUserId, rewardAmount, offerId) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
-    const [userRows] = await connection.query('SELECT referred_by FROM users WHERE id = ? LIMIT 1', [referredUserId]);
+    const [userRows] = await connection.query('SELECT referred_by, balance FROM users WHERE id = ? LIMIT 1', [referredUserId]);
     if (userRows.length === 0 || !userRows[0].referred_by) {
       await connection.rollback();
       return;
     }
     const referrerCode = userRows[0].referred_by;
+    const userBalance = parseFloat(userRows[0].balance || 0);
 
     const [referrerRows] = await connection.query(
       'SELECT id, name FROM users WHERE LOWER(referral_code) = LOWER(?) OR user_id = ? OR id = ? OR uid = ? LIMIT 1',
@@ -1332,8 +1335,32 @@ async function processReferralRewards(referredUserId, rewardAmount, offerId) {
     const [settingsRows] = await connection.query('SELECT * FROM referral_settings LIMIT 1');
     const settings = settingsRows.length > 0 
       ? settingsRows[0] 
-      : { bonus_coins: 10.00, commission_percent: 10, offers_required: 2 };
+      : { bonus_coins: 10.00, commission_percent: 10, offers_required: 2, reward_trigger: 'offers_completed', coin_threshold: 500, referrer_coins: 100 };
 
+    const trigger = settings.reward_trigger || 'offers_completed';
+
+    // If trigger is first_withdrawal, milestone bonus is handled in walletController — skip here
+    if (trigger === 'first_withdrawal') {
+      // Still give commission % on every offer completion if configured
+      const commPercent = parseInt(settings.commission_percent);
+      if (commPercent > 0 && rewardAmount > 0) {
+        const commissionAmount = rewardAmount * (commPercent / 100);
+        if (commissionAmount > 0) {
+          await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [commissionAmount, referrerId]);
+          const transId = uuidv4();
+          await connection.query(
+            `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
+             VALUES (?, ?, ?, 'CREDIT', 'REFERRAL', ?, ?, NOW())`,
+            [transId, referrerId, commissionAmount, `Commission (${commPercent}% of friend task reward)`, offerId]
+          );
+          await sendNotification(referrerId, "Referral Commission Earned!", `You earned ${commissionAmount.toFixed(1)} coins commission from your referred friend's task completion!`);
+        }
+      }
+      await connection.commit();
+      return;
+    }
+
+    // Ensure referral_uses record exists and track progress
     const [useRows] = await connection.query(
       'SELECT * FROM referral_uses WHERE referred_user_id = ? LIMIT 1 FOR UPDATE',
       [referredUserId]
@@ -1347,7 +1374,6 @@ async function processReferralRewards(referredUserId, rewardAmount, offerId) {
          VALUES (?, ?, ?, ?, 'PENDING', 1)`,
         [useId, referrerId, referredUserId, referrerCode]
       );
-      
       const [newUseRows] = await connection.query('SELECT * FROM referral_uses WHERE id = ? LIMIT 1', [useId]);
       refUse = newUseRows[0];
     } else {
@@ -1359,56 +1385,68 @@ async function processReferralRewards(referredUserId, rewardAmount, offerId) {
       refUse.offers_completed_count += 1;
     }
 
-    const threshold = parseInt(settings.offers_required);
-    if (refUse.status === 'PENDING' && refUse.offers_completed_count >= threshold) {
-      await connection.query(
-        'UPDATE referral_uses SET status = "COMPLETED", rewarded_at = NOW() WHERE id = ?',
-        [refUse.id]
-      );
+    // Only fire milestone reward if still PENDING
+    if (refUse.status === 'PENDING') {
+      let milestoneReached = false;
+      let milestoneDescription = '';
 
-      const bonusCoins = parseFloat(settings.bonus_coins);
+      if (trigger === 'offers_completed') {
+        const threshold = parseInt(settings.offers_required);
+        if (refUse.offers_completed_count >= threshold) {
+          milestoneReached = true;
+          milestoneDescription = `Referral Milestone Bonus (Friend completed ${threshold} tasks)`;
+        }
+      } else if (trigger === 'coin_threshold') {
+        // Recalculate total earnings of the referred user
+        const [earnRows] = await connection.query(
+          "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE user_id = ? AND type = 'CREDIT'",
+          [referredUserId]
+        );
+        const totalEarned = parseFloat(earnRows[0].total || 0);
+        const threshold = parseFloat(settings.coin_threshold || 500);
+        if (totalEarned >= threshold) {
+          milestoneReached = true;
+          milestoneDescription = `Referral Milestone Bonus (Friend earned ${threshold} coins)`;
+        }
+      }
 
-      await connection.query(
-        'UPDATE users SET balance = balance + ? WHERE id = ?',
-        [bonusCoins, referrerId]
-      );
-
-      const transId = uuidv4();
-      await connection.query(
-        `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
-         VALUES (?, ?, ?, 'CREDIT', 'REFERRAL_BONUS', ?, ?, NOW())`,
-        [transId, referrerId, bonusCoins, `Referral Milestone Bonus (Friend completed ${threshold} tasks)`, refUse.id]
-      );
-
-      await sendNotification(
-        referrerId,
-        "Referral Bonus Claimed!",
-        `You received ${bonusCoins.toFixed(0)} coins because your referred friend completed ${threshold} tasks!`
-      );
-    }
-
-    const commPercent = parseInt(settings.commission_percent);
-    if (commPercent > 0) {
-      const commissionAmount = rewardAmount * (commPercent / 100);
-
-      if (commissionAmount > 0) {
+      if (milestoneReached) {
         await connection.query(
-          'UPDATE users SET balance = balance + ? WHERE id = ?',
-          [commissionAmount, referrerId]
+          'UPDATE referral_uses SET status = "REWARDED", rewarded_at = NOW() WHERE id = ?',
+          [refUse.id]
         );
 
+        const bonusCoins = parseFloat(settings.referrer_coins || settings.bonus_coins || 100);
+        await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [bonusCoins, referrerId]);
+
+        const transId = uuidv4();
+        await connection.query(
+          `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
+           VALUES (?, ?, ?, 'CREDIT', 'REFERRAL_BONUS', ?, ?, NOW())`,
+          [transId, referrerId, bonusCoins, milestoneDescription, refUse.id]
+        );
+
+        await sendNotification(
+          referrerId,
+          "Referral Bonus Claimed!",
+          `You received ${bonusCoins.toFixed(0)} coins because ${milestoneDescription.toLowerCase()}!`
+        );
+      }
+    }
+
+    // Commission % on every offer completion regardless of trigger type
+    const commPercent = parseInt(settings.commission_percent);
+    if (commPercent > 0 && rewardAmount > 0) {
+      const commissionAmount = rewardAmount * (commPercent / 100);
+      if (commissionAmount > 0) {
+        await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [commissionAmount, referrerId]);
         const transId = uuidv4();
         await connection.query(
           `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
            VALUES (?, ?, ?, 'CREDIT', 'REFERRAL', ?, ?, NOW())`,
           [transId, referrerId, commissionAmount, `Commission (${commPercent}% of friend task reward)`, offerId]
         );
-
-        await sendNotification(
-          referrerId,
-          "Referral Commission Earned!",
-          `You earned ${commissionAmount.toFixed(1)} coins commission from your referred friend's task completion!`
-        );
+        await sendNotification(referrerId, "Referral Commission Earned!", `You earned ${commissionAmount.toFixed(1)} coins commission from your referred friend's task completion!`);
       }
     }
 
@@ -1420,6 +1458,7 @@ async function processReferralRewards(referredUserId, rewardAmount, offerId) {
     connection.release();
   }
 }
+
 
 // =========================================================================
 // 13. TIMEWALL POSTBACK (GET/POST)

@@ -772,17 +772,23 @@ export const getAppConfig = async (req, res) => {
     const updateUrl = await getConfig('update_url', 'https://play.google.com/store/apps/details?id=com.thinkforgeapps.stuearnindia');
     const updateMessage = await getConfig('update_message', 'A critical update is available!');
     const isMaintenance = await getConfig('is_maintenance', 'false');
+    const maintenanceMessage = await getConfig('maintenance_message', 'App is under maintenance. Please try again later.');
+
+    const configPayload = {
+      latest_version: latestVersion,
+      latest_version_code: parseInt(latestVersionCode),
+      force_update: forceUpdate === 'true',
+      update_url: updateUrl,
+      update_message: updateMessage,
+      is_maintenance: isMaintenance === 'true',
+      maintenance_mode: isMaintenance === 'true' ? "1" : "0",
+      maintenance_message: maintenanceMessage
+    };
 
     res.json({
       success: true,
-      data: {
-        latest_version: latestVersion,
-        latest_version_code: parseInt(latestVersionCode),
-        force_update: forceUpdate === 'true',
-        update_url: updateUrl,
-        update_message: updateMessage,
-        is_maintenance: isMaintenance === 'true'
-      }
+      configs: configPayload, // Mapped to Android GSON AppUpdateResponse model
+      data: configPayload    // Mapped to Web client structure
     });
   } catch (error) {
     console.error('Get App Config Error:', error);

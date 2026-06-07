@@ -44,9 +44,12 @@ export const getRecentEarnings = async (req, res) => {
         t.amount,
         t.source,
         t.created_at as timestamp,
-        t.description
+        t.description,
+        o.icon_url as offer_icon_url
       FROM transactions t
       JOIN users u ON t.user_id = u.id
+      LEFT JOIN user_offer_progress uop ON t.reference_id = uop.click_id AND t.source IN ('OFFER', 'OFFLINE_OFFER')
+      LEFT JOIN offers o ON uop.offer_id = o.id
       WHERE t.type = 'CREDIT' 
       AND t.source IN ('OFFER', 'OFFLINE_OFFER', 'PUBSCALE', 'OFFERMARU', 'OPINION_UNIVERSE', 'CPX_RESEARCH', 'GROWDECK', 'ADJUMP', 'REAL_OPINION', 'PLAYTIME', 'POCKETSFULL', 'TIMEWALL')
       ORDER BY t.created_at DESC
@@ -75,8 +78,13 @@ export const getRecentEarnings = async (req, res) => {
       const source = row.source || '';
       const sourceUpper = source.toUpperCase();
       
-      // Look up customized icon from admin config first, then fall back to default assets
-      let iconUrl = earningIcons[sourceUpper] || '';
+      // Prioritize the custom offer logo URL if it is a custom offer completion
+      let iconUrl = '';
+      if ((sourceUpper === 'OFFER' || sourceUpper === 'OFFLINE_OFFER') && row.offer_icon_url) {
+        iconUrl = row.offer_icon_url;
+      } else {
+        iconUrl = earningIcons[sourceUpper] || '';
+      }
 
       if (!iconUrl) {
         // Default icons mapping based on source

@@ -16,21 +16,43 @@ async function getConfig(key, defaultValue) {
 }
 
 // Helper: Send Message to Telegram API
-async function sendTelegramMessage(botToken, chatId, text) {
+async function sendTelegramMessage(botToken, chatId, text, replyMarkup = null) {
   if (!botToken || !chatId) return;
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  try {
+    const payload = {
+      chat_id: chatId,
+      text: text,
+      parse_mode: 'HTML'
+    };
+    if (replyMarkup) {
+      payload.reply_markup = replyMarkup;
+    }
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    console.error('Error sending Telegram message:', error);
+  }
+}
+
+// Helper: Answer Callback Query to stop the loading spinner on Telegram client
+async function answerCallbackQuery(botToken, callbackQueryId, text = '') {
+  if (!botToken || !callbackQueryId) return;
+  const url = `https://api.telegram.org/bot${botToken}/answerCallbackQuery`;
   try {
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: 'HTML'
+        callback_query_id: callbackQueryId,
+        text: text
       })
     });
   } catch (error) {
-    console.error('Error sending Telegram message:', error);
+    console.error('Error answering callback query:', error);
   }
 }
 
@@ -128,6 +150,60 @@ export const handleTelegramWebhook = async (req, res) => {
       return;
     }
 
+    // CASE C: Callback Query (Inline buttons click)
+    if (update.callback_query) {
+      const cb = update.callback_query;
+      const callbackQueryId = cb.id;
+      const tgUserId = cb.from.id;
+      const chatId = cb.message.chat.id;
+      const data = cb.data || '';
+
+      if (data.startsWith('check_join:')) {
+        const token = data.replace('check_join:', '').trim();
+
+        // 1. Answer callback query to stop the loading spinner in user's Telegram client
+        await answerCallbackQuery(botToken, callbackQueryId, 'Checking membership status...');
+
+        // 2. Check if user is member of the channel
+        const isMember = await checkTelegramMembership(botToken, channelHandle, tgUserId);
+
+        if (!isMember) {
+          // Send notification alert popup inside Telegram
+          await answerCallbackQuery(botToken, callbackQueryId, '❌ You haven\'t joined the channel yet!');
+          await sendTelegramMessage(
+            botToken,
+            chatId,
+            `❌ <b>Verification Failed</b>\n\nYou haven't joined the channel yet. Please click the <b>Join Channel</b> button above and join before clicking verify.`
+          );
+          return;
+        }
+
+        // 3. Find verification record in DB
+        const [rows] = await pool.query(
+          'SELECT * FROM telegram_verification WHERE (verify_token = ? OR click_id = ?) AND status = "PENDING" LIMIT 1',
+          [token, token]
+        );
+
+        if (rows.length === 0) {
+          // Check if already verified
+          const [checkUsed] = await pool.query(
+            'SELECT * FROM telegram_verification WHERE (verify_token = ? OR click_id = ?) AND status = "USED" LIMIT 1',
+            [token, token]
+          );
+          if (checkUsed.length > 0) {
+            await sendTelegramMessage(botToken, chatId, '⚠️ <b>Already Verified</b>\n\nYou have already claimed the reward for this task.');
+          } else {
+            await sendTelegramMessage(botToken, chatId, '❌ <b>Invalid or expired verification session.</b>');
+          }
+          return;
+        }
+
+        const record = rows[0];
+        await processTelegramReward(record, String(tgUserId), botToken, chatId);
+      }
+      return;
+    }
+
     // CASE A: User joins/updates membership in the channel
     if (update.chat_member) {
       const cm = update.chat_member;
@@ -164,10 +240,18 @@ export const handleTelegramWebhook = async (req, res) => {
 
         if (!token) {
           const channelClean = channelHandle.replace('@', '');
+          const replyMarkup = {
+            inline_keyboard: [
+              [
+                { text: "📢 Join Channel", url: `https://t.me/${channelClean}` }
+              ]
+            ]
+          };
           await sendTelegramMessage(
             botToken,
             chatId,
-            `<b>Welcome to StuEarn!</b> 🌟\n\nTo verify your task, please click the <b>Join Telegram</b> button inside the StuEarn App.\n\nOfficial Channel: https://t.me/${channelClean}`
+            `<b>Welcome to StuEarn!</b> 🌟\n\nTo verify your task, please click the <b>Join Telegram</b> button inside the StuEarn App.`,
+            replyMarkup
           );
           return;
         }
@@ -226,18 +310,35 @@ export const handleTelegramWebhook = async (req, res) => {
           await processTelegramReward(record, String(tgUserId), botToken, chatId);
         } else {
           const channelClean = channelHandle.replace('@', '');
+          const replyMarkup = {
+            inline_keyboard: [
+              [
+                { text: "📢 Join Channel", url: `https://t.me/${channelClean}` },
+                { text: "✅ I Have Joined", callback_data: `check_join:${token}` }
+              ]
+            ]
+          };
           await sendTelegramMessage(
             botToken,
             chatId,
-            `<b>Welcome to StuEarn Verification!</b> 🚀\n\nTo claim your reward, you must join our official channel:\n👉 https://t.me/${channelClean}\n\n<b>Action Required:</b> Join the channel above. You will be verified and rewarded <b>instantly</b> upon joining!`
+            `<b>Welcome to StuEarn Verification!</b> 🚀\n\nTo claim your reward, you must join our official channel:\n👉 https://t.me/${channelClean}\n\n<b>Action Required:</b> Join the channel above, then click the <b>I Have Joined</b> button below to verify.`,
+            replyMarkup
           );
         }
       } else {
         const channelClean = channelHandle.replace('@', '');
+        const replyMarkup = {
+          inline_keyboard: [
+            [
+              { text: "📢 Open Official Channel", url: `https://t.me/${channelClean}` }
+            ]
+          ]
+        };
         await sendTelegramMessage(
           botToken,
           chatId,
-          `Welcome to StuEarn! 🌟\n\nPlease use the verification link from the StuEarn App to earn rewards.\n\nOfficial Channel: https://t.me/${channelClean}`
+          `Welcome to StuEarn! 🌟\n\nPlease use the verification link from the StuEarn App to earn rewards.`,
+          replyMarkup
         );
       }
     }

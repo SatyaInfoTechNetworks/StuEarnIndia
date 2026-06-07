@@ -573,7 +573,22 @@ export async function initializeDatabase() {
     } catch (idxErr) {
       console.log('⚠️ Index creation info:', idxErr.message);
     }
-
+    // Seed default configurations
+    try {
+      console.log('⚡ Seeding default configurations...');
+      await connection.query(
+        `INSERT INTO app_configs (config_key, config_value, description) 
+         VALUES ('telegram_channel_username', '@SatyainfotechNetworks', 'Telegram channel username for task verification')
+         ON DUPLICATE KEY UPDATE config_value = IF(config_value = '@stuearn' OR config_value = 'stuearn', '@SatyainfotechNetworks', config_value)`
+      );
+      await connection.query(
+        `INSERT INTO app_configs (config_key, config_value, description) 
+         VALUES ('telegram_bot_username', 'sit_verification_bot', 'Telegram bot username for task verification')
+         ON DUPLICATE KEY UPDATE config_value = IF(config_value = 'stuearn_bot', 'sit_verification_bot', config_value)`
+      );
+    } catch (confErr) {
+      console.log('⚠️ Error seeding default configurations:', confErr.message);
+    }
     console.log('✅ All database tables checked/created successfully.');
   } catch (error) {
     console.error('❌ Error initializing database tables:', error);

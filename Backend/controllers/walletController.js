@@ -127,6 +127,8 @@ export const getEarnings = async (req, res) => {
           description = 'Reversed: ' + (r.completion_offer_name || 'Pocketsfull Offer');
         } else if (r.source === 'REFERRAL' || r.source === 'REFERRAL_BONUS') {
           description = 'Referral Bonus';
+        } else if (r.source === 'WELCOME_BONUS') {
+          description = 'Welcome Bonus';
         } else if (r.source === 'COMMISSION') {
           description = 'Offer Commission';
         } else if (r.source === 'LIFAFA_BONUS') {
@@ -162,6 +164,7 @@ export const getEarnings = async (req, res) => {
         'POCKETSFULL_REVERSAL':   'POCKETSFULL',
         // Referral aliases
         'REFERRAL_BONUS':         'REFERRAL',
+        'WELCOME_BONUS':          'WELCOME_BONUS',
         'COMMISSION':             'REFERRAL',
         // Legacy offer alias
         'OFFER':                  'OFFLINE_OFFER',
@@ -241,6 +244,9 @@ export const getEarnings = async (req, res) => {
             iconUrl = 'https://img.icons8.com/color/96/internet.png';
             break;
           // ---- Social / Referral ----
+          case 'WELCOME_BONUS':
+            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            break;
           case 'REFERRAL':
           case 'REFERRAL_BONUS':
           case 'COMMISSION':
@@ -609,6 +615,7 @@ export const getTransactions = async (req, res) => {
         'CPX_RESEARCH_REVERSAL':  'CPX_RESEARCH',
         'POCKETSFULL_REVERSAL':   'POCKETSFULL',
         'REFERRAL_BONUS':         'REFERRAL',
+        'WELCOME_BONUS':          'WELCOME_BONUS',
         'COMMISSION':             'REFERRAL',
         'OFFER':                  'OFFLINE_OFFER',
         'VISIT_EARN':             'OFFLINE_OFFER',
@@ -683,6 +690,9 @@ export const getTransactions = async (req, res) => {
             iconUrl = 'https://img.icons8.com/color/96/internet.png';
             break;
           // ---- Social / Referral ----
+          case 'WELCOME_BONUS':
+            iconUrl = 'https://i.ibb.co/twLPSHST/giftbox-1139982.png';
+            break;
           case 'REFERRAL':
           case 'REFERRAL_BONUS':
           case 'COMMISSION':

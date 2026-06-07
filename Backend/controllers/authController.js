@@ -196,11 +196,15 @@ export const signupUser = async (req, res) => {
     // Generate referral code (Case-insensitive unique code, e.g. uppercase base36)
     const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
+    // Fetch welcome bonus coins from referral_settings (applies to all new users as starting balance)
+    const [settingsRows] = await pool.query('SELECT bonus_coins FROM referral_settings LIMIT 1');
+    const welcomeBonus = settingsRows.length > 0 ? parseFloat(settingsRows[0].bonus_coins || 0) : 0;
+
     try {
       await pool.query(
         `INSERT INTO users 
           (id, uid, user_id, name, email, phone_number, profile_pic, location, referred_by, fcm_token, android_id, referral_code, balance, created_at) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, NOW())`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           newUserId,
           uid,
@@ -213,9 +217,32 @@ export const signupUser = async (req, res) => {
           referrerUuid,
           fcm_token || '',
           android_id || '',
-          referralCode
+          referralCode,
+          welcomeBonus
         ]
       );
+
+      if (welcomeBonus > 0) {
+        const transId = uuidv4();
+        await pool.query(
+          `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
+           VALUES (?, ?, ?, 'CREDIT', 'WELCOME_BONUS', ?, ?, NOW())`,
+          [
+            transId,
+            newUserId,
+            welcomeBonus,
+            'Welcome Bonus',
+            referrerUuid || 'SYSTEM'
+          ]
+        );
+
+        // Send push notification to user
+        sendNotification(
+          newUserId,
+          'Welcome Bonus Claimed! 🎉',
+          `You received a welcome bonus of ${welcomeBonus.toFixed(0)} coins!`
+        ).catch(err => console.error('Failed to send welcome bonus notification:', err.message));
+      }
     } catch (insertErr) {
       if (insertErr.code === 'ER_DUP_ENTRY') {
         console.warn(`[signupUser] Duplicate entry detected during insert for UID ${uid}. Retrying as update flow.`);
@@ -372,42 +399,6 @@ async function handleReferralMapping(referredUserId, referrerCode) {
         'INSERT INTO referral_uses (id, referrer_id, referred_user_id, referral_code, status, offers_completed_count) VALUES (?, ?, ?, ?, "PENDING", 0)',
         [uuidv4(), referrerId, referredUserId, actualReferrerCode]
       );
-
-      // --- WELCOME BONUS CREDITING FOR REFERRED USER ---
-      // Fetch bonus_coins from referral_settings
-      const [settingsRows] = await pool.query('SELECT bonus_coins FROM referral_settings LIMIT 1');
-      const welcomeBonus = settingsRows.length > 0 ? parseFloat(settingsRows[0].bonus_coins || 0) : 0;
-
-      if (welcomeBonus > 0) {
-        // Credit the welcome bonus to referred user
-        await pool.query(
-          'UPDATE users SET balance = balance + ? WHERE id = ?',
-          [welcomeBonus, referredUserId]
-        );
-
-        // Record the CREDIT transaction for the referred user
-        const transId = uuidv4();
-        await pool.query(
-          `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
-           VALUES (?, ?, ?, 'CREDIT', 'REFERRAL_BONUS', ?, ?, NOW())`,
-          [
-            transId,
-            referredUserId,
-            welcomeBonus,
-            'Welcome Bonus (Signed up using referral code)',
-            referrerId
-          ]
-        );
-
-        console.log(`🎁 Welcome bonus of ${welcomeBonus} coins credited to user ${referredUserId} (referred by ${referrerId})`);
-
-        // Send push notification to referred user
-        sendNotification(
-          referredUserId,
-          'Welcome Bonus Claimed! 🎉',
-          `You received a welcome bonus of ${welcomeBonus.toFixed(0)} coins for signing up with a referral code!`
-        ).catch(err => console.error('Failed to send welcome bonus notification:', err.message));
-      }
     }
   } catch (err) {
     console.error('Error in handleReferralMapping:', err.message);

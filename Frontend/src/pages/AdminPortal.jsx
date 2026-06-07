@@ -825,8 +825,8 @@ export default function AdminPortal() {
           const fetched = data.offer;
           // Maps tiers
           const loadedTiers = fetched.tiers ? fetched.tiers.map(t => ({
-            title: t.app_tier_title || t.title,
-            backend_title: t.tier_title || t.title,
+            title: t.title || '',
+            backend_title: t.backend_title || '',
             reward: parseFloat(t.reward || 0),
             steps: typeof t.steps === 'string' ? JSON.parse(t.steps) : (t.steps || []),
             sequence: parseInt(t.sequence || 1)

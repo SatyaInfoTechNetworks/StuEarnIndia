@@ -97,7 +97,7 @@ export const generateTelegramToken = async (req, res) => {
       [verifyId, targetUserId, token]
     );
 
-    const botUsername = await getConfig('telegram_bot_username', 'stuearn_bot');
+    const botUsername = await getConfig('telegram_bot_username', 'sit_verification_bot');
 
     res.json({
       success: true,
@@ -120,8 +120,8 @@ export const handleTelegramWebhook = async (req, res) => {
     const update = req.body;
     if (!update) return;
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const channelHandle = await getConfig('telegram_channel_username', '@stuearn');
+    const botToken = process.env.TELEGRAM_BOT_TOKEN || '8771960138:AAEVH2KyUvsjs5q_sE96JMU1hriKemgQ3jk';
+    const channelHandle = await getConfig('telegram_channel_username', '@SatyainfotechNetworks');
 
     if (!botToken) {
       console.warn('⚠️ Telegram Bot Token is missing in environment variables.');
@@ -173,10 +173,33 @@ export const handleTelegramWebhook = async (req, res) => {
         }
 
         // Look up token or click ID
-        const [rows] = await pool.query(
+        let [rows] = await pool.query(
           'SELECT * FROM telegram_verification WHERE verify_token = ? OR click_id = ? LIMIT 1',
           [token, token]
         );
+
+        if (rows.length === 0) {
+          // If not found in verification table, check if it's a valid click_id from user_offer_progress
+          const [progressRows] = await pool.query(
+            'SELECT * FROM user_offer_progress WHERE click_id = ? LIMIT 1',
+            [token]
+          );
+          if (progressRows.length > 0) {
+            const progress = progressRows[0];
+            const verifyId = uuidv4();
+            // Insert a new verification record linked to this click_id
+            await pool.query(
+              'INSERT INTO telegram_verification (id, user_id, click_id, verify_token, status, created_at) VALUES (?, ?, ?, NULL, "PENDING", NOW())',
+              [verifyId, progress.user_id, token]
+            );
+            // Fetch the newly created record
+            const [newRows] = await pool.query(
+              'SELECT * FROM telegram_verification WHERE id = ? LIMIT 1',
+              [verifyId]
+            );
+            rows = newRows;
+          }
+        }
 
         if (rows.length === 0) {
           await sendTelegramMessage(botToken, chatId, '❌ <b>Invalid verification link/token.</b>');
@@ -244,7 +267,10 @@ async function processTelegramReward(record, tgUserId, botToken, alertChatId = n
       return;
     }
 
-    const rewardAmount = 5.00; // Telegram joining coin reward
+    let rewardAmount = 5.00; // Telegram joining coin reward
+    let isCustomOffer = false;
+    let customOfferTitle = '';
+    let customTierTitle = '';
 
     await connection.beginTransaction();
 
@@ -254,28 +280,121 @@ async function processTelegramReward(record, tgUserId, botToken, alertChatId = n
       [tgUserId, record.id]
     );
 
+    if (record.click_id) {
+      // It's a custom offer! Let's resolve the offer and its tiers
+      const [progressRows] = await connection.query(
+        'SELECT * FROM user_offer_progress WHERE click_id = ? LIMIT 1 FOR UPDATE',
+        [record.click_id]
+      );
+      if (progressRows.length > 0) {
+        const progress = progressRows[0];
+        const { offer_id, user_id } = progress;
+
+        // Fetch offer details
+        const [offerRows] = await connection.query('SELECT title FROM offers WHERE id = ? LIMIT 1', [offer_id]);
+        const offerTitle = offerRows.length > 0 ? offerRows[0].title : 'Offer';
+        customOfferTitle = offerTitle;
+
+        // Fetch all tiers for this offer
+        const [tierRows] = await connection.query(
+          'SELECT * FROM offer_tiers WHERE offer_id = ? ORDER BY sequence ASC',
+          [offer_id]
+        );
+
+        if (tierRows.length > 0) {
+          isCustomOffer = true;
+
+          // Parse completed tiers from progress
+          let completedTiers = [];
+          if (progress.completed_tiers) {
+            try {
+              completedTiers = typeof progress.completed_tiers === 'string' 
+                ? JSON.parse(progress.completed_tiers) 
+                : progress.completed_tiers;
+            } catch (e) {
+              completedTiers = [];
+            }
+          }
+
+          // Find the first tier that has not been completed yet
+          const completedTitles = completedTiers.map(ct => ct.title.toLowerCase().trim());
+          const nextTier = tierRows.find(t => !completedTitles.includes(t.tier_title.toLowerCase().trim())) || tierRows[0];
+
+          rewardAmount = parseFloat(nextTier.reward || 0);
+          customTierTitle = nextTier.app_tier_title || nextTier.tier_title;
+
+          // Mark this tier as completed
+          const alreadyCompleted = completedTiers.some(ct => 
+            ct.title.toLowerCase().trim() === nextTier.tier_title.toLowerCase().trim()
+          );
+
+          if (!alreadyCompleted) {
+            completedTiers.push({
+              title: nextTier.tier_title,
+              reward: rewardAmount,
+              completed_at: new Date().toISOString()
+            });
+
+            const completedTiersJson = JSON.stringify(completedTiers);
+
+            // Check if all tiers are now completed
+            const allTierTitles = tierRows.map(r => r.tier_title.toLowerCase().trim());
+            const updatedCompletedTitles = completedTiers.map(ct => ct.title.toLowerCase().trim());
+            const isAllCompleted = allTierTitles.every(t => updatedCompletedTitles.includes(t));
+            const finalStatus = isAllCompleted ? 'COMPLETED' : 'STARTED';
+
+            // Update user_offer_progress
+            await connection.query(
+              'UPDATE user_offer_progress SET completed_tiers = ?, status = ?, last_updated = NOW() WHERE click_id = ?',
+              [completedTiersJson, finalStatus, record.click_id]
+            );
+          }
+        }
+      }
+    }
+
     if (record.user_id) {
       // Credit user balance
       await connection.query('UPDATE users SET balance = balance + ? WHERE id = ?', [rewardAmount, record.user_id]);
 
       // Add credit transaction record
       const transId = uuidv4();
+      const txSource = isCustomOffer ? 'OFFER' : 'TELEGRAM_JOIN';
+      const txDesc = isCustomOffer 
+        ? `${customOfferTitle} : ${customTierTitle}`
+        : "Joined official Telegram channel reward";
+      const refId = record.click_id || null;
+
       await connection.query(
-        `INSERT INTO transactions (id, user_id, amount, type, source, description, created_at) 
-         VALUES (?, ?, ?, "CREDIT", "TELEGRAM_JOIN", "Joined official Telegram channel reward", NOW())`,
-        [transId, record.user_id, rewardAmount]
+        `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
+         VALUES (?, ?, ?, "CREDIT", ?, ?, ?, NOW())`,
+        [transId, record.user_id, rewardAmount, txSource, txDesc, refId]
       );
     }
 
     await connection.commit();
 
+    // Send push notification if it's a custom offer
+    if (isCustomOffer && record.user_id) {
+      try {
+        const { sendNotification } = await import('../utils/notifications.js');
+        await sendNotification(
+          record.user_id,
+          "Coins Received!",
+          `You earned ${rewardAmount.toFixed(0)} coins for completing ${customTierTitle}.`
+        ).catch(err => console.error('Push Notification Error:', err.message));
+      } catch (err) {
+        console.error('Failed to send push notification:', err.message);
+      }
+    }
+
     // Send congratulatory message to user
     const targetChat = alertChatId || tgUserId;
-    await sendTelegramMessage(
-      botToken,
-      targetChat,
-      '✅ <b>Verification Successful!</b>\n\nYour reward of 5.00 coins has been credited instantly. You can now return to the app.'
-    );
+    const successMsg = isCustomOffer
+      ? `✅ <b>Verification Successful!</b>\n\nYour task <b>${customOfferTitle}</b> has been completed and <b>${rewardAmount.toFixed(2)} coins</b> credited to your wallet.`
+      : `✅ <b>Verification Successful!</b>\n\nYour reward of 5.00 coins has been credited instantly. You can now return to the app.`;
+
+    await sendTelegramMessage(botToken, targetChat, successMsg);
   } catch (error) {
     await connection.rollback();
     console.error('Error processing Telegram reward:', error);

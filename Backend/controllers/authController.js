@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import pool from '../db.js';
 import { generateUniqueUserId } from '../utils/userId.js';
+import { sendNotification } from '../utils/notifications.js';
 
 // Generates legacy token
 function generateLegacyToken(userId) {
@@ -195,25 +196,84 @@ export const signupUser = async (req, res) => {
     // Generate referral code (Case-insensitive unique code, e.g. uppercase base36)
     const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    await pool.query(
-      `INSERT INTO users 
-        (id, uid, user_id, name, email, phone_number, profile_pic, location, referred_by, fcm_token, android_id, referral_code, balance, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, NOW())`,
-      [
-        newUserId,
-        uid,
-        publicUserId,
-        name,
-        email,
-        phone_number || null,
-        profile_pic || '',
-        location || '',
-        referrerUuid,
-        fcm_token || '',
-        android_id || '',
-        referralCode
-      ]
-    );
+    try {
+      await pool.query(
+        `INSERT INTO users 
+          (id, uid, user_id, name, email, phone_number, profile_pic, location, referred_by, fcm_token, android_id, referral_code, balance, created_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, NOW())`,
+        [
+          newUserId,
+          uid,
+          publicUserId,
+          name,
+          email,
+          phone_number || null,
+          profile_pic || '',
+          location || '',
+          referrerUuid,
+          fcm_token || '',
+          android_id || '',
+          referralCode
+        ]
+      );
+    } catch (insertErr) {
+      if (insertErr.code === 'ER_DUP_ENTRY') {
+        console.warn(`[signupUser] Duplicate entry detected during insert for UID ${uid}. Retrying as update flow.`);
+        
+        // 1. Fetch the existing user (which must have been created by the concurrent request)
+        const [retryUserRows] = await pool.query('SELECT * FROM users WHERE uid = ? LIMIT 1', [uid]);
+        if (retryUserRows.length > 0) {
+          const user = retryUserRows[0];
+          
+          // 2. Perform the update just like we do in the exist flow
+          await pool.query(
+            `UPDATE users SET 
+              name = ?, email = ?, phone_number = ?, android_id = ?,
+              referred_by = ?, location = ?, fcm_token = ?
+             WHERE uid = ?`,
+            [
+              name,
+              email,
+              phone_number || user.phone_number,
+              android_id || user.android_id,
+              referrerUuid || user.referred_by,
+              location || user.location,
+              fcm_token || user.fcm_token,
+              uid
+            ]
+          );
+
+          // Record/Update Device Fingerprint
+          if (android_id) {
+            const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+            await pool.query(
+              `INSERT INTO device_fingerprints (id, user_id, android_id, device_model, os_version, ip_address, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, NOW())
+               ON DUPLICATE KEY UPDATE device_model=VALUES(device_model), os_version=VALUES(os_version), ip_address=VALUES(ip_address)`,
+              [uuidv4(), user.id, android_id, device_model || null, os_version || null, ipAddress]
+            ).catch(dfErr => console.error('Failed to log device fingerprint:', dfErr));
+          }
+
+          // Handle referral mapping if referred_by is set
+          if (referred_by) {
+            await handleReferralMapping(user.id, referred_by);
+          }
+
+          const [updatedUser] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [user.id]);
+
+          return res.json({
+            success: true,
+            message: 'User updated successfully (resolved concurrency)',
+            token: generateLegacyToken(user.id),
+            jwt: generateJwtToken({ id: user.id, role: 'user' }),
+            user: updatedUser[0]
+          });
+        }
+      }
+      
+      // If it's not ER_DUP_ENTRY or retry didn't find the user, rethrow
+      throw insertErr;
+    }
 
     // Record Device Fingerprint for New User
     if (android_id) {
@@ -309,9 +369,45 @@ async function handleReferralMapping(referredUserId, referrerCode) {
       );
 
       await pool.query(
-        'INSERT INTO referral_uses (id, referrer_id, referred_user_id, referral_code) VALUES (?, ?, ?, ?)',
+        'INSERT INTO referral_uses (id, referrer_id, referred_user_id, referral_code, status, offers_completed_count) VALUES (?, ?, ?, ?, "PENDING", 0)',
         [uuidv4(), referrerId, referredUserId, actualReferrerCode]
       );
+
+      // --- WELCOME BONUS CREDITING FOR REFERRED USER ---
+      // Fetch bonus_coins from referral_settings
+      const [settingsRows] = await pool.query('SELECT bonus_coins FROM referral_settings LIMIT 1');
+      const welcomeBonus = settingsRows.length > 0 ? parseFloat(settingsRows[0].bonus_coins || 0) : 0;
+
+      if (welcomeBonus > 0) {
+        // Credit the welcome bonus to referred user
+        await pool.query(
+          'UPDATE users SET balance = balance + ? WHERE id = ?',
+          [welcomeBonus, referredUserId]
+        );
+
+        // Record the CREDIT transaction for the referred user
+        const transId = uuidv4();
+        await pool.query(
+          `INSERT INTO transactions (id, user_id, amount, type, source, description, reference_id, created_at) 
+           VALUES (?, ?, ?, 'CREDIT', 'REFERRAL_BONUS', ?, ?, NOW())`,
+          [
+            transId,
+            referredUserId,
+            welcomeBonus,
+            'Welcome Bonus (Signed up using referral code)',
+            referrerId
+          ]
+        );
+
+        console.log(`🎁 Welcome bonus of ${welcomeBonus} coins credited to user ${referredUserId} (referred by ${referrerId})`);
+
+        // Send push notification to referred user
+        sendNotification(
+          referredUserId,
+          'Welcome Bonus Claimed! 🎉',
+          `You received a welcome bonus of ${welcomeBonus.toFixed(0)} coins for signing up with a referral code!`
+        ).catch(err => console.error('Failed to send welcome bonus notification:', err.message));
+      }
     }
   } catch (err) {
     console.error('Error in handleReferralMapping:', err.message);

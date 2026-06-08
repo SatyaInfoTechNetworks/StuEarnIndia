@@ -112,7 +112,7 @@ async function sendBeautifulTelegramAlert(emoji, title, user, amount, details = 
     // 7. Explicit image preview link
     text += `🖼️ <b>Offerwall Image:</b> <a href="${imageUrl}">View Brand Logo</a>\n\n`;
 
-    text += `⚡ <b>Powered by Rewardly</b>\n`;
+    text += `⚡ <b>Powered by StuEarnIndia</b>\n`;
     text += `🕒 <b>System Log Time:</b> <code>${new Date().toISOString()}</code>`;
 
     await sendAdminTelegramAlert(text).catch(err => console.error('[TelegramAlert] Failed:', err.message));
@@ -835,14 +835,46 @@ export const handleOpinionUniverse = async (req, res) => {
 
     // Signature check
     if (signature) {
-      const expectedSig = crypto
-        .createHmac('sha256', OPINION_UNIVERSE_TOKEN)
-        .update(transaction_id)
+      const params = { ...req.query };
+      delete params.SIG;
+      delete params.sig;
+
+      const sortedKeys = Object.keys(params).sort();
+
+      // Try RFC 3986 (%20 for spaces)
+      const queryPartsRFC3986 = sortedKeys.map(key => {
+        return `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`;
+      });
+      const queryStringRFC3986 = queryPartsRFC3986.join('&');
+      const expectedSig3986 = crypto
+        .createHash('sha256')
+        .update(queryStringRFC3986 + OPINION_UNIVERSE_TOKEN)
         .digest('hex');
 
-      console.log(`🔒 [OPINION_UNIVERSE] Verifying signature. Received: ${signature}, Expected: ${expectedSig}`);
+      // Try RFC 1738 (+ for spaces)
+      const queryStringRFC1738 = queryStringRFC3986.replace(/%20/g, '+');
+      const expectedSig1738 = crypto
+        .createHash('sha256')
+        .update(queryStringRFC1738 + OPINION_UNIVERSE_TOKEN)
+        .digest('hex');
 
-      if (!safeCompare(signature, expectedSig)) {
+      // Try raw values (unencoded)
+      const queryPartsRaw = sortedKeys.map(key => `${key}=${params[key]}`);
+      const queryStringRaw = queryPartsRaw.join('&');
+      const expectedSigRaw = crypto
+        .createHash('sha256')
+        .update(queryStringRaw + OPINION_UNIVERSE_TOKEN)
+        .digest('hex');
+
+      console.log(`🔒 [OPINION_UNIVERSE] Verifying signature. Received: ${signature}`);
+      console.log(`🔒 [OPINION_UNIVERSE] Expected (RFC3986): ${expectedSig3986}`);
+      console.log(`🔒 [OPINION_UNIVERSE] Expected (RFC1738): ${expectedSig1738}`);
+
+      const match = safeCompare(signature.toLowerCase(), expectedSig3986.toLowerCase()) ||
+                    safeCompare(signature.toLowerCase(), expectedSig1738.toLowerCase()) ||
+                    safeCompare(signature.toLowerCase(), expectedSigRaw.toLowerCase());
+
+      if (!match) {
         console.warn('❌ [OPINION_UNIVERSE] Signature Mismatch! Rejecting request with "0"');
         return res.status(403).send('0');
       }

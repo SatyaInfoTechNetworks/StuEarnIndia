@@ -118,6 +118,13 @@ export default function AdminPortal() {
   const [selectedWithdrawal, setSelectedWithdrawal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectModal, setRejectModal] = useState(false);
+  
+  const [providerPerformance, setProviderPerformance] = useState([]);
+  const [withdrawalSearch, setWithdrawalSearch] = useState('');
+  const [debouncedWithdrawalSearch, setDebouncedWithdrawalSearch] = useState('');
+  const [withdrawalPage, setWithdrawalPage] = useState(1);
+  const [withdrawalLimit, setWithdrawalLimit] = useState(15);
+  const [withdrawalTotal, setWithdrawalTotal] = useState(0);
 
   // Erasures states
   const [erasuresList, setErasuresList] = useState([]);
@@ -200,6 +207,15 @@ export default function AdminPortal() {
     return () => clearTimeout(timer);
   }, [userSearch]);
 
+  // Debounce withdrawal search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedWithdrawalSearch(withdrawalSearch);
+      setWithdrawalPage(1); // Reset page on search
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [withdrawalSearch]);
+
   // Check auth on load
   useEffect(() => {
     const token = localStorage.getItem('stuearn_admin_token');
@@ -269,7 +285,10 @@ export default function AdminPortal() {
       const statsRes = await fetch(`${API_BASE}/api/admin/stats`, { headers });
       if (!checkResponseStatus(statsRes)) return;
       const statsData = await statsRes.json();
-      if (statsData.success) setStats(statsData.stats);
+      if (statsData.success) {
+        setStats(statsData.stats);
+        setProviderPerformance(statsData.providerPerformance || []);
+      }
 
       // 2. Offers (Admin list includes completion counts)
       const offersRes = await fetch(`${API_BASE}/api/admin/offers`, { headers });
@@ -316,22 +335,30 @@ export default function AdminPortal() {
 
   const fetchWithdrawals = async () => {
     try {
-      const statusParam = withdrawalStatus !== 'ALL' ? `?status=${withdrawalStatus}` : '';
-      const res = await fetch(`${API_BASE}/api/admin/withdrawals${statusParam}`, { headers: getHeaders() });
+      const statusParam = withdrawalStatus !== 'ALL' ? `status=${withdrawalStatus}` : '';
+      const searchParam = debouncedWithdrawalSearch ? `&search=${encodeURIComponent(debouncedWithdrawalSearch)}` : '';
+      const pageParam = `&page=${withdrawalPage}&limit=${withdrawalLimit}`;
+      const queryParams = [statusParam, searchParam, pageParam].filter(Boolean).join('&');
+      const prefix = queryParams ? `?${queryParams}` : '';
+      
+      const res = await fetch(`${API_BASE}/api/admin/withdrawals${prefix}`, { headers: getHeaders() });
       if (!checkResponseStatus(res)) return;
       const data = await res.json();
-      if (data.success) setWithdrawalsList(data.withdrawals || []);
+      if (data.success) {
+        setWithdrawalsList(data.withdrawals || []);
+        setWithdrawalTotal(data.total || 0);
+      }
     } catch (err) {
       console.error("Error fetching withdrawals:", err);
     }
   };
 
-  // Fetch withdrawals when status tab changes
+  // Fetch withdrawals when status tab, search or page changes
   useEffect(() => {
     if (isAuthenticated && activeTab === 'withdrawals') {
       fetchWithdrawals();
     }
-  }, [withdrawalStatus, activeTab, isAuthenticated]);
+  }, [withdrawalStatus, debouncedWithdrawalSearch, withdrawalPage, withdrawalLimit, activeTab, isAuthenticated]);
 
   // Debounce global transactions search input
   useEffect(() => {
@@ -1351,6 +1378,32 @@ export default function AdminPortal() {
 
                 </div>
 
+                {/* Provider Performance Cards */}
+                <h4 className="mt-4 mb-3 font-weight-bold text-dark">Provider Performance</h4>
+                <div className="row">
+                  {providerPerformance.map(p => (
+                    <div key={p.key} className="col-12 col-sm-6 col-md-3 mb-3">
+                      <div className="info-box shadow-none border rounded-lg h-100 mb-0">
+                        <span className={`info-box-icon bg-${p.color} elevation-1`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '60px' }}>
+                          <img src={p.icon} style={{ width: '30px', height: '30px', objectFit: 'contain' }} alt={p.label} onError={(e) => { e.target.src = 'https://iili.io/qKAmR5J.png'; }} />
+                        </span>
+                        <div className="info-box-content">
+                          <span className="info-box-text font-weight-bold text-muted text-xs uppercase">{p.label}</span>
+                          <span className="info-box-number text-lg font-weight-black mt-1">
+                            {p.today.toLocaleString()} <span className="text-xs font-normal text-muted">coins today</span>
+                          </span>
+                          <div className="progress my-2" style={{ height: '2px' }}>
+                            <div className={`progress-bar bg-${p.color}`} style={{ width: '100%' }}></div>
+                          </div>
+                          <span className="progress-description text-xs text-secondary">
+                            Weekly: <strong>{p.weekly.toLocaleString()}</strong>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 <div className="card card-white shadow-none border rounded-lg mt-4">
                   <div className="card-body p-4">
                     <h5 className="font-weight-bold text-dark"><i className="fas fa-server mr-2 text-primary"></i> Active Database Host Credentials</h5>
@@ -1882,13 +1935,26 @@ export default function AdminPortal() {
 
                 {/* Main Queue Card */}
                 <div className="card card-warning card-outline shadow-none border rounded-lg mb-4 mt-3">
-                  <div className="card-header border-0 bg-transparent d-flex justify-content-between align-items-center">
-                    <h3 className="card-title font-weight-bold text-warning"><i className="fas fa-clock mr-2"></i>Awaiting Disbursements</h3>
-                    <div className="btn-group">
-                      <button className={`btn btn-xs ${withdrawalStatus === 'PENDING' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('PENDING')}>Pending</button>
-                      <button className={`btn btn-xs ${withdrawalStatus === 'APPROVED' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('APPROVED')}>Approved</button>
-                      <button className={`btn btn-xs ${withdrawalStatus === 'REJECTED' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('REJECTED')}>Rejected</button>
-                      <button className={`btn btn-xs ${withdrawalStatus === 'ALL' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setWithdrawalStatus('ALL')}>All</button>
+                  <div className="card-header border-0 bg-transparent pb-0">
+                    <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+                      <h3 className="card-title font-weight-bold text-warning mb-3 mb-md-0"><i className="fas fa-clock mr-2"></i>Awaiting Disbursements</h3>
+                      <div className="d-flex flex-wrap align-items-center" style={{ gap: '10px' }}>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm rounded-pill px-3"
+                          placeholder="Search beneficiary, method, details..."
+                          style={{ width: '220px' }}
+                          value={withdrawalSearch}
+                          onChange={e => setWithdrawalSearch(e.target.value)}
+                        />
+                        <div className="btn-group">
+                          <button className={`btn btn-xs ${withdrawalStatus === 'PENDING' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => { setWithdrawalStatus('PENDING'); setWithdrawalPage(1); }}>Pending</button>
+                          <button className={`btn btn-xs ${withdrawalStatus === 'APPROVED' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => { setWithdrawalStatus('APPROVED'); setWithdrawalPage(1); }}>Approved</button>
+                          <button className={`btn btn-xs ${withdrawalStatus === 'REJECTED' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => { setWithdrawalStatus('REJECTED'); setWithdrawalPage(1); }}>Rejected</button>
+                          <button className={`btn btn-xs ${withdrawalStatus === 'ALL' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => { setWithdrawalStatus('ALL'); setWithdrawalPage(1); }}>All</button>
+                        </div>
+                        <button className="btn btn-sm btn-outline-secondary rounded-pill" onClick={fetchWithdrawals}><i className="fas fa-sync-alt"></i></button>
+                      </div>
                     </div>
                   </div>
                   <div className="card-body p-0 table-responsive">
@@ -1950,6 +2016,24 @@ export default function AdminPortal() {
                         )}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="card-footer clearfix bg-white border-top-0 d-flex justify-content-between align-items-center">
+                    <span className="text-xs text-muted">Showing {withdrawalsList.length} of {withdrawalTotal} entries</span>
+                    {withdrawalTotal > withdrawalLimit && (
+                      <ul className="pagination pagination-sm m-0 float-right">
+                        <li className={`page-item ${withdrawalPage === 1 ? 'disabled' : ''}`}>
+                          <button className="page-link" onClick={() => setWithdrawalPage(prev => Math.max(1, prev - 1))}>«</button>
+                        </li>
+                        {Array.from({ length: Math.ceil(withdrawalTotal / withdrawalLimit) }, (_, i) => i + 1).map(p => (
+                          <li key={p} className={`page-item ${withdrawalPage === p ? 'active' : ''}`}>
+                            <button className="page-link" onClick={() => setWithdrawalPage(p)}>{p}</button>
+                          </li>
+                        ))}
+                        <li className={`page-item ${withdrawalPage === Math.ceil(withdrawalTotal / withdrawalLimit) ? 'disabled' : ''}`}>
+                          <button className="page-link" onClick={() => setWithdrawalPage(prev => Math.min(Math.ceil(withdrawalTotal / withdrawalLimit), prev + 1))}>»</button>
+                        </li>
+                      </ul>
+                    )}
                   </div>
                 </div>
               </div>

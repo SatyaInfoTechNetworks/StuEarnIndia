@@ -42,6 +42,44 @@ export const getAdminStats = async (req, res) => {
     const [pendingErasures]   = await pool.query('SELECT COUNT(*) as c FROM deletion_requests WHERE status = "PENDING"').catch(() => [[{c:0}]]);
     const [pendingProofs]     = await pool.query('SELECT COUNT(*) as c FROM user_offer_progress WHERE admin_status = "PENDING"');
 
+    // Fetch sources stats from transactions table grouped by source
+    const [todaySums] = await pool.query(
+      "SELECT source, COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'CREDIT' AND DATE(created_at) = CURDATE() GROUP BY source"
+    );
+    const [weeklySums] = await pool.query(
+      "SELECT source, COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'CREDIT' AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY source"
+    );
+
+    const todayMap = {};
+    todaySums.forEach(r => { todayMap[(r.source || '').toUpperCase()] = parseFloat(r.total); });
+
+    const weeklyMap = {};
+    weeklySums.forEach(r => { weeklyMap[(r.source || '').toUpperCase()] = parseFloat(r.total); });
+
+    const providerPerformance = [];
+    const configSources = [
+      { key: 'LUCKY_SPIN', label: 'Lucky Spin', icon: 'https://cdn-icons-png.flaticon.com/512/3593/3593456.png', color: 'success' },
+      { key: 'STREAK_REWARD', label: 'Daily Streak', icon: 'https://cdn-icons-png.flaticon.com/512/4305/4305432.png', color: 'orange' },
+      { key: 'PUBSCALE', label: 'PubScale Wall', icon: 'https://pubscale.com/favicon.ico', color: 'primary' },
+      { key: 'CPX_RESEARCH', label: 'CPX Surveys', icon: 'https://cpx-research.com/assets/img/logo-cpx-research.png', color: 'indigo' },
+      { key: 'GROWDECK', label: 'GrowDeck Wall', icon: 'https://growdeck.com/favicon.ico', color: 'success' },
+      { key: 'ADJUMP', label: 'AdJump Wall', icon: 'https://adjump.com/favicon.ico', color: 'danger' },
+      { key: 'REAL_OPINION', label: 'Real Opinion', icon: 'https://realopinion.com/favicon.ico', color: 'warning' },
+      { key: 'OFFERMARU', label: 'OfferMaru Wall', icon: 'https://offermaru.com/favicon.ico', color: 'secondary' },
+      { key: 'OPINION_UNIVERSE', label: 'Opinion Universe', icon: 'https://i.ibb.co/zXgYqKB/opinionuniverse.png', color: 'info' }
+    ];
+
+    configSources.forEach(src => {
+      providerPerformance.push({
+        key: src.key,
+        label: src.label,
+        icon: src.icon,
+        color: src.color,
+        today: todayMap[src.key] || 0,
+        weekly: weeklyMap[src.key] || 0
+      });
+    });
+
     res.json({
       success: true,
       stats: {
@@ -58,7 +96,8 @@ export const getAdminStats = async (req, res) => {
         open_tickets: openTickets[0].c,
         pending_erasures: pendingErasures[0].c,
         pending_proofs: pendingProofs[0].c
-      }
+      },
+      providerPerformance
     });
   } catch (error) {
     console.error('Admin Stats Error:', error);
@@ -627,14 +666,26 @@ export const listAdminOffers = async (req, res) => {
 // ==========================================
 export const listWithdrawals = async (req, res) => {
   try {
-    const { status = 'PENDING', page = 1, limit = 50 } = req.query;
+    const { status = 'PENDING', page = 1, limit = 50, search = '' } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     let whereClause = '';
     const params = [];
+    const conditions = [];
+
     if (status && status !== 'ALL') {
-      whereClause = 'WHERE w.status = ?';
+      conditions.push('w.status = ?');
       params.push(status);
+    }
+
+    if (search && search.trim() !== '') {
+      conditions.push('(u.name LIKE ? OR u.email LIKE ? OR w.details LIKE ? OR w.method LIKE ? OR w.id LIKE ?)');
+      const searchWildcard = `%${search.trim()}%`;
+      params.push(searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard);
+    }
+
+    if (conditions.length > 0) {
+      whereClause = 'WHERE ' + conditions.join(' AND ');
     }
 
     const [rows] = await pool.query(
@@ -652,7 +703,10 @@ export const listWithdrawals = async (req, res) => {
       [...params, parseInt(limit), offset]
     );
 
-    const [countRows] = await pool.query(`SELECT COUNT(*) as total FROM withdrawals w ${whereClause}`, params);
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) as total FROM withdrawals w JOIN users u ON w.user_id = u.id ${whereClause}`, 
+      params
+    );
 
     res.json({ success: true, withdrawals: rows, total: countRows[0].total });
   } catch (error) {
@@ -844,6 +898,7 @@ export const triggerPushNotification = async (req, res) => {
 
     const targetType = target_type || (user_id ? 'specific' : 'broadcast');
     let sentCount = 0;
+    let pushStats = null;
 
     if (targetType === 'specific') {
       if (!user_id) return res.status(400).json({ success: false, message: 'User ID is required for specific targeting' });
@@ -852,17 +907,23 @@ export const triggerPushNotification = async (req, res) => {
       if (userRows.length === 0) return res.status(404).json({ success: false, message: 'Target user not found' });
       const success = await sendNotification(userRows[0].id, title, body, image_url);
       sentCount = success ? 1 : 0;
+      pushStats = { total: 1, success: success ? 1 : 0, failure: success ? 0 : 1 };
     } else if (targetType === 'topic') {
       if (!topic) return res.status(400).json({ success: false, message: 'Topic name is required' });
       const success = await sendTopicNotification(topic, title, body, image_url);
       sentCount = success ? 1 : 0;
+      pushStats = { total: 1, success: success ? 1 : 0, failure: success ? 0 : 1 };
     } else {
-      const success = await broadcastNotification(title, body, image_url);
-      const [cnt] = await pool.query('SELECT COUNT(*) as c FROM users WHERE fcm_token IS NOT NULL AND fcm_token != ""');
-      sentCount = success ? cnt[0].c : 0;
+      const result = await broadcastNotification(title, body, image_url);
+      sentCount = result.success ? result.sentCount : 0;
+      pushStats = result.success ? {
+        total: result.sentCount,
+        success: result.successCount,
+        failure: result.failureCount
+      } : null;
     }
 
-    res.json({ success: true, message: `Notification sent successfully`, sent_count: sentCount });
+    res.json({ success: true, message: `Notification sent successfully`, sent_count: sentCount, stats: pushStats });
   } catch (error) {
     console.error('Admin Push Notification Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });

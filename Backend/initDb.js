@@ -358,11 +358,15 @@ export async function initializeDatabase() {
         target_type VARCHAR(50) NOT NULL DEFAULT 'broadcast',
         target_user_id VARCHAR(255) NULL,
         sent_count INT DEFAULT 0,
+        success_count INT DEFAULT 0,
+        failure_count INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
     await addColumnIfNotExists(connection, 'notifications', 'target_user_id', 'VARCHAR(255) NULL');
     await addColumnIfNotExists(connection, 'notifications', 'sent_count', 'INT DEFAULT 0');
+    await addColumnIfNotExists(connection, 'notifications', 'success_count', 'INT DEFAULT 0');
+    await addColumnIfNotExists(connection, 'notifications', 'failure_count', 'INT DEFAULT 0');
     await addColumnIfNotExists(connection, 'notifications', 'image_url', 'VARCHAR(255) NULL');
     await addColumnIfNotExists(connection, 'notifications', 'target_topic', 'VARCHAR(50) NULL');
     await addColumnIfNotExists(connection, 'notifications', 'status', 'VARCHAR(20) DEFAULT "sent"');

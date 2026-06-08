@@ -805,6 +805,22 @@ export const enterContestUser = async (req, res) => {
 
       const today = new Date().toISOString().split('T')[0];
 
+      // Enforce daily combined limit (max_entries_per_day)
+      if (contest.max_entries_per_day > 0) {
+        const [todayRows] = await connection.query(
+          'SELECT SUM(entries_count) as tickets FROM contest_entries WHERE contest_id = ? AND user_id = ? AND DATE(created_at) = ?',
+          [contestId, userId, today]
+        );
+        const todayEntries = parseInt(todayRows[0]?.tickets || 0);
+        if (todayEntries >= contest.max_entries_per_day) {
+          await connection.rollback();
+          return res.status(400).json({
+            success: false,
+            message: `Daily limit reached! You can only get up to ${contest.max_entries_per_day} tickets per day for this draw.`
+          });
+        }
+      }
+
       if (source === 'FREE') {
         if (!contest.allow_free_entry) {
           await connection.rollback();

@@ -816,13 +816,6 @@ export const handleOpinionUniverse = async (req, res) => {
     const gaid = req.query.gaid || '';
     const signature = req.query.SIG || '';
 
-    // Check placeholder / test callback
-    const isTestCallback = (user_id.includes('{') || String(payoutParam).includes('{'));
-    if (isTestCallback) {
-      console.log('⚠️ [OPINION_UNIVERSE] Bypassing test callback placeholder. Returning "1"');
-      return res.send('1');
-    }
-
     if (transaction_id.includes('{') || !transaction_id) {
       transaction_id = `OU_${user_id}_${offer_id}_${payoutParam}_${Date.now()}`;
       console.log(`ℹ️ [OPINION_UNIVERSE] Generated synthetic transaction ID: ${transaction_id}`);
@@ -887,6 +880,13 @@ export const handleOpinionUniverse = async (req, res) => {
       console.log('✅ [OPINION_UNIVERSE] Signature verified successfully.');
     } else {
       console.log('ℹ️ [OPINION_UNIVERSE] No signature SIG provided. Skipping verification.');
+    }
+
+    // Check placeholder / test callback AFTER verifying the signature
+    const isTestCallback = (user_id.includes('{') || String(payoutParam).includes('{'));
+    if (isTestCallback) {
+      console.log('⚠️ [OPINION_UNIVERSE] Test callback placeholder identified and validated. Returning "1"');
+      return res.send('1');
     }
 
     // Reversal case

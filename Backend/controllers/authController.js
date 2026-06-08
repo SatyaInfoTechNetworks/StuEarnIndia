@@ -381,14 +381,15 @@ async function handleReferralMapping(referredUserId, referrerCode) {
 
     if (existRows.length === 0) {
       // Insert into referral_uses (if the table exists in user's DB, otherwise we support it)
-      // Check if table 'referral_uses' exists or create it
       await pool.query(
         `CREATE TABLE IF NOT EXISTS referral_uses (
           id CHAR(36) PRIMARY KEY,
           referrer_id CHAR(36) NOT NULL,
           referred_user_id CHAR(36) NOT NULL,
           referral_code VARCHAR(50) NOT NULL,
-          status ENUM('PENDING', 'COMPLETED') DEFAULT 'PENDING',
+          status VARCHAR(20) DEFAULT 'PENDING',
+          offers_completed_count INT DEFAULT 0,
+          rewarded_at TIMESTAMP NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (referrer_id) REFERENCES users(id) ON DELETE CASCADE,
           FOREIGN KEY (referred_user_id) REFERENCES users(id) ON DELETE CASCADE

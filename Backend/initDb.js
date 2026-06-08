@@ -342,6 +342,7 @@ export async function initializeDatabase() {
         referral_code VARCHAR(50) NOT NULL,
         status VARCHAR(20) DEFAULT 'PENDING',
         offers_completed_count INT DEFAULT 0,
+        rewarded_at TIMESTAMP NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (referrer_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (referred_user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -548,6 +549,7 @@ export async function initializeDatabase() {
     await addColumnIfNotExists(connection, 'transactions', 'opening_balance', 'DECIMAL(10, 2) DEFAULT NULL');
     await addColumnIfNotExists(connection, 'transactions', 'closing_balance', 'DECIMAL(10, 2) DEFAULT NULL');
     await addColumnIfNotExists(connection, 'transactions', 'tamper_signature', 'VARCHAR(64) DEFAULT NULL');
+    await addColumnIfNotExists(connection, 'referral_uses', 'rewarded_at', 'TIMESTAMP NULL');
 
     // Ensure transactions and withdrawals column types are flexible (legacy ENUM to VARCHAR)
     try {

@@ -835,6 +835,11 @@ export const handleOpinionUniverse = async (req, res) => {
 
     // Signature check
     if (signature) {
+      const expectedHmac = crypto
+        .createHmac('sha256', OPINION_UNIVERSE_TOKEN)
+        .update(transaction_id)
+        .digest('hex');
+
       const params = { ...req.query };
       delete params.SIG;
       delete params.sig;
@@ -867,10 +872,11 @@ export const handleOpinionUniverse = async (req, res) => {
         .digest('hex');
 
       console.log(`🔒 [OPINION_UNIVERSE] Verifying signature. Received: ${signature}`);
+      console.log(`🔒 [OPINION_UNIVERSE] Expected (HMAC-SHA256 of TransactionID): ${expectedHmac}`);
       console.log(`🔒 [OPINION_UNIVERSE] Expected (RFC3986): ${expectedSig3986}`);
-      console.log(`🔒 [OPINION_UNIVERSE] Expected (RFC1738): ${expectedSig1738}`);
 
-      const match = safeCompare(signature.toLowerCase(), expectedSig3986.toLowerCase()) ||
+      const match = safeCompare(signature.toLowerCase(), expectedHmac.toLowerCase()) ||
+                    safeCompare(signature.toLowerCase(), expectedSig3986.toLowerCase()) ||
                     safeCompare(signature.toLowerCase(), expectedSig1738.toLowerCase()) ||
                     safeCompare(signature.toLowerCase(), expectedSigRaw.toLowerCase());
 

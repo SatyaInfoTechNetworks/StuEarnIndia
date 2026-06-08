@@ -885,7 +885,17 @@ export const handleOpinionUniverse = async (req, res) => {
     // Check placeholder / test callback AFTER verifying the signature
     const isTestCallback = (user_id.includes('{') || String(payoutParam).includes('{'));
     if (isTestCallback) {
-      console.log('⚠️ [OPINION_UNIVERSE] Test callback placeholder identified and validated. Returning "1"');
+      console.log('⚠️ [OPINION_UNIVERSE] Test callback placeholder identified and validated. Sending test Telegram alert and returning "1"');
+      const mockUser = {
+        name: 'TestUser',
+        email: 'test@stuearn.com',
+        user_id: 'SE_TEST_ID'
+      };
+      await sendBeautifulTelegramAlert('✅', 'Opinion Universe Completion (TEST)', mockUser, parseFloat(payoutParam || 100), {
+        'Offer Name': offer_name,
+        'Offer ID': offer_id || 'N/A',
+        'Transaction ID': transaction_id
+      }).catch(console.error);
       return res.send('1');
     }
 
